@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#4F46E5"/>
+  
+  <!-- Document/Form Icon -->
+  <path d="M160 96C160 81.2223 172.222 69 187 69H275.5C282.956 69 290.088 72.0893 295.277 77.2785L387.277 169.279C392.466 174.468 395.556 181.6 395.556 189.056V416C395.556 430.778 383.333 443 368.556 443H187C172.222 443 160 430.778 160 416V96Z" fill="white"/>
+  
+  <!-- Lines on document -->
+  <rect x="200" y="230" width="160" height="12" rx="6" fill="#4F46E5"/>
+  <rect x="200" y="270" width="160" height="12" rx="6" fill="#4F46E5"/>
+  <rect x="200" y="310" width="120" height="12" rx="6" fill="#4F46E5"/>
+  <rect x="200" y="350" width="140" height="12" rx="6" fill="#4F46E5"/>
+  
+  <!-- Folded corner -->
+  <path d="M275 69V147C275 156.389 282.611 164 292 164H370.057L275 69Z" fill="#C7D2FE"/>
+</svg>
