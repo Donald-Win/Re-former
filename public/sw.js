@@ -1,90 +1,74 @@
-// ⬆️ Bump this version string on every deployment to force cache refresh
-const CACHE_VERSION = 'v1.0.0';
-const CACHE_NAME = `re-former-${CACHE_VERSION}`;
+// re-former Service Worker
+// Bump CACHE_VERSION whenever deploying a new build.
+const CACHE_VERSION = 're-former-v2.2.0'
+const STATIC_CACHE = `${CACHE_VERSION}-static`
+const PDF_CACHE    = `${CACHE_VERSION}-pdfs`
 
-// App shell — Vite assets use content hashes so they auto-bust cache
-const APP_SHELL = [
-  '/re-former/',
-  '/re-former/index.html',
-  '/re-former/manifest.json',
-];
+const STATIC_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+]
 
-// Always fetch PDFs fresh from network (network-first)
-const FORMS_PATTERN = /\/forms\/.*\.pdf$/;
-
-// Install — cache app shell, activate immediately
+// ── Install ────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
-  console.log('[SW] Installing:', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
+    caches.open(STATIC_CACHE)
+      .then(cache => cache.addAll(STATIC_ASSETS))
       .then(() => self.skipWaiting())
-  );
-});
+  )
+})
 
-// Activate — delete old caches, take control immediately
+// ── Activate — purge old caches ────────────────────────────────────────────
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating:', CACHE_VERSION);
   event.waitUntil(
-    caches.keys().then(names =>
+    caches.keys().then(keys =>
       Promise.all(
-        names
-          .filter(n => n.startsWith('re-former-') && n !== CACHE_NAME)
-          .map(n => { console.log('[SW] Deleting old cache:', n); return caches.delete(n); })
+        keys
+          .filter(k => k !== STATIC_CACHE && k !== PDF_CACHE)
+          .map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
-  );
-});
+  )
+})
 
-// Fetch
+// ── Fetch ──────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  if (request.method !== 'GET') return;
+  const url = new URL(event.request.url)
 
-  // Don't intercept CDN requests (pdf.js worker etc.)
-  if (!request.url.startsWith(self.location.origin)) return;
-
-  // Network-first for PDF forms — always serve latest
-  if (FORMS_PATTERN.test(request.url)) {
+  // PDFs — network-first so technicians always get the latest version,
+  // fall back to cache when offline.
+  if (/\/forms\/.*\.pdf$/.test(url.pathname)) {
     event.respondWith(
-      fetch(request)
+      fetch(event.request)
         .then(response => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          }
-          return response;
+          const clone = response.clone()
+          caches.open(PDF_CACHE).then(cache => cache.put(event.request, clone))
+          return response
         })
-        .catch(() => caches.match(request))
-    );
-    return;
+        .catch(() => caches.match(event.request))
+    )
+    return
   }
 
-  // Stale-while-revalidate for everything else —
-  // return cache immediately for speed, fetch fresh copy in background
+  // Everything else — stale-while-revalidate.
   event.respondWith(
-    caches.match(request).then(cached => {
-      const networkFetch = fetch(request).then(response => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-        }
-        return response;
-      }).catch(() => {});
+    caches.open(STATIC_CACHE).then(cache =>
+      cache.match(event.request).then(cached => {
+        const fetched = fetch(event.request).then(response => {
+          cache.put(event.request, response.clone())
+          return response
+        })
+        return cached || fetched
+      })
+    )
+  )
+})
 
-      return cached || networkFetch;
-    })
-  );
-});
-
-// Message handler — lets the app trigger updates programmatically
+// ── Messages from app ──────────────────────────────────────────────────────
 self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') {
-    console.log('[SW] Received SKIP_WAITING');
-    self.skipWaiting();
+  if (event.data === 'SKIP_WAITING') self.skipWaiting()
+  if (event.data === 'CHECK_UPDATE') {
+    self.registration.update()
   }
-  if (event.data?.type === 'CHECK_UPDATE') {
-    console.log('[SW] Checking for updates...');
-    self.registration.update();
-  }
-});
+})
