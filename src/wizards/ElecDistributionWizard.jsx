@@ -603,8 +603,7 @@ export default function ElecDistributionWizard({ onClose }) {
         fontSize: 13, color: '#9a3412', lineHeight: 1.5,
       }}>
         <strong>📐 Location plan:</strong> Draw the dimensioned plan manually on
-        the printed form. Include a north arrow in the circle. Dimension cables
-        in road reserve at right angles to known reference points.
+        the printed form.
       </div>
 
       <SectionHead label="Comments" accent={EB_ORANGE} />

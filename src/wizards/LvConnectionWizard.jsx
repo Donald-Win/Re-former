@@ -436,8 +436,7 @@ export default function LvConnectionWizard({ onClose }) {
         lineHeight: 1.5,
       }}>
         <strong>📐 Location plan:</strong> The dimensioned conductor plan must be
-        drawn manually on the printed form. The north-arrow circle is pre-printed
-        on the PDF — draw your plan in the large blank area below it.
+        drawn manually on the printed form.
       </div>
 
       <WTA

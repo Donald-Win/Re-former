@@ -13,7 +13,7 @@ import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
-const W_STEPS = ["Location & Contractor","Pole IDs & GPS","Pole Details","Pole Code & Type","Equipment on Pole","Accessories","Conductors","Crossarms","Work Description","Preview & Print"];
+const W_STEPS = ["Location & Contractor","Pole IDs & Activity","New Pole Details","Equipment on Pole","Accessories","Conductors","Crossarms","Work Description","Preview & Print"];
 const POLE_CODES = ["B9.5 (Busck)","B10.0 (Busck)","B10.5 (Busck)","B11.0 (Busck)","B12.4 (Busck)","B12.5 (Busck)","B13.65 (Busck)","B14.85 (Busck)","B15.5 (Busck)","B18.5 (Busck)","9m (9kN) Goldpine","10m (9kN) Goldpine","10m (12kN) Goldpine","11m (9kN) Goldpine","11m (12kN) Goldpine","12m (12kN) Goldpine"];
 const PC_X = [45,173,295,427,45,173,295,427,45,173,295,427,45,173,295,427];
 const PC_Y = [478,478,478,478,493,493,493,493,507,507,507,507,521,521,521,521];
@@ -32,6 +32,11 @@ async function generateFilledPdf(d) {
     if (!str) return;
     page.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE });
   };
+  const tc = (page, centerX, cssY, str, size=8.5) => {
+    if (!str) return;
+    const w = font.widthOfTextAtSize(String(str), size);
+    page.drawText(String(str), { x: centerX - w/2, y: PAGE_H - cssY - size, size, font, color: BLUE });
+  };
   const ck = (page, x, cssY, show) => {
     if (!show) return;
     const by = PAGE_H - cssY - 2;
@@ -49,8 +54,8 @@ async function generateFilledPdf(d) {
     const sigWPole = (sigMaxH / sigDimsPole.height) * sigDimsPole.width;
     p1.drawImage(sigImg, { x: 393, y: PAGE_H - 151, width: sigWPole, height: sigMaxH, opacity: 1 });
   } t(p1,165,164,d.pcoWONo); t(p1,451,164,d.ciwrNo);
-  t(p1,80,225,d.newPoleId); t(p1,260,225,d.oldPoleId); t(p1,415,220,d.gpsNorth);
-  t(p1,415,234,d.gpsEast); t(p1,415,265,d.altitude); t(p1,80,273,d.manufacturerPoleId); t(p1,260,273,d.manufacturedDate);
+  tc(p1,133,225,d.newPoleId); tc(p1,303,225,d.oldPoleId); t(p1,415,220,d.gpsNorth);
+  t(p1,415,234,d.gpsEast); t(p1,415,265,d.altitude); tc(p1,133,273,d.manufacturerPoleId); tc(p1,303,273,d.manufacturedDate);
   ck(p1,143,319,d.poleActivity==="New"); ck(p1,218,319,d.poleActivity==="Removed"); ck(p1,294,319,d.poleActivity==="Replaced"); ck(p1,386,319,d.poleActivity==="Relocation"); ck(p1,464,319,d.poleActivity==="Label Replaced");
   ck(p1,143,333,d.crossarmActivity==="New"); ck(p1,218,333,d.crossarmActivity==="Removed"); ck(p1,294,333,d.crossarmActivity==="Replaced");
   ck(p1,143,348,d.poleLoading==="Angle"); ck(p1,218,348,d.poleLoading==="In Line"); ck(p1,294,348,d.poleLoading==="Road Crossing"); ck(p1,386,348,d.poleLoading==="Take Off"); ck(p1,464,348,d.poleLoading==="Termination");
@@ -96,6 +101,52 @@ async function generateFilledPdf(d) {
   return new Uint8Array(await pdfDoc.save());
 }
 
+
+function DateBoxInput({ label, value, onChange }) {
+  const ddRef = useRef(null); const mmRef = useRef(null); const yyRef = useRef(null);
+  const parts = value ? value.split("-") : ["","",""];
+  const dd = parts[0]||""; const mm = parts[1]||""; const yy = parts[2]||"";
+  const update = (newDd, newMm, newYy) => {
+    const out = [newDd,newMm,newYy].every(v=>v==="") ? "" : `${newDd}-${newMm}-${newYy}`;
+    onChange(out);
+  };
+  const boxStyle = {
+    width:52, padding:"10px 0", textAlign:"center", fontSize:18, fontWeight:600,
+    border:"1.5px solid #ddd", borderRadius:8, fontFamily:"inherit",
+    background:"#fff", outline:"none", boxSizing:"border-box",
+  };
+  const sepStyle = { fontSize:20, fontWeight:700, color:"#aaa", padding:"0 2px", lineHeight:"44px" };
+  return (
+    <div style={{marginBottom:12}}>
+      <label style={wLbl}>{label}</label>
+      <div style={{display:"flex",alignItems:"center",gap:4}}>
+        <input ref={ddRef} type="text" inputMode="numeric" placeholder="DD" maxLength={2} value={dd}
+          onChange={e=>{
+            const v=e.target.value.replace(/\D/g,"").slice(0,2);
+            update(v,mm,yy);
+            if(v.length===2) mmRef.current?.focus();
+          }} style={boxStyle} />
+        <span style={sepStyle}>-</span>
+        <input ref={mmRef} type="text" inputMode="numeric" placeholder="MM" maxLength={2} value={mm}
+          onChange={e=>{
+            const v=e.target.value.replace(/\D/g,"").slice(0,2);
+            update(dd,v,yy);
+            if(v.length===2) yyRef.current?.focus();
+          }}
+          onKeyDown={e=>{ if(e.key==="Backspace"&&mm==="") ddRef.current?.focus(); }}
+          style={boxStyle} />
+        <span style={sepStyle}>-</span>
+        <input ref={yyRef} type="text" inputMode="numeric" placeholder="YY" maxLength={2} value={yy}
+          onChange={e=>{
+            const v=e.target.value.replace(/\D/g,"").slice(0,2);
+            update(dd,mm,v);
+          }}
+          onKeyDown={e=>{ if(e.key==="Backspace"&&yy==="") mmRef.current?.focus(); }}
+          style={boxStyle} />
+      </div>
+    </div>
+  );
+}
 
 function PoleRecordWizard({ onClose }) {
   const [step, setStep] = useState(0)
@@ -192,44 +243,56 @@ function PoleRecordWizard({ onClose }) {
       <SignaturePad value={d.signed} onChange={set("signed")} />
     </div>,
     <div key="1">
-      <WF label="Powerco New Pole ID(s)" v={d.newPoleId} set={set("newPoleId")} />
       <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set("oldPoleId")} />
-      <WCB label="GPS Required" options={["Yes","No"]} value={d.gpsRequired} onChange={tog("gpsRequired")} />
-      {d.gpsRequired==="Yes"&&<div style={{background:"#f5f5f5",borderRadius:10,padding:12,marginBottom:12}}>
-        <div style={{fontWeight:700,fontSize:11,marginBottom:8,color:"#555"}}>GPS CO-ORDINATES</div>
-        <WF label="North" v={d.gpsNorth} set={set("gpsNorth")} ph="e.g. 5812345" />
-        <WF label="East" v={d.gpsEast} set={set("gpsEast")} ph="e.g. 1832456" />
-        <WF label="Altitude above sea level (ASL)" v={d.altitude} set={set("altitude")} ph="e.g. 45m" />
-      </div>}
-      <WF label="Manufacturers Unique Pole ID" v={d.manufacturerPoleId} set={set("manufacturerPoleId")} ph="Required for Goldpine & Dulhunty" />
-      <WF label="New Pole Manufactured Date" v={d.manufacturedDate} set={set("manufacturedDate")} type="date" />
-    </div>,
-    <div key="2">
       <WCB label="Type of Pole Activity" options={["New","Removed","Replaced","Relocation","Label Replaced"]} value={d.poleActivity} onChange={tog("poleActivity")} />
+      {(d.poleActivity==="New"||d.poleActivity==="Replaced"||d.poleActivity==="Label Replaced")&&<WF label="Powerco New Pole ID(s)" v={d.newPoleId} set={set("newPoleId")} />}
+      {(d.poleActivity==="New"||d.poleActivity==="Replaced")&&<DateBoxInput label="New Pole Manufactured Date" value={d.manufacturedDate||""} onChange={set("manufacturedDate")} />}
       <WCB label="Cross-arm Activity" options={["New","Removed","Replaced"]} value={d.crossarmActivity} onChange={tog("crossarmActivity")} />
       <WCB label="Pole Loading" options={["Angle","In Line","Road Crossing","Take Off","Termination"]} value={d.poleLoading} onChange={tog("poleLoading")} />
-      <WCB label="Pole Condition" options={["New","Pre-Used"]} value={d.poleCondition} onChange={tog("poleCondition")} />
       <WCB label="Ownership" options={["Powerco","Private","Other"]} value={d.ownership} onChange={tog("ownership")} />
       {d.ownership==="Other"&&<WF label="Specify Ownership" v={d.ownershipOther} set={set("ownershipOther")} />}
       <WCB label="Shared Use" options={["Fibre","Chorus","Other"]} value={d.sharedUse} onChange={tog("sharedUse")} />
       {d.sharedUse==="Other"&&<WF label="Specify Shared Use" v={d.sharedUseOther} set={set("sharedUseOther")} />}
-      <WTA label="Reason for Removal" v={d.reasonForRemoval} set={set("reasonForRemoval")} rows={2} />
+      {(d.poleActivity==="Removed"||d.poleActivity==="Replaced")&&<WTA label="Reason for Removal" v={d.reasonForRemoval} set={set("reasonForRemoval")} rows={2} />}
+    </div>,
+    <div key="2">
+      {!(d.poleActivity==="New"||d.poleActivity==="Replaced") ? (
+        <div style={{background:"#f4f4f8",border:"1px solid #ddd",borderRadius:10,padding:"20px 18px",textAlign:"center",color:"#666",fontSize:14,lineHeight:1.6}}>
+          <div style={{fontSize:28,marginBottom:8}}>🪵</div>
+          <strong>New Pole Details — not applicable</strong>
+          <p style={{margin:"8px 0 0",fontSize:13,color:"#888"}}>
+            These fields only apply when the pole activity is <strong>New</strong> or <strong>Replaced</strong>.
+            {d.poleActivity ? <> You selected <strong>{d.poleActivity}</strong>.</> : <> Select an activity on the previous step.</>}
+          </p>
+          <p style={{margin:"6px 0 0",fontSize:12,color:"#999"}}>Tap <strong>Next →</strong> to continue.</p>
+        </div>
+      ) : (
+        <>
+          <WCB label="GPS Required" options={["Yes","No"]} value={d.gpsRequired} onChange={tog("gpsRequired")} />
+          {d.gpsRequired==="Yes"&&<div style={{background:"#f5f5f5",borderRadius:10,padding:12,marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:11,marginBottom:8,color:"#555"}}>GPS CO-ORDINATES</div>
+            <WF label="North" v={d.gpsNorth} set={set("gpsNorth")} ph="e.g. 5812345" />
+            <WF label="East" v={d.gpsEast} set={set("gpsEast")} ph="e.g. 1832456" />
+            <WF label="Altitude above sea level (ASL)" v={d.altitude} set={set("altitude")} ph="e.g. 45m" />
+          </div>}
+          <WCB label="Pole Condition" options={["New","Pre-Used"]} value={d.poleCondition} onChange={tog("poleCondition")} />
+          <div style={{marginBottom:14}}>
+            <label style={wLbl}>New Pole Code & Manufacturer</label>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:4}}>
+              {POLE_CODES.map(code=>{const sel=d.poleCode===code;return<button key={code} onClick={()=>tog("poleCode")(code)} style={{padding:"7px 9px",borderRadius:8,border:`2px solid ${sel?W_PURPLE:"#ddd"}`,background:sel?W_PURPLE:"#fff",color:sel?"#fff":"#333",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:sel?700:400,textAlign:"left"}}>{code}</button>;})}
+              {["DULHUNTY","IUP","OTHER"].map(code=>{const sel=d.poleCode===code;return<button key={code} onClick={()=>tog("poleCode")(code)} style={{padding:"7px 9px",borderRadius:8,border:`2px solid ${sel?W_PURPLE:"#ddd"}`,background:sel?W_PURPLE:"#fff",color:sel?"#fff":"#333",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:sel?700:400,textAlign:"left"}}>{code}</button>;})}
+            </div>
+          </div>
+          {d.poleCode==="DULHUNTY"&&<WF label="State Pole Code, kN & Length" v={d.dulhuntyCode} set={set("dulhuntyCode")} ph="e.g. D300 8kN 12m" />}
+          {d.poleCode==="IUP"&&<WF label="State kN & Length (Steel)" v={d.iupCode} set={set("iupCode")} ph="e.g. 12kN 11m" />}
+          {d.poleCode==="OTHER"&&<WF label="State Manufacturer, kN & Length" v={d.otherCode} set={set("otherCode")} ph="e.g. Other Co 10kN 12m" />}
+          {d.poleCode&&!d.poleCode.includes("Busck")&&<WF label="Manufacturers Unique Pole ID" v={d.manufacturerPoleId} set={set("manufacturerPoleId")} ph="Required for Goldpine & Dulhunty" />}
+          <WCB label="New Pole Information (Type)" options={POLE_TYPES} value={d.poleType} onChange={tog("poleType")} />
+          {d.poleType==="Other"&&<WF label="Specify Type" v={d.poleTypeOther} set={set("poleTypeOther")} />}
+        </>
+      )}
     </div>,
     <div key="3">
-      <div style={{marginBottom:14}}>
-        <label style={wLbl}>New Pole Code & Manufacturer</label>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:4}}>
-          {POLE_CODES.map(code=>{const sel=d.poleCode===code;return<button key={code} onClick={()=>tog("poleCode")(code)} style={{padding:"7px 9px",borderRadius:8,border:`2px solid ${sel?W_PURPLE:"#ddd"}`,background:sel?W_PURPLE:"#fff",color:sel?"#fff":"#333",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:sel?700:400,textAlign:"left"}}>{code}</button>;})}
-          {["DULHUNTY","IUP","OTHER"].map(code=>{const sel=d.poleCode===code;return<button key={code} onClick={()=>tog("poleCode")(code)} style={{padding:"7px 9px",borderRadius:8,border:`2px solid ${sel?W_PURPLE:"#ddd"}`,background:sel?W_PURPLE:"#fff",color:sel?"#fff":"#333",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:sel?700:400,textAlign:"left"}}>{code}</button>;})}
-        </div>
-      </div>
-      {d.poleCode==="DULHUNTY"&&<WF label="State Pole Code, kN & Length" v={d.dulhuntyCode} set={set("dulhuntyCode")} ph="e.g. D300 8kN 12m" />}
-      {d.poleCode==="IUP"&&<WF label="State kN & Length (Steel)" v={d.iupCode} set={set("iupCode")} ph="e.g. 12kN 11m" />}
-      {d.poleCode==="OTHER"&&<WF label="State Manufacturer, kN & Length" v={d.otherCode} set={set("otherCode")} ph="e.g. Other Co 10kN 12m" />}
-      <WCB label="New Pole Information (Type)" options={POLE_TYPES} value={d.poleType} onChange={tog("poleType")} />
-      {d.poleType==="Other"&&<WF label="Specify Type" v={d.poleTypeOther} set={set("poleTypeOther")} />}
-    </div>,
-    <div key="4">
       <div style={{fontSize:13,color:"#777",marginBottom:10}}>Select equipment on pole and enter IDs where applicable.</div>
       <div style={{marginBottom:14}}>
         <label style={wLbl}>Equipment on Pole</label>
@@ -249,7 +312,7 @@ function PoleRecordWizard({ onClose }) {
       </div>
       {(d.otherEquipType!==undefined&&d.otherEquipType!==null)&&<div><WF label="Equipment Type" v={d.otherEquipType} set={set("otherEquipType")} ph="Specify type" /><WF label="Equipment ID" v={d.otherEquipId} set={set("otherEquipId")} /></div>}
     </div>,
-    <div key="5">
+    <div key="4">
       <WCB label="Pole Accessories (select all that apply)" options={["Possum Guard","Streetlight Fitting","Aerial Stay","Climbers","Ground Stay","Platform","HV Cable Riser","Bird Spikes"]} value={d.accessories} onChange={togAcc} multi />
       <div style={{marginBottom:14,marginTop:14}}>
         <label style={wLbl}>Control Box & Other Options</label>
@@ -260,18 +323,18 @@ function PoleRecordWizard({ onClose }) {
       {d.controlBoxPurpose!==undefined&&d.controlBoxPurpose!==null&&<WF label="Control Box – Stipulate Purpose" v={d.controlBoxPurpose} set={set("controlBoxPurpose")} ph="Leave blank if N/A" />}
       {d.accessoriesOther!==undefined&&d.accessoriesOther!==null&&<WF label="Other Accessories (specify)" v={d.accessoriesOther} set={set("accessoriesOther")} />}
     </div>,
-    <div key="6">
+    <div key="5">
       <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set("serviceConnections")} ph="e.g. 2" />
-      <WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set("serviceAddresses")} ph="List addresses" />
+      {parseInt(d.serviceConnections||0,10)>=1&&<WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set("serviceAddresses")} ph="List addresses" />}
       <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Conductors</div>
       {(()=>{const firstEmptyIdx=d.conductors.findIndex(c=>!(c.level||c.existing||c.size||c.material||c.insulation));return d.conductors.map((c,i)=>{const hasData=c.level||c.existing||c.size||c.material||c.insulation;const isFirstEmpty=i===firstEmptyIdx;const isLastRow=i===d.conductors.length-1;return(hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}><button onClick={()=>setD(p=>({...p,conductors:p.conductors.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button><div style={{fontWeight:600,fontSize:12,marginBottom:6,color:W_PURPLE}}>Row {i+1}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><WF label="Level" v={c.level} set={v=>setCond(i,"level",v)} ph="LV,11,33" /><WF label="E or N" v={c.existing} set={v=>setCond(i,"existing",v)} ph="E or N" /><WF label="Conductor Size" v={c.size} set={v=>setCond(i,"size",v)} ph="e.g. 95mm²" /><WF label="Material" v={c.material} set={v=>setCond(i,"material",v)} ph="ACSR" /></div><WF label="Insulation Type" v={c.insulation} set={v=>setCond(i,"insulation",v)} ph="Bare, Covered" />{isLastRow&&d.conductors.length<7&&<button onClick={()=>setD(p=>({...p,conductors:[...p.conductors,{level:"",existing:"",size:"",material:"",insulation:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}</div>:null;});})()}
     </div>,
-    <div key="7">
+    <div key="6">
       <div style={{background:"#fffff0",border:"1px solid #e0e000",borderRadius:8,padding:9,marginBottom:12,fontSize:11,color:"#555"}}><b>End Size:</b> B=100×100, D=100×150 | <b>Length:</b> 20=2m, 23=2.3m<br/><b>Material:</b> T=Timber, S=Steel, C=Composite | <b>Insulators:</b> PN=Pin(LV), PS=Post(HV), TT=Term-Term, DP=Delta Post, EDO</div>
       <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Crossarms</div>
       {(()=>{const firstEmptyIdx=d.crossarms.findIndex(c=>!(c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires));return d.crossarms.map((c,i)=>{const hasData=c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires;const isFirstEmpty=i===firstEmptyIdx;const isLastRow=i===d.crossarms.length-1;return(hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}><button onClick={()=>setD(p=>({...p,crossarms:p.crossarms.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button><div style={{fontWeight:600,fontSize:12,marginBottom:6,color:W_PURPLE}}>Crossarm {i+1}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}><WF label="Level" v={c.level} set={v=>setCA(i,"level",v)} ph="LV,11" /><WF label="E or N" v={c.existing} set={v=>setCA(i,"existing",v)} ph="E/N" /><WF label="Rated Voltage" v={c.voltage} set={v=>setCA(i,"voltage",v)} ph="LV/11" /><WF label="End Size" v={c.endSize} set={v=>setCA(i,"endSize",v)} ph="B/D" /><WF label="Length" v={c.length} set={v=>setCA(i,"length",v)} ph="20/23" /><WF label="# Arms" v={c.arms} set={v=>setCA(i,"arms",v)} ph="1/2" /><WF label="Insulator Type" v={c.insulatorType} set={v=>setCA(i,"insulatorType",v)} ph="PN/PS" /><WF label="Arm Material" v={c.armMaterial} set={v=>setCA(i,"armMaterial",v)} ph="T/S/C" /><WF label="# Wires" v={c.wires} set={v=>setCA(i,"wires",v)} ph="2-6" /></div>{isLastRow&&d.crossarms.length<7&&<button onClick={()=>setD(p=>({...p,crossarms:[...p.crossarms,{level:"",existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}</div>:null;});})()}
     </div>,
-    <div key="8">
+    <div key="7">
       <div style={{fontSize:13,color:"#777",marginBottom:10}}>Illustrate asset location if the pole is new or has been moved more than 1 metre. Show any LV break positions.</div>
       <WTA label="Describe the work performed" v={d.workDescription} set={set("workDescription")} rows={12} ph="Describe all work performed..." />
     </div>,

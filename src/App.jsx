@@ -7,8 +7,9 @@ import TransformerWizardApp from './wizards/TransformerWizard'
 import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
+import LvBoxWizard from './wizards/LvBoxWizard'
 
-const APP_VERSION = '2.5.0'
+const APP_VERSION = '2.6.0'
 
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork] = useState('');
@@ -29,6 +30,8 @@ const AsBuiltFormSelector = () => {
   const [lvWizardOpen, setLvWizardOpen] = useState(false);
   const [ebChoiceOpen, setEbChoiceOpen] = useState(false);
   const [ebWizardOpen, setEbWizardOpen] = useState(false);
+  const [edChoiceOpen, setEdChoiceOpen] = useState(false);
+  const [edWizardOpen, setEdWizardOpen] = useState(false);
 
   // Form definitions with local file paths
   // PDFs should be placed in the public/forms/ folder
@@ -297,6 +300,11 @@ const AsBuiltFormSelector = () => {
     // Electrical Distribution Record gets a choice modal
     if (formId === '360S014EB') {
       setEbChoiceOpen(true);
+      return;
+    }
+    // LV Box Record gets a choice modal
+    if (formId === '360S014ED') {
+      setEdChoiceOpen(true);
       return;
     }
 
@@ -1157,6 +1165,50 @@ const AsBuiltFormSelector = () => {
 
       {/* Electrical Distribution Record Wizard overlay */}
       {ebWizardOpen && <ElecDistributionWizard onClose={()=>setEbWizardOpen(false)} />}
+
+            {/* LV Box Record choice modal */}
+      {edChoiceOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={()=>setEdChoiceOpen(false)}>
+          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-5">
+              <FileText className="text-green-600 flex-shrink-0" size={24} />
+              <div>
+                <p className="font-bold text-gray-900 text-base">360S014ED – As-built LV Box Record</p>
+                <p className="text-sm text-gray-500">How would you like to open this form?</p>
+              </div>
+            </div>
+            <button
+              onClick={()=>{setEdChoiceOpen(false); setEdWizardOpen(true);}}
+              className="w-full mb-3 p-4 rounded-xl border-2 text-left transition-all"
+              style={{borderColor:'#16a34a', background:'#f0fdf4'}}
+            >
+              <div className="flex items-center gap-3">
+                <PenLine style={{color:'#16a34a', flexShrink:0}} size={22} />
+                <div>
+                  <p className="font-semibold" style={{color:'#14532d'}}>Fill Out Form</p>
+                  <p className="text-xs mt-0.5" style={{color:'#16a34a'}}>Step-by-step wizard — generates a filled PDF</p>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={()=>{setEdChoiceOpen(false); handleFormClick('forms/360S014ED.pdf', 'As-built LV Box Record', null);}}
+              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
+                <div>
+                  <p className="font-semibold text-gray-900">View / Download PDF</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
+                </div>
+              </div>
+            </button>
+            <button onClick={()=>setEdChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* LV Box Record Wizard overlay */}
+      {edWizardOpen && <LvBoxWizard onClose={()=>setEdWizardOpen(false)} />}
 
             {/* Version Number */}
       <div style={{
