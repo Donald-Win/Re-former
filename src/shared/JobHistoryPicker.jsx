@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Clock, X, ChevronRight, Trash2 } from 'lucide-react'
 import { APP_ACCENT } from './constants'
-import { loadHistory, saveToHistory, formatJobLabel, formatJobDate, JOB_FIELDS } from './jobHistory'
+import { loadHistory, formatJobDate, JOB_FIELDS, STORAGE_KEY } from './jobHistory'
 
 // Modal that lets the user pick a previous job to load into the wizard.
 // Props:
@@ -27,7 +27,7 @@ export function JobHistoryPicker({ open, onClose, onSelect, accent = APP_ACCENT 
     e.stopPropagation()
     const updated = history.filter(h => h.id !== id)
     setHistory(updated)
-    try { localStorage.setItem('re-former-job-history', JSON.stringify(updated)) } catch {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)) } catch {}
   }
 
   if (!open) return null
@@ -112,16 +112,20 @@ export function JobHistoryPicker({ open, onClose, onSelect, accent = APP_ACCENT 
                     fontWeight: 600, fontSize: 14, color: '#1a1a2e',
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
-                    {entry.pcoWONo
-                      ? `W/O ${entry.pcoWONo}`
-                      : entry.streetRoad || 'Unnamed job'}
+                    {entry.npJobNumber
+                      ? `NP ${entry.npJobNumber}`
+                      : entry.pcoWONo
+                        ? `W/O ${entry.pcoWONo}`
+                        : entry.projectName || entry.streetRoad || 'Unnamed job'}
                   </div>
-                  <div style={{
-                    fontSize: 12, color: '#666', marginTop: 2,
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {[entry.streetRoad, entry.cityTown].filter(Boolean).join(', ')}
-                  </div>
+                  {(entry.projectName || entry.streetRoad) && (
+                    <div style={{
+                      fontSize: 12, color: '#555', marginTop: 2,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {[entry.projectName, entry.streetRoad, entry.cityTown].filter(Boolean).join(' — ')}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: '#aaa', marginTop: 1 }}>
                     {[
                       entry.contractor,

@@ -12,21 +12,26 @@ const loadScript = src => new Promise((res, rej) => {
 export function PdfCanvasPreview({ pdfBytes }) {
   const containerRef = useRef(null)
   const renderingRef = useRef(false)
+  const cancelledRef = useRef(false)
 
   useEffect(() => {
     if (!pdfBytes || !containerRef.current) return
     if (renderingRef.current) return
+    cancelledRef.current = false
     renderingRef.current = true
     const container = containerRef.current
     container.innerHTML = '';
     (async () => {
       try {
         await loadScript(`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`)
+        if (cancelledRef.current) return
         const lib = window['pdfjs-dist/build/pdf']
         lib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`
         const pdf   = await lib.getDocument({ data: pdfBytes.slice() }).promise
+        if (cancelledRef.current) return
         const scale = window.devicePixelRatio >= 2 ? 2 : 1.5
         for (let n = 1; n <= Math.min(pdf.numPages, 3); n++) {
+          if (cancelledRef.current) return
           const page  = await pdf.getPage(n)
           const vp    = page.getViewport({ scale })
           const wrap  = document.createElement('div')
@@ -38,9 +43,12 @@ export function PdfCanvasPreview({ pdfBytes }) {
           await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
         }
         renderingRef.current = false
-      } catch (err) { console.error('pdf.js render failed:', err); renderingRef.current = false }
+      } catch (err) {
+        if (!cancelledRef.current) console.error('pdf.js render failed:', err)
+        renderingRef.current = false
+      }
     })()
-    return () => { renderingRef.current = false }
+    return () => { cancelledRef.current = true; renderingRef.current = false }
   }, [pdfBytes])
 
   return <div ref={containerRef} style={{ width: '100%' }} />

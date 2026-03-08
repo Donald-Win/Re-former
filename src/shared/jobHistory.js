@@ -1,24 +1,24 @@
 // Job history — saves up to 5 recent jobs in localStorage.
 // Only text fields are stored (no signature blob — too large).
-// Keyed by pcoWONo+streetRoad combo so blank W/O jobs also deduplicate.
+// Primary identifier: NP Job Number, then PCo W/O No., then project+address combo.
 
-const STORAGE_KEY = 're-former-job-history'
+export const STORAGE_KEY = 're-former-job-history'
 const MAX_ENTRIES = 5
 
 export const JOB_FIELDS = [
+  'npJobNumber', 'projectName',
   'pcoWONo', 'ciwrNo',
   'streetRoad', 'cityTown', 'district',
-  'contractor', 'contractorJobCostCode',
+  'contractor',
   'dateWorkCompleted', 'namePrint',
 ]
 
 function makeId(d) {
-  // Stable key: prefer W/O number, fall back to street+contractor combo,
-  // last resort timestamp (only if truly empty — prevents spurious dupes)
-  if (d.pcoWONo) return `wo:${d.pcoWONo.trim()}`
-  const combo = [d.streetRoad, d.contractor].filter(Boolean).map(s => s.trim()).join('|')
+  if (d.npJobNumber) return `np:${d.npJobNumber.trim()}`
+  if (d.pcoWONo)     return `wo:${d.pcoWONo.trim()}`
+  const combo = [d.projectName, d.streetRoad, d.contractor].filter(Boolean).map(s => s.trim()).join('|')
   if (combo) return `job:${combo}`
-  return `ts:${Date.now()}`
+  return `ts:${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`
 }
 
 export function loadHistory() {
@@ -30,8 +30,8 @@ export function loadHistory() {
 }
 
 export function saveToHistory(d) {
-  // Don't save blank entries
-  if (!d.pcoWONo && !d.streetRoad && !d.contractor) return
+  // Don't save if there's nothing meaningful to identify this job by
+  if (!d.npJobNumber && !d.pcoWONo && !d.projectName && !d.streetRoad && !d.contractor) return
 
   const id = makeId(d)
   const entry = {
@@ -53,7 +53,7 @@ export function saveToHistory(d) {
 }
 
 export function formatJobLabel(entry) {
-  const parts = [entry.pcoWONo, entry.streetRoad, entry.cityTown].filter(Boolean)
+  const parts = [entry.npJobNumber, entry.projectName, entry.streetRoad].filter(Boolean)
   return parts.join(' — ') || 'Unnamed job'
 }
 

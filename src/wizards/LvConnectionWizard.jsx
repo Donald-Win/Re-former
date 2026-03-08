@@ -170,13 +170,14 @@ export default function LvConnectionWizard({ onClose }) {
   const [step, setStep] = useState(0)
 
   const [d, setD] = useState({
+    npJobNumber:          '',
+    projectName:          '',
     pcoWONo:              '',
     ciwrNo:               '',
     streetRoad:           '',
     cityTown:             '',
     district:             '',
     contractor:           '',
-    contractorJobCostCode:'',
     dateWorkCompleted:    '',
     namePrint:            '',
     signed:               '',
@@ -288,46 +289,44 @@ export default function LvConnectionWizard({ onClose }) {
       </button>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Powerco W/O Number"      v={d.pcoWONo}  set={v => set('pcoWONo',  v)} accent={LV_TEAL} />
-        <WF label="Customer Works App. No." v={d.ciwrNo}   set={v => set('ciwrNo',   v)} accent={LV_TEAL} />
-      </div>
-
-      <div style={{ marginTop: 10 }}>
-        <WF
-          label="Physical Address / Legal Description (incl. Lot & DP No)"
-          v={d.streetRoad}
-          set={v => set('streetRoad', v)}
-          accent={LV_TEAL}
-        />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginTop: 10 }}>
-        <WF label="City / Town"             v={d.cityTown}      set={v => set('cityTown',      v)} accent={LV_TEAL} />
-        <WF label="District"                v={d.district}      set={v => set('district',      v)} accent={LV_TEAL} />
-        <WF label="Contractor"              v={d.contractor}    set={v => set('contractor',    v)} accent={LV_TEAL} />
-        <WF label="C.O.C Number"            v={d.cocNumber}     set={v => set('cocNumber',     v)} accent={LV_TEAL} />
-        <WF label="Cow Shed / Dairy Number" v={d.cowShedNumber} set={v => set('cowShedNumber', v)} accent={LV_TEAL} />
-        <WF label="ICP Number"              v={d.icpNumber}     set={v => set('icpNumber',     v)} accent={LV_TEAL} />
-        <WF
-          label="Date Work Completed"
-          type="date"
-          v={d.dateWorkCompleted}
-          set={v => set('dateWorkCompleted', v)}
-          accent={LV_TEAL}
-        />
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        <SectionHead label="Authorisation" accent={LV_TEAL} />
+        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={LV_TEAL} />
+        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber',  v)} accent={LV_TEAL} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Name (Print)" v={d.namePrint} set={v => set('namePrint', v)} accent={LV_TEAL} />
+        <WF label="PCo W/O No."  v={d.pcoWONo}  set={v => set('pcoWONo',  v)} accent={LV_TEAL} />
+        <WF label="CIWR No."     v={d.ciwrNo}   set={v => set('ciwrNo',   v)} accent={LV_TEAL} />
       </div>
-      <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-          Signature
-        </div>
-        <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={LV_TEAL} />
+      <WF
+        label="No./Street/Road"
+        v={d.streetRoad}
+        set={v => set('streetRoad', v)}
+        ph="123 Example Road"
+        accent={LV_TEAL}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={LV_TEAL} />
+        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={LV_TEAL} />
+      </div>
+
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+
+      <WF label="Contractor" v={d.contractor} set={v => set('contractor', v)} accent={LV_TEAL} />
+      <WF
+        label="Date Work Completed"
+        type="date"
+        v={d.dateWorkCompleted}
+        set={v => set('dateWorkCompleted', v)}
+        accent={LV_TEAL}
+      />
+      <WF label="Name (Print)" v={d.namePrint} set={v => set('namePrint', v)} accent={LV_TEAL} />
+      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={LV_TEAL} />
+
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+      <SectionHead label="Connection Identifiers" accent={LV_TEAL} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="C.O.C Number"           v={d.cocNumber}     set={v => set('cocNumber',     v)} accent={LV_TEAL} />
+        <WF label="Cow Shed / Dairy No."   v={d.cowShedNumber} set={v => set('cowShedNumber', v)} accent={LV_TEAL} />
+        <WF label="ICP Number"             v={d.icpNumber}     set={v => set('icpNumber',     v)} accent={LV_TEAL} />
       </div>
     </div>,
 

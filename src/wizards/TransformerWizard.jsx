@@ -112,7 +112,7 @@ async function generatePdf(d) {
     const sigWTx = (sigMaxHTx / sigDimsTx.height) * sigDimsTx.width;
     p1.drawImage(sigImg, { x: 438, y: PAGE_H - 136, width: sigWTx, height: sigMaxHTx, opacity: 1 });
   }
-  t(p1, 160, 140, d.contractorJobCostCode)
+  t(p1, 160, 140, d.npJobNumber)
   t(p1, 440, 141, d.namePrint)
 
   // ── DETAILS: IDs ───────────────────────────────────────────────────────────
@@ -294,7 +294,8 @@ function TransformerWizardApp({ onClose }) {
 
   const [d, setD] = useState({
     streetRoad: '', cityTown: '', district: '',
-    pcoWONo: '', ciwrNo: '', contractorJobCostCode: '',
+    npJobNumber: '', projectName: '',
+    pcoWONo: '', ciwrNo: '',
     contractor: '', dateWorkCompleted: '',
     signed: '', namePrint: '',
     transformerSiteId: '', poleId: '',
@@ -402,30 +403,28 @@ function TransformerWizardApp({ onClose }) {
     // 0 – Job Details
     <div key="0">
       <button onClick={() => setPickerOpen(true)} style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        padding: '10px 14px', marginBottom: 14, width: '100%',
-        background: '#eef2ff', border: `2px solid ${APP_ACCENT}`,
-        borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-        fontSize: 13, fontWeight: 700, color: APP_ACCENT,
-      }}>
-        <span style={{ fontSize: 16 }}>📋</span> Load Previous Job
-      </button>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        width: '100%', padding: '10px 0', marginBottom: 16,
+        borderRadius: 8, border: `2px dashed ${APP_ACCENT}`,
+        background: '#eef2ff', color: APP_ACCENT,
+        fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+      }}>📋 Load Previous Job</button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <F label="Project Name"   v={d.projectName} set={set('projectName')} />
+        <F label="NP Job Number"  v={d.npJobNumber}  set={set('npJobNumber')} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <F label="PCo W/O No."  v={d.pcoWONo}  set={set('pcoWONo')} />
         <F label="CIWR No."     v={d.ciwrNo}   set={set('ciwrNo')} />
       </div>
       <F label="No./Street/Road" v={d.streetRoad} set={set('streetRoad')} ph="123 Example Road" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="City/Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" />
-        <F label="District"  v={d.district} set={set('district')} ph="Waikato" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <F label="City / Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" />
+        <F label="District"    v={d.district} set={set('district')} ph="Waikato" />
       </div>
-      <F label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={set('contractorJobCostCode')} />
-      <div style={{ height: 1, background: '#eee', margin: '12px 0' }} />
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
       <F label="Contractor" v={d.contractor} set={set('contractor')} />
       <F label="Date Work Completed" v={d.dateWorkCompleted} set={set('dateWorkCompleted')} type="date" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="Name (Print)" v={d.namePrint} set={set('namePrint')} />
-      </div>
+      <F label="Name (Print)" v={d.namePrint} set={set('namePrint')} />
       <SignaturePad value={d.signed} onChange={set('signed')} accent={G} />
     </div>,
 

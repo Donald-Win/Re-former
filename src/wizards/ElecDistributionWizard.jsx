@@ -178,7 +178,7 @@ async function generateEbPdf(d) {
   t(450, 103, d.dateWorkCompleted)
   t(120, 120, d.pcoWONo)
   t(255, 120, d.ciwrNo)
-  t(160, 137, d.contractorJobCostCode)
+  t(160, 137, d.npJobNumber)
   t(450, 137, d.namePrint)
 
   // ── Signature ──────────────────────────────────────────────
@@ -258,13 +258,14 @@ export default function ElecDistributionWizard({ onClose }) {
 
   const [d, setD] = useState({
     // Standard job-history fields
+    npJobNumber:          '',
+    projectName:          '',
     pcoWONo:              '',
     ciwrNo:               '',
     streetRoad:           '',
     cityTown:             '',
     district:             '',
     contractor:           '',
-    contractorJobCostCode:'',
     dateWorkCompleted:    '',
     namePrint:            '',
     signed:               '',
@@ -383,27 +384,25 @@ export default function ElecDistributionWizard({ onClose }) {
       </button>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={EB_ORANGE} />
+        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber',  v)} accent={EB_ORANGE} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <WF label="PCo W/O No." v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={EB_ORANGE} />
         <WF label="CIWR No."    v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={EB_ORANGE} />
       </div>
-
-      <div style={{ marginTop: 10 }}>
-        <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} accent={EB_ORANGE} />
+      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={EB_ORANGE} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={EB_ORANGE} />
+        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={EB_ORANGE} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginTop: 10 }}>
-        <WF label="City / Town"              v={d.cityTown}             set={v => set('cityTown',             v)} accent={EB_ORANGE} />
-        <WF label="District"                 v={d.district}             set={v => set('district',             v)} accent={EB_ORANGE} />
-        <WF label="Contractor"               v={d.contractor}           set={v => set('contractor',           v)} accent={EB_ORANGE} />
-        <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={EB_ORANGE} />
-        <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={EB_ORANGE} />
-        <WF label="Name (Print)"             v={d.namePrint}            set={v => set('namePrint',            v)} accent={EB_ORANGE} />
-      </div>
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
 
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Signature</div>
-        <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={EB_ORANGE} />
-      </div>
+      <WF label="Contractor"               v={d.contractor}            set={v => set('contractor',            v)} accent={EB_ORANGE} />
+      <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={EB_ORANGE} />
+      <WF label="Name (Print)"             v={d.namePrint}             set={v => set('namePrint',             v)} accent={EB_ORANGE} />
+      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={EB_ORANGE} />
     </div>,
 
     // ── Step 1 — Distribution Main ───────────────────────

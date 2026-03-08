@@ -16,28 +16,37 @@ const loadScript = src => new Promise((res, rej) => {
 export function CoordOverlay({ pdfBytes, page = 1 }) {
   const canvasRef    = useRef(null)
   const renderingRef = useRef(false)
+  const cancelledRef = useRef(false)
   const [coord, setCoord]   = useState(null)
   const [clicks, setClicks] = useState([])
 
   useEffect(() => {
     if (!pdfBytes || !canvasRef.current) return
     if (renderingRef.current) return
+    cancelledRef.current = false
     renderingRef.current = true
     ;(async () => {
       try {
         await loadScript(`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`)
+        if (cancelledRef.current) return
         const lib = window['pdfjs-dist/build/pdf']
         lib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`
         const pdf    = await lib.getDocument({ data: pdfBytes.slice() }).promise
+        if (cancelledRef.current) return
         const pg     = await pdf.getPage(page)
         const vp     = pg.getViewport({ scale: 1.0 })
         const canvas = canvasRef.current
+        if (cancelledRef.current) return
         canvas.width = vp.width; canvas.height = vp.height
         canvas.style.width = vp.width + 'px'; canvas.style.height = vp.height + 'px'
         await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
         renderingRef.current = false
-      } catch (err) { console.error('Overlay render failed:', err); renderingRef.current = false }
+      } catch (err) {
+        if (!cancelledRef.current) console.error('Overlay render failed:', err)
+        renderingRef.current = false
+      }
     })()
+    return () => { cancelledRef.current = true; renderingRef.current = false }
   }, [pdfBytes, page])
 
   const handleClick = e => {

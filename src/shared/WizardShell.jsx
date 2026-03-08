@@ -140,12 +140,13 @@ export function WizardShell({
         </div>
         <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
           {steps.map((_, i) => (
-            <button key={i} onClick={() => onStepClick(i)} style={{
+            <button key={i} onClick={() => i <= step && onStepClick(i)} style={{
               flexShrink: 0,
               width: i === step ? 18 : 7,
               height: 7,
               borderRadius: 4,
-              border: 'none', padding: 0, cursor: 'pointer',
+              border: 'none', padding: 0,
+              cursor: i <= step ? 'pointer' : 'default',
               background: i <= step ? resolvedDotColor(i) : '#ccc',
               opacity: i === step ? 1 : 0.6,
               transition: 'all .2s',

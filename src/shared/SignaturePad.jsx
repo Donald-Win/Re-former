@@ -8,17 +8,41 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const drawing   = useRef(false)
   const lastPos   = useRef(null)
 
-  // ── Size canvas to physical pixels on mount ───────────────
+  // ── Size canvas to physical pixels; re-size on orientation change ───
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
-    const cssW = canvas.clientWidth  || 750
-    const cssH = canvas.clientHeight || 160
-    canvas.width  = Math.round(cssW * dpr)
-    canvas.height = Math.round(cssH * dpr)
-    const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
+
+    const resize = () => {
+      // Preserve any existing drawing before resize
+      const dpr    = window.devicePixelRatio || 1
+      const cssW   = canvas.clientWidth  || 750
+      const cssH   = canvas.clientHeight || 160
+      const newW   = Math.round(cssW * dpr)
+      const newH   = Math.round(cssH * dpr)
+      if (canvas.width === newW && canvas.height === newH) return
+
+      // Snapshot current content
+      const snapshot = canvas.toDataURL()
+
+      canvas.width  = newW
+      canvas.height = newH
+      const ctx = canvas.getContext('2d')
+      ctx.scale(dpr, dpr)
+
+      // Restore previous drawing (if any) so strokes survive rotation
+      if (snapshot && snapshot !== 'data:,') {
+        const img = new Image()
+        img.onload = () => ctx.drawImage(img, 0, 0, cssW, cssH)
+        img.src = snapshot
+      }
+    }
+
+    resize()
+
+    const ro = new ResizeObserver(resize)
+    ro.observe(canvas)
+    return () => ro.disconnect()
   }, [])
 
   // ── Clear when value is reset externally ──────────────────

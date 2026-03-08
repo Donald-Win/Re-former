@@ -157,6 +157,7 @@ function PoleRecordWizard({ onClose }) {
   const [pdfError, setPdfError] = useState(null);
   const blobUrlRef = useRef(null);
   const [d, setD] = useState({
+    npJobNumber: '', projectName: '',
     conductors: [{level:"",existing:"",size:"",material:"",insulation:""}],
     crossarms: [{level:"",existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}],
     accessories: [],
@@ -217,30 +218,29 @@ function PoleRecordWizard({ onClose }) {
   const formSteps = [
     <div key="0">
       <button onClick={() => setPickerOpen(true)} style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        padding: '10px 14px', marginBottom: 14, width: '100%',
-        background: '#eef2ff', border: `2px solid ${APP_ACCENT}`,
-        borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-        fontSize: 13, fontWeight: 700, color: APP_ACCENT,
-      }}>
-        <span style={{ fontSize: 16 }}>📋</span> Load Previous Job
-      </button>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <WF label="PCo W/O No." v={d.pcoWONo} set={set("pcoWONo")} />
-        <WF label="CIWR No." v={d.ciwrNo} set={set("ciwrNo")} />
+        width: '100%', padding: '10px 0', marginBottom: 16,
+        borderRadius: 8, border: `2px dashed ${W_PURPLE}`,
+        background: '#eef2ff', color: W_PURPLE,
+        fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+      }}>📋 Load Previous Job</button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="Project Name" v={d.projectName} set={set("projectName")} accent={W_PURPLE} />
+        <WF label="NP Job Number" v={d.npJobNumber} set={set("npJobNumber")} accent={W_PURPLE} />
       </div>
-      <WF label="No./Street/Road" v={d.streetRoad} set={set("streetRoad")} ph="123 Example Road" />
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <WF label="City/Town" v={d.cityTown} set={set("cityTown")} ph="Hamilton" />
-        <WF label="District" v={d.district} set={set("district")} ph="Waikato" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="PCo W/O No." v={d.pcoWONo} set={set("pcoWONo")} accent={W_PURPLE} />
+        <WF label="CIWR No." v={d.ciwrNo} set={set("ciwrNo")} accent={W_PURPLE} />
       </div>
-      <div style={{height:1,background:"#eee",margin:"14px 0"}} />
-      <WF label="Contractor" v={d.contractor} set={set("contractor")} ph="Contractor name" />
-      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={set("dateWorkCompleted")} type="date" />
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <WF label="Name (Print)" v={d.namePrint} set={set("namePrint")} />
+      <WF label="No./Street/Road" v={d.streetRoad} set={set("streetRoad")} ph="123 Example Road" accent={W_PURPLE} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="City / Town" v={d.cityTown} set={set("cityTown")} ph="Hamilton" accent={W_PURPLE} />
+        <WF label="District" v={d.district} set={set("district")} ph="Waikato" accent={W_PURPLE} />
       </div>
-      <SignaturePad value={d.signed} onChange={set("signed")} />
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+      <WF label="Contractor" v={d.contractor} set={set("contractor")} accent={W_PURPLE} />
+      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={set("dateWorkCompleted")} type="date" accent={W_PURPLE} />
+      <WF label="Name (Print)" v={d.namePrint} set={set("namePrint")} accent={W_PURPLE} />
+      <SignaturePad value={d.signed} onChange={set("signed")} accent={W_PURPLE} />
     </div>,
     <div key="1">
       <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set("oldPoleId")} />

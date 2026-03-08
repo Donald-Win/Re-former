@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { APP_ACCENT } from './constants'
 
 export const wInp = {
@@ -12,22 +12,38 @@ export const wLbl = {
 }
 
 export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
+  const [focused, setFocused] = useState(false)
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
       <input type={type} value={v || ''} onChange={e => set(e.target.value)}
-        placeholder={ph} style={{ ...wInp, borderColor: v ? accent : '#ddd' }} />
+        placeholder={ph}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          ...wInp,
+          borderColor: focused ? accent : v ? accent : '#ddd',
+          boxShadow: focused ? `0 0 0 3px ${accent}25` : 'none',
+        }} />
     </div>
   )
 }
 
 export function WTA({ label, v, set, rows = 3, ph, accent = APP_ACCENT }) {
+  const [focused, setFocused] = useState(false)
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
       <textarea value={v || ''} onChange={e => set(e.target.value)}
         rows={rows} placeholder={ph}
-        style={{ ...wInp, height: 'auto', resize: 'vertical', borderColor: v ? accent : '#ddd' }} />
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          ...wInp,
+          height: 'auto', resize: 'vertical',
+          borderColor: focused ? accent : v ? accent : '#ddd',
+          boxShadow: focused ? `0 0 0 3px ${accent}25` : 'none',
+        }} />
     </div>
   )
 }

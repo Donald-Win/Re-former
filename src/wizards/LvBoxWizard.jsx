@@ -205,13 +205,13 @@ async function generateEdPdf(d) {
   // ── Header ─────────────────────────────────────────────────
   // Left column
   t(120, 150, d.streetRoad)
-  t(120, 160, d.townDistrict)
+  t(120, 160, [d.cityTown, d.district].filter(Boolean).join(', '))
   t(120, 170, d.pcoWONo)
   t(120, 180, d.ciwrNo)
   // Right column
   t(460, 150, d.contractor)
   t(460, 160, d.dateWorkCompleted)
-  t(460, 170, d.contractorJobCostCode)
+  t(460, 170, d.npJobNumber)
 
   // ── Signature ──────────────────────────────────────────────
   if (d.signed) {
@@ -270,12 +270,14 @@ export default function LvBoxWizard({ onClose }) {
 
   const [d, setD] = useState({
     // Job Details
+    npJobNumber:           '',
+    projectName:           '',
     streetRoad:            '',
-    townDistrict:          '',
+    cityTown:              '',
+    district:              '',
     pcoWONo:               '',
     ciwrNo:                '',
     contractor:            '',
-    contractorJobCostCode: '',
     dateWorkCompleted:     '',
     signed:                '',
     // Box table rows
@@ -372,25 +374,25 @@ export default function LvBoxWizard({ onClose }) {
         📋 Load Previous Job
       </button>
 
-      <div style={{ marginBottom: 10 }}>
-        <WF label="No./Street/Road"  v={d.streetRoad}   set={v => set('streetRoad',   v)} accent={ED_GREEN} />
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <WF label="Town / District"  v={d.townDistrict} set={v => set('townDistrict', v)} accent={ED_GREEN} />
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Powerco WO No."          v={d.pcoWONo}               set={v => set('pcoWONo',               v)} accent={ED_GREEN} />
-        <WF label="CIWR / IR / ELE No."     v={d.ciwrNo}                set={v => set('ciwrNo',                v)} accent={ED_GREEN} />
-        <WF label="Contractor"              v={d.contractor}             set={v => set('contractor',             v)} accent={ED_GREEN} />
-        <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ED_GREEN} />
-        <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={ED_GREEN} />
+        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={ED_GREEN} />
+        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber',  v)} accent={ED_GREEN} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="PCo W/O No."  v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={ED_GREEN} />
+        <WF label="CIWR No."     v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={ED_GREEN} />
+      </div>
+      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={ED_GREEN} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={ED_GREEN} />
+        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={ED_GREEN} />
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Signature</div>
-        <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={ED_GREEN} />
-      </div>
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+
+      <WF label="Contractor"               v={d.contractor}            set={v => set('contractor',            v)} accent={ED_GREEN} />
+      <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={ED_GREEN} />
+      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={ED_GREEN} />
     </div>,
 
     // ── Step 1 — Box Entries ─────────────────────────────
