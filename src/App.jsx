@@ -8,6 +8,7 @@ import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
+import { AuthGate } from './auth/AuthGate'
 
 const APP_VERSION = '2.6.0'
 
@@ -308,12 +309,30 @@ const AsBuiltFormSelector = () => {
       return;
     }
 
-    // iOS detection — covers iPhone/iPod and all iPadOS versions.
-    // iPadOS 13+ dropped "iPad" from the UA and "MacIntel" from platform,
-    // so we detect it as: Mac UA + touch support (Windows touch says "Windows").
-    const ua = navigator.userAgent;
-    const isIOS = /iPhone|iPod/.test(ua) ||
-      (/Mac/.test(ua) && navigator.maxTouchPoints > 1 && !window.MSStream);
+    // Improved iOS detection (works with modern iPads)
+    const isIOS = (() => {
+      // Check for iOS devices
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      
+      // iPhone, iPod
+      if (/iPhone|iPod/.test(userAgent) && !window.MSStream) {
+        return true;
+      }
+      
+      // iPad detection (iOS 13+ reports as Mac)
+      if (navigator.maxTouchPoints && 
+          navigator.maxTouchPoints > 2 && 
+          /MacIntel/.test(navigator.platform)) {
+        return true;
+      }
+      
+      // Older iPad detection
+      if (/iPad/.test(userAgent) && !window.MSStream) {
+        return true;
+      }
+      
+      return false;
+    })();
     
     if (isIOS) {
       // On iOS: Open in modal viewer
@@ -434,6 +453,7 @@ const AsBuiltFormSelector = () => {
     );
 
   return (
+    <AuthGate>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="max-w-6xl mx-auto p-4 md:p-6 pb-16">
         {/* Header */}
@@ -827,7 +847,7 @@ const AsBuiltFormSelector = () => {
                 {allCommissioningForms.map((cert) => (
                   <div
                     key={cert.id}
-                    onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name)}
+                    onClick={() => cert.hasLink && handleFormClick(cert.url)}
                     className="p-4 border-2 border-green-200 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 hover:border-green-300 active:bg-green-200 transition-all"
                   >
                     <div className="flex items-start gap-3">
@@ -981,7 +1001,7 @@ const AsBuiltFormSelector = () => {
             <div className="flex items-center gap-3 mb-5">
               <FileText className="text-indigo-600 flex-shrink-0" size={24} />
               <div>
-                <p className="font-bold text-gray-900 text-base">360S014EG – As-built Transformer Record</p>
+                <p className="font-bold text-gray-900 text-base">360S014EG – AS-Built Transformer Record</p>
                 <p className="text-sm text-gray-500">How would you like to open this form?</p>
               </div>
             </div>
@@ -998,7 +1018,7 @@ const AsBuiltFormSelector = () => {
               </div>
             </button>
             <button
-              onClick={()=>{setTxChoiceOpen(false); handleFormClick('forms/360S014EG.pdf', 'As-built Transformer Record', null);}}
+              onClick={()=>{setTxChoiceOpen(false); handleFormClick('forms/360S014EG.pdf', 'AS-Built Transformer Record', null);}}
               className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all"
             >
               <div className="flex items-center gap-3">
@@ -1204,12 +1224,12 @@ const AsBuiltFormSelector = () => {
         borderRadius: '6px',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         userSelect: 'none',
-        zIndex: 40,
-        pointerEvents: 'none',
+        zIndex: 1000
       }}>
         v{APP_VERSION}
       </div>
     </div>
+    </AuthGate>
   );
 };
 
