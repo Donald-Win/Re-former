@@ -67,11 +67,13 @@ export async function checkAccessOnline() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deviceId, app: APP_ID }),
-    // Ensure this is never served from HTTP cache
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(`Worker responded ${res.status}`)
   const result = await res.json()
+  // Cache all results including denied — so offline behaviour is correct.
+  // Denied cache is cleared immediately after the lock screen is shown,
+  // so it never persists to block a user who has since been granted access.
   cacheResult(result)
   return result
 }
