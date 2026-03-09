@@ -8,6 +8,7 @@ import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
+import { AuthGate } from './auth/AuthGate'
 
 const APP_VERSION = '2.6.0'
 
@@ -1306,4 +1307,12 @@ const AsBuiltFormSelector = () => {
   );
 };
 
-export default AsBuiltFormSelector;
+function App() {
+  return (
+    <AuthGate>
+      <AsBuiltFormSelector />
+    </AuthGate>
+  )
+}
+
+export default App;
