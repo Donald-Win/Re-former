@@ -1,6 +1,6 @@
 // re-former Service Worker
 // Bump CACHE_VERSION whenever deploying a new build.
-const CACHE_VERSION = 're-former-v2.2.0'
+const CACHE_VERSION = 're-former-v2.6.0'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const PDF_CACHE    = `${CACHE_VERSION}-pdfs`
 
