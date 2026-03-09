@@ -29,13 +29,50 @@ function generateDeviceId() {
   return `DCW-${uuid.slice(0, 4)}-${uuid.slice(4, 8)}-${uuid.slice(8, 12)}`
 }
 
+function isValidId(id) {
+  return typeof id === 'string' && /^DCW-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(id)
+}
+
+// Read device ID from cookie (backup store)
+function readIdFromCookie() {
+  const match = document.cookie.match(/(?:^|;\s*)dcw-device-id=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+// Write device ID to a 10-year cookie (backup store)
+function writeIdToCookie(id) {
+  const expires = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toUTCString()
+  document.cookie = `dcw-device-id=${encodeURIComponent(id)};expires=${expires};path=/;SameSite=Strict`
+}
+
 export function getDeviceId() {
+  // Request persistent storage so Chrome won't evict localStorage under pressure
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist()
+  }
+
   let id = localStorage.getItem(DEVICE_ID_KEY)
-  if (!id || !/^DCW-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(id)) {
+
+  // localStorage was cleared — try restoring from cookie backup
+  if (!isValidId(id)) {
+    const cookieId = readIdFromCookie()
+    if (isValidId(cookieId)) {
+      console.log('[re-former auth] Restored device ID from cookie backup')
+      id = cookieId
+      localStorage.setItem(DEVICE_ID_KEY, id)
+    }
+  }
+
+  // Still no valid ID — generate a new one
+  if (!isValidId(id)) {
     id = generateDeviceId()
-    localStorage.setItem(DEVICE_ID_KEY, id)
     console.log('[re-former auth] Generated new device ID:', id)
   }
+
+  // Always write to both stores
+  localStorage.setItem(DEVICE_ID_KEY, id)
+  writeIdToCookie(id)
+
   return id
 }
 
