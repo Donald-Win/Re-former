@@ -10,7 +10,7 @@
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 // Replace with your actual Cloudflare Worker URL after deployment.
-export const WORKER_URL = 'https://re-former-auth.YOUR_SUBDOMAIN.workers.dev'
+export const WORKER_URL = 'https://re-former-auth.donald-c-win-2a0.workers.dev'
 
 // Identifies this app to the Worker. Must match a key in APP_COLUMN_MAP.
 export const APP_ID = 'reformer'
