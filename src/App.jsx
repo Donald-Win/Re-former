@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Search, FileText, CheckCircle2, Circle, ExternalLink, Download,
-  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, Printer } from 'lucide-react'
+  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine } from 'lucide-react'
 
 import PoleRecordWizard from './wizards/PoleWizard'
 import TransformerWizardApp from './wizards/TransformerWizard'
@@ -8,7 +8,6 @@ import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
-import { AuthGate } from './auth/AuthGate'
 
 const APP_VERSION = '2.6.0'
 
@@ -33,6 +32,28 @@ const AsBuiltFormSelector = () => {
   const [ebWizardOpen, setEbWizardOpen] = useState(false);
   const [edChoiceOpen, setEdChoiceOpen] = useState(false);
   const [edWizardOpen, setEdWizardOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installDismissed, setInstallDismissed] = useState(false);
+
+  // Capture the beforeinstallprompt event so we can trigger it from a button
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    // Hide button once app is installed
+    window.addEventListener('appinstalled', () => setInstallPrompt(null))
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const { outcome } = await installPrompt.userChoice
+    if (outcome === 'accepted') setInstallPrompt(null)
+    else setInstallDismissed(true)
+  }
 
   // Form definitions with local file paths
   // PDFs should be placed in the public/forms/ folder
@@ -453,7 +474,6 @@ const AsBuiltFormSelector = () => {
     );
 
   return (
-    <AuthGate>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="max-w-6xl mx-auto p-4 md:p-6 pb-16">
         {/* Header */}
@@ -1212,7 +1232,57 @@ const AsBuiltFormSelector = () => {
       {/* LV Box Record Wizard overlay */}
       {edWizardOpen && <LvBoxWizard onClose={()=>setEdWizardOpen(false)} />}
 
-            {/* Version Number */}
+            {/* Install App Button */}
+      {installPrompt && !installDismissed && (
+        <div style={{
+          position: 'fixed',
+          bottom: '44px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+        }}>
+          <button
+            onClick={handleInstall}
+            style={{
+              background: '#4f46e5',
+              color: 'white',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '10px 20px',
+              fontSize: '14px',
+              fontWeight: '700',
+              boxShadow: '0 4px 12px rgba(79,70,229,0.4)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            ⬇ Install App
+          </button>
+          <button
+            onClick={() => setInstallDismissed(true)}
+            style={{
+              background: 'rgba(255,255,255,0.9)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '28px',
+              height: '28px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }}
+          >✕</button>
+        </div>
+      )}
+
+      {/* Version Number */}
       <div style={{
         position: 'fixed',
         bottom: '12px',
@@ -1229,7 +1299,6 @@ const AsBuiltFormSelector = () => {
         v{APP_VERSION}
       </div>
     </div>
-    </AuthGate>
   );
 };
 
