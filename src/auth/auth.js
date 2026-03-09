@@ -10,28 +10,28 @@
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 // Replace with your actual Cloudflare Worker URL after deployment.
-export const WORKER_URL = 'https://re-former-auth.donald-c-win-2a0.workers.dev'
+export const WORKER_URL = 'https://re-former-auth.YOUR_SUBDOMAIN.workers.dev'
 
 // Identifies this app to the Worker. Must match a key in APP_COLUMN_MAP.
 export const APP_ID = 'reformer'
 
-const DEVICE_ID_KEY  = 're-former-device-id'
+const DEVICE_ID_KEY  = 'dcw-device-id'
 const AUTH_CACHE_KEY = 're-former-auth-cache'
 const POLL_MS        = 45_000   // 45 seconds — ~1,920 req/day per user, well under free 100k limit
 
 // ── DEVICE ID ─────────────────────────────────────────────────────────────────
 // Uses crypto.randomUUID() for a truly stable, unpredictable device identity.
 // Stored in localStorage so it survives app restarts but is unique per device/browser.
-// Format: RF-XXXX-XXXX-XXXX
+// Format: DCW-XXXX-XXXX-XXXX
 
 function generateDeviceId() {
   const uuid = crypto.randomUUID().replace(/-/g, '').toUpperCase()
-  return `RF-${uuid.slice(0, 4)}-${uuid.slice(4, 8)}-${uuid.slice(8, 12)}`
+  return `DCW-${uuid.slice(0, 4)}-${uuid.slice(4, 8)}-${uuid.slice(8, 12)}`
 }
 
 export function getDeviceId() {
   let id = localStorage.getItem(DEVICE_ID_KEY)
-  if (!id || !/^RF-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(id)) {
+  if (!id || !/^DCW-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(id)) {
     id = generateDeviceId()
     localStorage.setItem(DEVICE_ID_KEY, id)
     console.log('[re-former auth] Generated new device ID:', id)
