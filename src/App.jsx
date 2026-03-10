@@ -269,41 +269,7 @@ const AsBuiltFormSelector = () => {
     }
   }
 
-  const [isPrinting, setIsPrinting] = useState(false)
-
   const handleShare = async () => {
-    if (!pdfBytes || !pdfBlobUrl || isPrinting) return
-    setIsPrinting(true)
-
-    // Create a hidden iframe, point it at the blob URL, then call print()
-    // This triggers the native iOS Print dialog directly — no date/time footer
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;'
-    iframe.src = pdfBlobUrl
-    document.body.appendChild(iframe)
-
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow.focus()
-        iframe.contentWindow.print()
-      } catch (e) {
-        console.warn('iframe print failed, falling back to share:', e)
-      }
-      setTimeout(() => {
-        document.body.removeChild(iframe)
-        setIsPrinting(false)
-      }, 1000)
-    }
-
-    iframe.onerror = () => {
-      document.body.removeChild(iframe)
-      setIsPrinting(false)
-      // Fall back to navigator.share
-      _shareFile()
-    }
-  }
-
-  const _shareFile = async () => {
     if (!pdfBytes) return
     const file = new File([pdfBytes], currentPdfName, { type: 'application/pdf' })
     if (navigator.canShare?.({ files: [file] })) {
@@ -683,18 +649,17 @@ const AsBuiltFormSelector = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
               <button
                 onClick={handleShare}
-                disabled={!pdfBytes || isPrinting}
+                disabled={!pdfBytes}
                 style={{
                   padding: '8px 14px', border: 'none',
-                  background: pdfBytes && !isPrinting ? '#4f46e5' : '#9ca3af',
-                  color: '#fff', cursor: pdfBytes && !isPrinting ? 'pointer' : 'default',
+                  background: pdfBytes ? '#4f46e5' : '#9ca3af',
+                  color: '#fff', cursor: pdfBytes ? 'pointer' : 'default',
                   borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                  transition: 'background 0.2s',
                 }}
               >
                 <Share2 size={16} color="#fff" />
-                {!pdfBytes ? 'Loading…' : isPrinting ? 'Preparing Print…' : 'Print / Save / Share'}
+                {pdfBytes ? 'Print / Save / Share' : 'Loading…'}
               </button>
               <button onClick={handleClosePdf} style={{
                 padding: 8, border: 'none', background: 'none',
