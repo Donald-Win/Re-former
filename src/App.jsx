@@ -9,9 +9,9 @@ import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import { AuthGate } from './auth/AuthGate'
-import { CHANGELOGS } from './changelog'
+import { CHANGELOG_VERSION, CHANGELOG } from './changelog'
 
-const APP_VERSION = '2.8.0'
+const APP_VERSION = '2.7.0'
 
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork] = useState('');
@@ -20,6 +20,7 @@ const AsBuiltFormSelector = () => {
   const [viewMode, setViewMode] = useState('workType');
   const [formSearchTerm, setFormSearchTerm] = useState('');
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl]       = useState('');
   const [currentPdfUrl, setCurrentPdfUrl] = useState('');
   const [currentPdfName, setCurrentPdfName] = useState('');
   const [poleChoiceOpen, setPoleChoiceOpen] = useState(false);
@@ -36,8 +37,7 @@ const AsBuiltFormSelector = () => {
   const [edWizardOpen, setEdWizardOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installDismissed, setInstallDismissed] = useState(false);
-  const [changelogQueue, setChangelogQueue] = useState([])  // unseen batches
-  const [changelogIdx, setChangelogIdx]     = useState(0)    // which batch showing
+  const [showChangelog, setShowChangelog] = useState(false);
 
   // Pick up the install prompt captured in main.jsx before React mounted.
   // Also listen for pwaPromptReady in case React mounted first (rare but possible).
@@ -55,35 +55,17 @@ const AsBuiltFormSelector = () => {
     }
   }, [])
 
-  // Show changelog for any unseen version batches
+  // Show changelog modal once per CHANGELOG_VERSION
   useEffect(() => {
-    try {
-      const seen = JSON.parse(localStorage.getItem('re-former-changelog-seen') || '[]')
-      const unseen = CHANGELOGS.filter(b => !seen.includes(b.version))
-      if (unseen.length > 0) {
-        setChangelogQueue(unseen)
-        setChangelogIdx(0)
-      }
-    } catch {
-      setChangelogQueue([])
+    const seen = localStorage.getItem('re-former-changelog-seen')
+    if (seen !== CHANGELOG_VERSION) {
+      setShowChangelog(true)
     }
   }, [])
 
   const dismissChangelog = () => {
-    const current = changelogQueue[changelogIdx]
-    if (!current) return
-    try {
-      const seen = JSON.parse(localStorage.getItem('re-former-changelog-seen') || '[]')
-      if (!seen.includes(current.version)) {
-        localStorage.setItem('re-former-changelog-seen', JSON.stringify([...seen, current.version]))
-      }
-    } catch {}
-    if (changelogIdx + 1 < changelogQueue.length) {
-      setChangelogIdx(i => i + 1)
-    } else {
-      setChangelogQueue([])
-      setChangelogIdx(0)
-    }
+    localStorage.setItem('re-former-changelog-seen', CHANGELOG_VERSION)
+    setShowChangelog(false)
   }
 
   const handleInstall = async () => {
@@ -395,10 +377,20 @@ const AsBuiltFormSelector = () => {
     })();
     
     if (isIOS) {
-      // On iOS: Open in modal viewer
-      setCurrentPdfUrl(url);
-      setCurrentPdfName(name || url.split('/').pop());
+      // On iOS: fetch as blob URL so Safari can render it in the iframe
+      const displayName = name || url.split('/').pop();
+      setCurrentPdfName(displayName);
+      setPdfBlobUrl('');
       setPdfViewerOpen(true);
+      fetch(url)
+        .then(r => r.blob())
+        .then(blob => setPdfBlobUrl(URL.createObjectURL(blob)))
+        .catch(() => {
+          // Blob fetch failed — fall back to opening in new tab
+          setPdfViewerOpen(false);
+          window.open(url, '_blank', 'noopener,noreferrer');
+        });
+      setCurrentPdfUrl(url);
     } else {
       // On desktop/Android: Open in new tab
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -409,6 +401,10 @@ const AsBuiltFormSelector = () => {
     setPdfViewerOpen(false);
     setCurrentPdfUrl('');
     setCurrentPdfName('');
+    if (pdfBlobUrl) {
+      URL.revokeObjectURL(pdfBlobUrl);
+      setPdfBlobUrl('');
+    }
   };
 
   const handlePrint = () => {
@@ -428,17 +424,11 @@ const AsBuiltFormSelector = () => {
         
         // Check if we can share files
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: currentPdfName
-          });
+          await navigator.share({ files: [file] });
           // Share successful - stay in modal, don't close
         } else {
           // Can't share files, share URL instead
-          await navigator.share({
-            title: currentPdfName,
-            url: currentPdfUrl
-          });
+          await navigator.share({ url: currentPdfUrl });
         }
       } catch (error) {
         // User cancelled or error - do nothing, stay in modal
@@ -980,12 +970,21 @@ const AsBuiltFormSelector = () => {
 
           {/* PDF Viewer */}
           <div className="flex-1 bg-gray-900 overflow-hidden">
-            <iframe
-              id="pdf-iframe"
-              src={currentPdfUrl}
-              className="w-full h-full border-0"
-              title={currentPdfName}
-            />
+            {pdfBlobUrl ? (
+              <iframe
+                id="pdf-iframe"
+                src={pdfBlobUrl}
+                className="w-full h-full border-0"
+                title={currentPdfName}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-white">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-3" />
+                  <p className="text-sm opacity-75">Loading PDF…</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bottom Action Bar (Mobile) */}
@@ -1272,64 +1271,57 @@ const AsBuiltFormSelector = () => {
       {edWizardOpen && <LvBoxWizard onClose={()=>setEdWizardOpen(false)} />}
 
             {/* Changelog Modal */}
-      {changelogQueue.length > 0 && changelogQueue[changelogIdx] && (() => {
-        const batch = changelogQueue[changelogIdx]
-        const total = changelogQueue.length
-        const current = changelogIdx + 1
-        return (
+      {showChangelog && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1.5rem',
+        }}>
           <div style={{
-            position: 'fixed', inset: 0, zIndex: 2000,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '1.5rem',
+            background: 'white', borderRadius: 20,
+            padding: '2rem', maxWidth: 480, width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            maxHeight: '80dvh', overflowY: 'auto',
           }}>
-            <div style={{
-              background: 'white', borderRadius: 20,
-              padding: '2rem', maxWidth: 480, width: '100%',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              maxHeight: '80dvh', overflowY: 'auto',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>
-                  What's New
-                </h2>
-                {total > 1 && (
-                  <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>
-                    {current} of {total}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                {batch.changes.map((item, i) => (
-                  <div key={i} style={{
-                    borderLeft: '3px solid #4f46e5',
-                    paddingLeft: '0.875rem',
-                  }}>
-                    <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>
-                      {item.heading}
-                    </div>
-                    {item.detail && (
-                      <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
-                        {item.detail}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={dismissChangelog}
-                style={{
-                  width: '100%', background: '#4f46e5', color: 'white',
-                  border: 'none', borderRadius: 12, padding: '0.875rem',
-                  fontWeight: 700, fontSize: '1rem', cursor: 'pointer',
-                }}
-              >
-                {current < total ? 'Next →' : 'Got it'}
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>
+                What's New
+              </h2>
+              <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>
+                v{CHANGELOG_VERSION}
+              </span>
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+              {CHANGELOG.map((item, i) => (
+                <div key={i} style={{
+                  borderLeft: '3px solid #4f46e5',
+                  paddingLeft: '0.875rem',
+                }}>
+                  <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>
+                    {item.heading}
+                  </div>
+                  {item.detail && (
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
+                      {item.detail}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={dismissChangelog}
+              style={{
+                width: '100%', background: '#4f46e5', color: 'white',
+                border: 'none', borderRadius: 12, padding: '0.875rem',
+                fontWeight: 700, fontSize: '1rem', cursor: 'pointer',
+              }}
+            >
+              Got it
+            </button>
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {/* Install App Button */}
       {installPrompt && !installDismissed && (
