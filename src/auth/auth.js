@@ -25,7 +25,7 @@ const POLL_MS        = 45_000   // 45 seconds — ~1,920 req/day per user, well 
 // Format: DCW-XXXX-XXXX-XXXX
 
 function generateDeviceId() {
-  const uuid = crypto.randomUUID().replace(/-/g, '').toUpperCase()
+  const uuid = (crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16))).replace(/-/g, '').toUpperCase()
   return `DCW-${uuid.slice(0, 4)}-${uuid.slice(4, 8)}-${uuid.slice(8, 12)}`
 }
 
