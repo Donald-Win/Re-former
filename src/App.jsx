@@ -229,15 +229,6 @@ const AsBuiltFormSelector = () => {
     'Remote Terminal Unit (RTU)': { forms: ['360S014EW'], commissioningCerts: [] }
   };
 
-  // iOS detection — works with modern iPads that report as MacIntel
-  const isIOS = (() => {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    if (/iPhone|iPod/.test(ua) && !window.MSStream) return true;
-    if (navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform)) return true;
-    if (/iPad/.test(ua) && !window.MSStream) return true;
-    return false;
-  })();
-
   const handleFormClick = (url, name, formId) => {
     if (formId === '360S014EC') { setPoleChoiceOpen(true); return; }
     if (formId === '360S014EG') { setTxChoiceOpen(true);   return; }
@@ -246,29 +237,25 @@ const AsBuiltFormSelector = () => {
     if (formId === '360S014EB') { setEbChoiceOpen(true);   return; }
     if (formId === '360S014ED') { setEdChoiceOpen(true);   return; }
 
-    if (isIOS) {
-      // Fetch as blob so Safari can render it in the iframe
-      const displayName = name || url.split('/').pop();
-      setCurrentPdfUrl(url);
-      setCurrentPdfName(displayName);
-      setPdfBytes(null);
-      setPdfBlobUrl(null);
-      setPdfViewerOpen(true);
-      fetch(url)
-        .then(r => r.arrayBuffer())
-        .then(buf => {
-          const bytes = new Uint8Array(buf);
-          setPdfBytes(bytes);
-          const blob = new Blob([bytes], { type: 'application/pdf' });
-          setPdfBlobUrl(URL.createObjectURL(blob));
-        })
-        .catch(() => {
-          setPdfViewerOpen(false);
-          window.open(url, '_blank', 'noopener,noreferrer');
-        });
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
+    // All platforms: fetch as arrayBuffer, render via PdfCanvasPreview, share as File
+    const displayName = name || url.split('/').pop();
+    setCurrentPdfUrl(url);
+    setCurrentPdfName(displayName);
+    setPdfBytes(null);
+    setPdfBlobUrl(null);
+    setPdfViewerOpen(true);
+    fetch(url)
+      .then(r => r.arrayBuffer())
+      .then(buf => {
+        const bytes = new Uint8Array(buf);
+        setPdfBytes(bytes);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        setPdfBlobUrl(URL.createObjectURL(blob));
+      })
+      .catch(() => {
+        setPdfViewerOpen(false);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
   };
 
   const handleClosePdf = () => {
@@ -281,17 +268,12 @@ const AsBuiltFormSelector = () => {
   };
 
   const handleShare = async () => {
-    if (!pdfBlobUrl) return;
-    try {
-      const blob = await fetch(pdfBlobUrl).then(r => r.blob());
-      const file = new File([blob], currentPdfName, { type: 'application/pdf' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file] });
-      } else {
-        window.open(pdfBlobUrl, '_blank');
-      }
-    } catch (err) {
-      if (err.name !== 'AbortError') console.error('Share failed:', err);
+    if (!pdfBytes) return;
+    const file = new File([pdfBytes], currentPdfName, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); } catch (_) {}
+    } else if (pdfBlobUrl) {
+      window.open(pdfBlobUrl, '_blank');
     }
   };
 
@@ -665,17 +647,17 @@ const AsBuiltFormSelector = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
               <button
                 onClick={handleShare}
-                disabled={!pdfBlobUrl}
+                disabled={!pdfBytes}
                 style={{
                   padding: '8px 14px', border: 'none',
-                  background: pdfBlobUrl ? '#4f46e5' : '#9ca3af',
-                  color: '#fff', cursor: pdfBlobUrl ? 'pointer' : 'default',
+                  background: pdfBytes ? '#4f46e5' : '#9ca3af',
+                  color: '#fff', cursor: pdfBytes ? 'pointer' : 'default',
                   borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
                 }}
               >
                 <Share2 size={16} color="#fff" />
-                {pdfBlobUrl ? 'Print / Save / Share' : 'Loading…'}
+                {pdfBytes ? 'Print / Save / Share' : 'Loading…'}
               </button>
               <button onClick={handleClosePdf} style={{
                 padding: 8, border: 'none', background: 'none',
