@@ -342,7 +342,7 @@ export default function LvBoxWizard({ onClose }) {
     const filename = `LvBox-${d.pcoWONo || d.streetRoad || 'record'}.pdf`
     const file = new File([pdfBytes], filename, { type: 'application/pdf' })
     if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: filename }) } catch (_) {}
+      try { await navigator.share({ files: [file] }) } catch (_) {}
     } else if (pdfBlobUrl) {
       window.open(pdfBlobUrl, '_blank')
     }

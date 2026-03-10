@@ -206,7 +206,7 @@ function PoleRecordWizard({ onClose }) {
       const file = new File([blob], 'AS-Built-Pole-Record.pdf', { type: 'application/pdf' })
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         // iOS Safari — native share sheet with file
-        await navigator.share({ title: 'Powerco AS-Built Pole Record', files: [file] })
+        await navigator.share({ files: [file] })
       } else {
         // Android / desktop — open in new tab so browser PDF viewer
         // provides its own share/save controls
