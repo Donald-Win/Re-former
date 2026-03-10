@@ -9,9 +9,9 @@ import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import { AuthGate } from './auth/AuthGate'
-import { CHANGELOG_VERSION, CHANGELOG } from './changelog'
+import { CHANGELOGS } from './changelog'
 
-const APP_VERSION = '2.7.0'
+const APP_VERSION = '2.8.0'
 
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork] = useState('');
@@ -36,7 +36,8 @@ const AsBuiltFormSelector = () => {
   const [edWizardOpen, setEdWizardOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installDismissed, setInstallDismissed] = useState(false);
-  const [showChangelog, setShowChangelog] = useState(false);
+  const [changelogQueue, setChangelogQueue] = useState([])  // unseen batches
+  const [changelogIdx, setChangelogIdx]     = useState(0)    // which batch showing
 
   // Pick up the install prompt captured in main.jsx before React mounted.
   // Also listen for pwaPromptReady in case React mounted first (rare but possible).
@@ -54,17 +55,35 @@ const AsBuiltFormSelector = () => {
     }
   }, [])
 
-  // Show changelog modal once per CHANGELOG_VERSION
+  // Show changelog for any unseen version batches
   useEffect(() => {
-    const seen = localStorage.getItem('re-former-changelog-seen')
-    if (seen !== CHANGELOG_VERSION) {
-      setShowChangelog(true)
+    try {
+      const seen = JSON.parse(localStorage.getItem('re-former-changelog-seen') || '[]')
+      const unseen = CHANGELOGS.filter(b => !seen.includes(b.version))
+      if (unseen.length > 0) {
+        setChangelogQueue(unseen)
+        setChangelogIdx(0)
+      }
+    } catch {
+      setChangelogQueue([])
     }
   }, [])
 
   const dismissChangelog = () => {
-    localStorage.setItem('re-former-changelog-seen', CHANGELOG_VERSION)
-    setShowChangelog(false)
+    const current = changelogQueue[changelogIdx]
+    if (!current) return
+    try {
+      const seen = JSON.parse(localStorage.getItem('re-former-changelog-seen') || '[]')
+      if (!seen.includes(current.version)) {
+        localStorage.setItem('re-former-changelog-seen', JSON.stringify([...seen, current.version]))
+      }
+    } catch {}
+    if (changelogIdx + 1 < changelogQueue.length) {
+      setChangelogIdx(i => i + 1)
+    } else {
+      setChangelogQueue([])
+      setChangelogIdx(0)
+    }
   }
 
   const handleInstall = async () => {
@@ -1253,57 +1272,64 @@ const AsBuiltFormSelector = () => {
       {edWizardOpen && <LvBoxWizard onClose={()=>setEdWizardOpen(false)} />}
 
             {/* Changelog Modal */}
-      {showChangelog && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '1.5rem',
-        }}>
+      {changelogQueue.length > 0 && changelogQueue[changelogIdx] && (() => {
+        const batch = changelogQueue[changelogIdx]
+        const total = changelogQueue.length
+        const current = changelogIdx + 1
+        return (
           <div style={{
-            background: 'white', borderRadius: 20,
-            padding: '2rem', maxWidth: 480, width: '100%',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            maxHeight: '80dvh', overflowY: 'auto',
+            position: 'fixed', inset: 0, zIndex: 2000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1.5rem',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-              <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>
-                What's New
-              </h2>
-              <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>
-                v{CHANGELOG_VERSION}
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-              {CHANGELOG.map((item, i) => (
-                <div key={i} style={{
-                  borderLeft: '3px solid #4f46e5',
-                  paddingLeft: '0.875rem',
-                }}>
-                  <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>
-                    {item.heading}
-                  </div>
-                  {item.detail && (
-                    <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
-                      {item.detail}
+            <div style={{
+              background: 'white', borderRadius: 20,
+              padding: '2rem', maxWidth: 480, width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              maxHeight: '80dvh', overflowY: 'auto',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>
+                  What's New
+                </h2>
+                {total > 1 && (
+                  <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>
+                    {current} of {total}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                {batch.changes.map((item, i) => (
+                  <div key={i} style={{
+                    borderLeft: '3px solid #4f46e5',
+                    paddingLeft: '0.875rem',
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>
+                      {item.heading}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {item.detail && (
+                      <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
+                        {item.detail}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={dismissChangelog}
+                style={{
+                  width: '100%', background: '#4f46e5', color: 'white',
+                  border: 'none', borderRadius: 12, padding: '0.875rem',
+                  fontWeight: 700, fontSize: '1rem', cursor: 'pointer',
+                }}
+              >
+                {current < total ? 'Next →' : 'Got it'}
+              </button>
             </div>
-            <button
-              onClick={dismissChangelog}
-              style={{
-                width: '100%', background: '#4f46e5', color: 'white',
-                border: 'none', borderRadius: 12, padding: '0.875rem',
-                fontWeight: 700, fontSize: '1rem', cursor: 'pointer',
-              }}
-            >
-              Got it
-            </button>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Install App Button */}
       {installPrompt && !installDismissed && (

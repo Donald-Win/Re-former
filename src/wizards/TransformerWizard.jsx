@@ -6,6 +6,7 @@ import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { saveToHistory } from '../shared/jobHistory'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
+import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
@@ -380,10 +381,19 @@ function TransformerWizardApp({ onClose }) {
     if (!pdfBlobUrl) return
     try {
       const blob = await fetch(pdfBlobUrl).then(r => r.blob())
-      const file = new File([blob], 'AS-Built-Transformer-Record.pdf', { type: 'application/pdf' })
+      const filename = (() => {
+      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+      const proj = sanitise(d.projectName)
+      const np   = sanitise(d.npJobNumber)
+      const form = 'Transformer Record'
+      const parts = [proj, np, form].filter(Boolean)
+      return parts.join(' - ') + '.pdf'
+    })()
+        const file = new File([blob], filename, { type: 'application/pdf' })
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         // iOS Safari — native share sheet with file
         await navigator.share({ files: [file] })
+        clearFormDraft()
       } else {
         // Android / desktop — open in new tab so browser PDF viewer
         // provides its own share/save controls
@@ -398,10 +408,13 @@ function TransformerWizardApp({ onClose }) {
   const SH = (props) => <SectionHead {...props} accent={G} />
 
   // ─── Form steps ────────────────────────────────────────────────────────────
+  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, setD, setStep)
+
   const formSteps = [
 
     // 0 – Job Details
     <div key="0">
+      <DraftBanner />
       <button onClick={() => setPickerOpen(true)} style={{
         width: '100%', padding: '10px 0', marginBottom: 16,
         borderRadius: 8, border: `2px dashed ${APP_ACCENT}`,

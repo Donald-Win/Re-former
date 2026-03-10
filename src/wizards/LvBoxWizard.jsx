@@ -8,6 +8,7 @@ import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { saveToHistory } from '../shared/jobHistory'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
+import { useDraft } from '../shared/useDraft'
 
 // ─── Dev calibration — set false when coords are finalised ────
 const ED_SHOW_OVERLAY = false
@@ -339,10 +340,17 @@ export default function LvBoxWizard({ onClose }) {
   // ── Share ─────────────────────────────────────────────────
   const handleShare = async () => {
     if (!pdfBytes) return
-    const filename = `LvBox-${d.pcoWONo || d.streetRoad || 'record'}.pdf`
+    const filename = (() => {
+      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+      const proj = sanitise(d.projectName)
+      const np   = sanitise(d.npJobNumber)
+      const form = 'LV Box Record'
+      const parts = [proj, np, form].filter(Boolean)
+      return parts.join(' - ') + '.pdf'
+    })()
     const file = new File([pdfBytes], filename, { type: 'application/pdf' })
     if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file] }) } catch (_) {}
+      try { await navigator.share({ files: [file] }); clearFormDraft() } catch (_) {}
     } else if (pdfBlobUrl) {
       window.open(pdfBlobUrl, '_blank')
     }
@@ -358,10 +366,13 @@ export default function LvBoxWizard({ onClose }) {
   ].filter(Boolean)
 
   // ── Step content ──────────────────────────────────────────
+  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, setD, setStep)
+
   const formSteps = [
 
     // ── Step 0 — Job Details ─────────────────────────────
     <div key="s0">
+      <DraftBanner />
       <button
         onClick={() => setPickerOpen(true)}
         style={{
