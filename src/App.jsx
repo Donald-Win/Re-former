@@ -24,6 +24,7 @@ const AsBuiltFormSelector = () => {
   const [currentPdfUrl, setCurrentPdfUrl] = useState('');
   const [currentPdfName, setCurrentPdfName] = useState('');
   const [pdfBytes, setPdfBytes] = useState(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [poleChoiceOpen, setPoleChoiceOpen] = useState(false);
   const [poleWizardOpen, setPoleWizardOpen] = useState(false);
   const [txChoiceOpen, setTxChoiceOpen] = useState(false);
@@ -251,10 +252,16 @@ const AsBuiltFormSelector = () => {
       setCurrentPdfUrl(url);
       setCurrentPdfName(displayName);
       setPdfBytes(null);
+      setPdfBlobUrl(null);
       setPdfViewerOpen(true);
       fetch(url)
         .then(r => r.arrayBuffer())
-        .then(buf => setPdfBytes(new Uint8Array(buf)))
+        .then(buf => {
+          const bytes = new Uint8Array(buf);
+          setPdfBytes(bytes);
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          setPdfBlobUrl(URL.createObjectURL(blob));
+        })
         .catch(() => {
           setPdfViewerOpen(false);
           window.open(url, '_blank', 'noopener,noreferrer');
@@ -269,18 +276,19 @@ const AsBuiltFormSelector = () => {
     setCurrentPdfUrl('');
     setCurrentPdfName('');
     setPdfBytes(null);
+    if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    setPdfBlobUrl(null);
   };
 
   const handleShare = async () => {
-    if (!pdfBytes) return;
+    if (!pdfBlobUrl) return;
     try {
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = await fetch(pdfBlobUrl).then(r => r.blob());
       const file = new File([blob], currentPdfName, { type: 'application/pdf' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file] });
       } else {
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        window.open(pdfBlobUrl, '_blank');
       }
     } catch (err) {
       if (err.name !== 'AbortError') console.error('Share failed:', err);
@@ -657,17 +665,17 @@ const AsBuiltFormSelector = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
               <button
                 onClick={handleShare}
-                disabled={!pdfBytes}
+                disabled={!pdfBlobUrl}
                 style={{
                   padding: '8px 14px', border: 'none',
-                  background: pdfBytes ? '#4f46e5' : '#9ca3af',
-                  color: '#fff', cursor: pdfBytes ? 'pointer' : 'default',
+                  background: pdfBlobUrl ? '#4f46e5' : '#9ca3af',
+                  color: '#fff', cursor: pdfBlobUrl ? 'pointer' : 'default',
                   borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
                 }}
               >
                 <Share2 size={16} color="#fff" />
-                {pdfBytes ? 'Print / Save / Share' : 'Loading…'}
+                {pdfBlobUrl ? 'Print / Save / Share' : 'Loading…'}
               </button>
               <button onClick={handleClosePdf} style={{
                 padding: 8, border: 'none', background: 'none',
