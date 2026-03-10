@@ -28,6 +28,10 @@ export const CHANGELOGS = [
         detail: 'Saving a PDF to iPad was creating an unwanted sidecar text file. This has been fixed.',
       },
       {
+        heading: 'Changed print handling for blank PDF',
+        detail: 'Native PDF viewer in Safari on iOS was not handling the blank PDF fipes correctly. Changed to use the same custom handler as the wizard system. should handle printing far better',
+      },
+      {
         heading: 'Update notices',
         detail: "You'll now see a summary of what's changed when the app updates — like this one.",
       },

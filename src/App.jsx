@@ -10,6 +10,7 @@ import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import { AuthGate } from './auth/AuthGate'
 import { CHANGELOGS } from './changelog'
+import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
 const APP_VERSION = '2.8.0'
 
@@ -22,7 +23,7 @@ const AsBuiltFormSelector = () => {
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [currentPdfUrl, setCurrentPdfUrl] = useState('');
   const [currentPdfName, setCurrentPdfName] = useState('');
-  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
+  const [pdfBytes, setPdfBytes] = useState(null);
   const [poleChoiceOpen, setPoleChoiceOpen] = useState(false);
   const [poleWizardOpen, setPoleWizardOpen] = useState(false);
   const [txChoiceOpen, setTxChoiceOpen] = useState(false);
@@ -249,13 +250,11 @@ const AsBuiltFormSelector = () => {
       const displayName = name || url.split('/').pop();
       setCurrentPdfUrl(url);
       setCurrentPdfName(displayName);
-      setPdfBlobUrl('');
+      setPdfBytes(null);
       setPdfViewerOpen(true);
       fetch(url)
-        .then(r => r.blob())
-        .then(blob => {
-          setPdfBlobUrl(URL.createObjectURL(blob) + '#toolbar=0');
-        })
+        .then(r => r.arrayBuffer())
+        .then(buf => setPdfBytes(new Uint8Array(buf)))
         .catch(() => {
           setPdfViewerOpen(false);
           window.open(url, '_blank', 'noopener,noreferrer');
@@ -269,24 +268,22 @@ const AsBuiltFormSelector = () => {
     setPdfViewerOpen(false);
     setCurrentPdfUrl('');
     setCurrentPdfName('');
-    if (pdfBlobUrl) {
-      URL.revokeObjectURL(pdfBlobUrl.split('#')[0]);
-      setPdfBlobUrl('');
-    }
+    setPdfBytes(null);
   };
 
   const handleShare = async () => {
-    if (!pdfBlobUrl) return;
+    if (!pdfBytes) return;
     try {
-      const blob = await fetch(pdfBlobUrl.split('#')[0]).then(r => r.blob())
-      const file = new File([blob], currentPdfName, { type: 'application/pdf' })
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const file = new File([blob], currentPdfName, { type: 'application/pdf' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file] })
+        await navigator.share({ files: [file] });
       } else {
-        window.open(pdfBlobUrl.split('#')[0], '_blank')
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
       }
     } catch (err) {
-      if (err.name !== 'AbortError') console.error('Share failed:', err)
+      if (err.name !== 'AbortError') console.error('Share failed:', err);
     }
   };
 
@@ -660,17 +657,17 @@ const AsBuiltFormSelector = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
               <button
                 onClick={handleShare}
-                disabled={!pdfBlobUrl}
+                disabled={!pdfBytes}
                 style={{
                   padding: '8px 14px', border: 'none',
-                  background: pdfBlobUrl ? '#4f46e5' : '#9ca3af',
-                  color: '#fff', cursor: pdfBlobUrl ? 'pointer' : 'default',
+                  background: pdfBytes ? '#4f46e5' : '#9ca3af',
+                  color: '#fff', cursor: pdfBytes ? 'pointer' : 'default',
                   borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
                 }}
               >
                 <Share2 size={16} color="#fff" />
-                {pdfBlobUrl ? 'Print / Save / Share' : 'Loading…'}
+                {pdfBytes ? 'Print / Save / Share' : 'Loading…'}
               </button>
               <button onClick={handleClosePdf} style={{
                 padding: 8, border: 'none', background: 'none',
@@ -682,15 +679,10 @@ const AsBuiltFormSelector = () => {
             </div>
           </div>
 
-          {/* PDF content */}
-          <div style={{ flex: 1, background: '#111827', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {pdfBlobUrl ? (
-              <iframe
-                id="pdf-iframe"
-                src={pdfBlobUrl}
-                style={{ flex: 1, width: '100%', border: 'none', display: 'block' }}
-                title={currentPdfName}
-              />
+          {/* PDF content — canvas render via pdf.js, same as wizard */}
+          <div style={{ flex: 1, background: '#111827', overflowY: 'auto', padding: 16 }}>
+            {pdfBytes ? (
+              <PdfCanvasPreview pdfBytes={pdfBytes} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <div style={{ textAlign: 'center', color: '#fff' }}>
