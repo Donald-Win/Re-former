@@ -11,6 +11,9 @@ import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
+import { PhotoAttachStep } from '../shared/PhotoAttachStep'
+import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
+import { sharePdf } from '../shared/sharePdf'
 import { CoordOverlay } from '../shared/CoordOverlay'
 
 const W_PURPLE = APP_ACCENT
@@ -37,6 +40,7 @@ const EE_STEPS = [
   'Equipment Rating',
   'Additional Detail',
   'Multi-Item Details',
+  'Photos',
   'Preview & Print',
 ]
 
@@ -67,7 +71,7 @@ const emptyMultiRow = () => ({
 const PAGE_H = 842
 const BLUE   = rgb(26 / 255, 26 / 255, 1)
 
-async function generateEEPdf(d) {
+async function generateEEPdf(d, photos = []) {
   const bytes  = await fetch(import.meta.env.BASE_URL + 'forms/360S014EE.pdf').then(r => r.arrayBuffer())
   const pdfDoc = await PDFDocument.load(bytes)
   const font   = await pdfDoc.embedFont(StandardFonts.Helvetica)
@@ -236,10 +240,9 @@ async function generateEEPdf(d) {
     })
   }
 
+  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
   return new Uint8Array(await pdfDoc.save())
 }
-
-// ── Main wizard component ──────────────────────────────────────────────────────
 function ElecEquipWizard({ onClose = () => {} }) {
   const [tab, setTab]                   = useState('wizard')
   const [calPage, setCalPage]           = useState(1)
@@ -249,6 +252,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
   const [pdfBlobUrl, setPdfBlobUrl]     = useState(null)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [pdfError, setPdfError]         = useState(null)
+  const [photos, setPhotos] = useState([])
   const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
   const blobUrlRef = useRef(null)
 
@@ -287,9 +291,10 @@ function ElecEquipWizard({ onClose = () => {} }) {
       .catch(err => console.warn('Could not load calibration PDF:', err))
   }, [])
 
-  const triggerGenerate = () => {
+  const triggerGenerate = (photosArg) => {
+    const photoList = photosArg !== undefined ? photosArg : photos
     setPdfBytes(null); setPdfBlobUrl(null); setPdfGenerating(true); setPdfError(null)
-    generateEEPdf(d).then(bytes => {
+    generateEEPdf(d, photoList).then(bytes => {
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
       const blob = new Blob([bytes], { type: 'application/pdf' })
       const url  = URL.createObjectURL(blob)
@@ -339,29 +344,11 @@ function ElecEquipWizard({ onClose = () => {} }) {
   const addMultiRow    = () => setD(p => p.multiItems.length < 15 ? { ...p, multiItems: [...p.multiItems, emptyMultiRow()] } : p)
   const removeMultiRow = i  => setD(p => p.multiItems.length > 1  ? { ...p, multiItems: p.multiItems.filter((_, idx) => idx !== i) } : p)
 
-  const handleShare = async () => {
-    if (!pdfBlobUrl) return
-    try {
-      const blob = await fetch(pdfBlobUrl).then(r => r.blob())
-      const filename = (() => {
-      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-      const proj = sanitise(d.projectName)
-      const np   = sanitise(d.npJobNumber)
-      const form = 'Elec Equipment Record'
-      const parts = [proj, np, form].filter(Boolean)
-      return parts.join(' - ') + '.pdf'
-    })()
-        const file = new File([blob], filename, { type: 'application/pdf' })
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        // iOS Safari — native share sheet with file
-        await navigator.share({ files: [file] })
-        clearFormDraft()
-      } else {
-        // Android / desktop — open in new tab so browser PDF viewer
-        // provides its own share/save controls
-        window.open(pdfBlobUrl, '_blank')
-      }
-    } catch (err) { if (err.name !== 'AbortError') console.error('Share failed:', err) }
+  const handleShare = () => {
+    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Elec Equipment Record'].filter(Boolean)
+    const filename = parts.join(' - ') + '.pdf'
+    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
   // ── Form steps ─────────────────────────────────────────────────────────────
@@ -582,6 +569,11 @@ function ElecEquipWizard({ onClose = () => {} }) {
         </button>
       )}
     </div>,
+
+    // 7 – Photos
+    <div key="7">
+      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
+    </div>,
   ]
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -659,7 +651,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
           onStepClick={setStep}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const next = step + 1; setStep(next); if (next === EE_STEPS.length - 1) triggerGenerate() }}
+          onNext={() => { const next = step + 1; setStep(next); if (next === EE_STEPS.length - 1) triggerGenerate(photos) }}
           accent={W_PURPLE}
           bg={EE_BG}
           mid={EE_MID}

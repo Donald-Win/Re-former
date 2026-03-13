@@ -5,6 +5,9 @@ import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
+import { PhotoAttachStep } from '../shared/PhotoAttachStep'
+import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
+import { sharePdf } from '../shared/sharePdf'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { saveToHistory } from '../shared/jobHistory'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
@@ -25,6 +28,7 @@ const EB_STEPS = [
   'Distribution Main',
   'Underground Details',
   'Comments & Plan',
+  'Photos',
   'Preview & Print',
 ]
 
@@ -137,7 +141,7 @@ function wrapText(text, font, size, maxPts) {
 // ─────────────────────────────────────────────────────────────
 // PDF generation
 // ─────────────────────────────────────────────────────────────
-async function generateEbPdf(d) {
+async function generateEbPdf(d, photos = []) {
   const bytes = await fetch(
     import.meta.env.BASE_URL + 'forms/360S014EB.pdf'
   ).then(r => r.arrayBuffer())
@@ -248,6 +252,7 @@ async function generateEbPdf(d) {
   // ── Comments ───────────────────────────────────────────────
   tWrap(195, 701, d.comments, 370, 14, 4)
 
+  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
   return await pdfDoc.save()
 }
 
@@ -299,6 +304,7 @@ export default function ElecDistributionWizard({ onClose }) {
   const [pickerOpen,    setPickerOpen]    = useState(false)
   const [overlayTab,    setOverlayTab]    = useState('form')
   const [overlayBytes,  setOverlayBytes]  = useState(null)
+  const [photos,        setPhotos]        = useState([])
 
   const prevStepRef = useRef(step)
 
@@ -327,13 +333,14 @@ export default function ElecDistributionWizard({ onClose }) {
   }, [overlayTab, overlayBytes])
 
   // ── PDF generation ────────────────────────────────────────
-  const triggerGenerate = async () => {
+  const triggerGenerate = async (photosArg) => {
+    const photoList = photosArg !== undefined ? photosArg : photos
     setIsPreview(true)
     setPdfGenerating(true)
     setPdfError(null)
     setPdfBytes(null)
     try {
-      const bytes = await generateEbPdf(d)
+      const bytes = await generateEbPdf(d, photoList)
       setPdfBytes(bytes)
       const blob = new Blob([bytes], { type: 'application/pdf' })
       setPdfBlobUrl(URL.createObjectURL(blob))
@@ -345,22 +352,11 @@ export default function ElecDistributionWizard({ onClose }) {
   }
 
   // ── Share ─────────────────────────────────────────────────
-  const handleShare = async () => {
-    if (!pdfBytes) return
-    const filename = (() => {
-      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-      const proj = sanitise(d.projectName)
-      const np   = sanitise(d.npJobNumber)
-      const form = 'Elec Distribution Record'
-      const parts = [proj, np, form].filter(Boolean)
-      return parts.join(' - ') + '.pdf'
-    })()
-    const file = new File([pdfBytes], filename, { type: 'application/pdf' })
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); clearFormDraft() } catch (_) {}
-    } else if (pdfBlobUrl) {
-      window.open(pdfBlobUrl, '_blank')
-    }
+  const handleShare = () => {
+    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Elec Distribution Record'].filter(Boolean)
+    const filename = parts.join(' - ') + '.pdf'
+    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
   const loadJobHistory = fields => setD(prev => ({ ...prev, ...fields }))
@@ -626,8 +622,13 @@ export default function ElecDistributionWizard({ onClose }) {
       />
     </div>,
 
-    // ── Step 4 — Preview ─────────────────────────────────
-    <div key="s4" />,
+    // ── Step 4 — Photos ──────────────────────────────────
+    <div key="s4">
+      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={EB_ORANGE} />
+    </div>,
+
+    // ── Step 5 — Preview ─────────────────────────────────
+    <div key="s5" />,
   ]
 
   // ── Preview content ───────────────────────────────────────
@@ -718,14 +719,14 @@ export default function ElecDistributionWizard({ onClose }) {
           step={step}
           onStepClick={i => {
             setStep(i)
-            if (i === EB_STEPS.length - 1) triggerGenerate()
+            if (i === EB_STEPS.length - 1) triggerGenerate(photos)
           }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => {
             const n = step + 1
             setStep(n)
-            if (n === EB_STEPS.length - 1) triggerGenerate()
+            if (n === EB_STEPS.length - 1) triggerGenerate(photos)
           }}
           accent={EB_ORANGE}
           bg={EB_BG}

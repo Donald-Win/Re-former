@@ -13,6 +13,23 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.9.0',
+    changes: [
+      {
+        heading: 'Photo attachments',
+        detail: 'All six wizards now have a Photos step before the preview. Attach job site photos and they will be appended to the PDF — one per page, correctly oriented.',
+      },
+      {
+        heading: 'Pole Record — smarter conductor & crossarm entry',
+        detail: 'Level, Existing/New, Material, and Insulation Type in the Conductors section are now dropdowns. Level auto-fills to match the row number. Material options are HDCu, ACSR, AAC, AAAC, and ABC.',
+      },
+      {
+        heading: 'Pole Record — crossarm dropdowns',
+        detail: 'Rated Voltage, Number of Arms, and Arm Material in the Crossarms section are now dropdowns. Arm Material shows Timber, Steel, or Composite and writes the correct T/S/C code to the form.',
+      },
+    ],
+  },
+  {
     version: '2.8.0',
     changes: [
       {

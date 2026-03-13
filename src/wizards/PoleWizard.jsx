@@ -10,18 +10,21 @@ import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
+import { PhotoAttachStep } from '../shared/PhotoAttachStep'
+import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
+import { sharePdf } from '../shared/sharePdf'
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
-const W_STEPS = ["Location & Contractor","Pole IDs & Activity","New Pole Details","Equipment on Pole","Accessories","Conductors","Crossarms","Work Description","Preview & Print"];
+const W_STEPS = ["Location & Contractor","Pole IDs & Activity","New Pole Details","Equipment on Pole","Accessories","Conductors","Crossarms","Work Description","Photos","Preview & Print"];
 const POLE_CODES = ["B9.5 (Busck)","B10.0 (Busck)","B10.5 (Busck)","B11.0 (Busck)","B12.4 (Busck)","B12.5 (Busck)","B13.65 (Busck)","B14.85 (Busck)","B15.5 (Busck)","B18.5 (Busck)","9m (9kN) Goldpine","10m (9kN) Goldpine","10m (12kN) Goldpine","11m (9kN) Goldpine","11m (12kN) Goldpine","12m (12kN) Goldpine"];
 const PC_X = [45,173,295,427,45,173,295,427,45,173,295,427,45,173,295,427];
 const PC_Y = [478,478,478,478,493,493,493,493,507,507,507,507,521,521,521,521];
 const POLE_TYPES = ["1 Pole","1 \u00BD Pole","2 Pole","3 Pole","4 Pole","H Pole","Double","Stay Pole"];
 const PT_X = [45,174,296,429,45,174,296,429];
 const PT_Y = [610,610,610,610,624,624,624,624];
-async function generateFilledPdf(d) {
+async function generateFilledPdf(d, photos = []) {
   const PAGE_H = 842;
   const BLUE = rgb(26/255, 26/255, 1);
   const existingPdfBytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014EC.pdf').then(r => r.arrayBuffer());
@@ -99,6 +102,7 @@ async function generateFilledPdf(d) {
   const lines=(d.workDescription||"").split("\n");
   const LINE_Y=[532,547,561,575,590,604,618,632,646,661,676,690,705,719,733];
   lines.slice(0,15).forEach((line,i)=>t(p3,48,LINE_Y[i],line));
+  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos);
   return new Uint8Array(await pdfDoc.save());
 }
 
@@ -156,11 +160,12 @@ function PoleRecordWizard({ onClose }) {
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [pdfError, setPdfError] = useState(null);
+  const [photos, setPhotos] = useState([]);
   const blobUrlRef = useRef(null);
   const [d, setD] = useState({
     npJobNumber: '', projectName: '',
-    conductors: [{level:"",existing:"",size:"",material:"",insulation:""}],
-    crossarms: [{level:"",existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}],
+    conductors: [{level:"1",existing:"",size:"",material:"",insulation:""}],
+    crossarms: [{level:"1",existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}],
     accessories: [],
   });
 
@@ -168,8 +173,9 @@ function PoleRecordWizard({ onClose }) {
 
   useEffect(() => {
     if (!isPreview) return;
+    setPdfBytes(null); setPdfBlobUrl(null);
     setPdfGenerating(true); setPdfError(null);
-    generateFilledPdf(d).then(bytes => {
+    generateFilledPdf(d, photos).then(bytes => {
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
       const blob = new Blob([bytes], { type:'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -200,30 +206,12 @@ function PoleRecordWizard({ onClose }) {
   const setCond = (i,field,val) => setD(p=>{const c=[...p.conductors];c[i]={...c[i],[field]:val};return{...p,conductors:c};});
   const setCA = (i,field,val) => setD(p=>{const c=[...p.crossarms];c[i]={...c[i],[field]:val};return{...p,crossarms:c};});
 
-  const handleShare = async () => {
-    if (!pdfBlobUrl) return
-    try {
-      const blob = await fetch(pdfBlobUrl).then(r => r.blob())
-      const filename = (() => {
-      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-      const proj = sanitise(d.projectName)
-      const np   = sanitise(d.npJobNumber)
-      const form = 'Pole Record'
-      const parts = [proj, np, form].filter(Boolean)
-      return parts.join(' - ') + '.pdf'
-    })()
-      const file = new File([blob], filename, { type: 'application/pdf' })
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        // iOS Safari — native share sheet with file
-        await navigator.share({ files: [file] })
-        clearFormDraft()
-      } else {
-        // Android / desktop — open in new tab so browser PDF viewer
-        // provides its own share/save controls
-        window.open(pdfBlobUrl, '_blank')
-      }
-    } catch (err) { if (err.name !== 'AbortError') console.error('Share failed:', err) }
-  };
+  const handleShare = () => {
+    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Pole Record'].filter(Boolean)
+    const filename = parts.join(' - ') + '.pdf'
+    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+  }
 
   const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, setD, setStep)
 
@@ -337,19 +325,104 @@ function PoleRecordWizard({ onClose }) {
       {d.accessoriesOther!==undefined&&d.accessoriesOther!==null&&<WF label="Other Accessories (specify)" v={d.accessoriesOther} set={set("accessoriesOther")} />}
     </div>,
     <div key="5">
-      <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set("serviceConnections")} ph="e.g. 2" />
-      {parseInt(d.serviceConnections||0,10)>=1&&<WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set("serviceAddresses")} ph="List addresses" />}
-      <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Conductors</div>
-      {(()=>{const firstEmptyIdx=d.conductors.findIndex(c=>!(c.level||c.existing||c.size||c.material||c.insulation));return d.conductors.map((c,i)=>{const hasData=c.level||c.existing||c.size||c.material||c.insulation;const isFirstEmpty=i===firstEmptyIdx;const isLastRow=i===d.conductors.length-1;return(hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}><button onClick={()=>setD(p=>({...p,conductors:p.conductors.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button><div style={{fontWeight:600,fontSize:12,marginBottom:6,color:W_PURPLE}}>Row {i+1}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><WF label="Level" v={c.level} set={v=>setCond(i,"level",v)} ph="LV,11,33" /><WF label="E or N" v={c.existing} set={v=>setCond(i,"existing",v)} ph="E or N" /><WF label="Conductor Size" v={c.size} set={v=>setCond(i,"size",v)} ph="e.g. 95mm²" /><WF label="Material" v={c.material} set={v=>setCond(i,"material",v)} ph="ACSR" /></div><WF label="Insulation Type" v={c.insulation} set={v=>setCond(i,"insulation",v)} ph="Bare, Covered" />{isLastRow&&d.conductors.length<7&&<button onClick={()=>setD(p=>({...p,conductors:[...p.conductors,{level:"",existing:"",size:"",material:"",insulation:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}</div>:null;});})()}
+      {(()=>{
+        const SEL_STYLE = {...wInp, appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28}
+        const WSel = ({label, value, onChange, options}) => (
+          <div style={{marginBottom:8}}>
+            <label style={wLbl}>{label}</label>
+            <select value={value||""} onChange={e=>onChange(e.target.value)} style={SEL_STYLE}>
+              <option value="">—</option>
+              {options.map(([val,lbl])=><option key={val} value={val}>{lbl}</option>)}
+            </select>
+          </div>
+        )
+        const LEVELS     = [["1","1"],["2","2"],["3","3"],["4","4"],["5","5"],["6","6"],["7","7"]]
+        const EN         = [["E","Existing (E)"],["N","New (N)"]]
+        const MATERIAL   = [["HDCu","HDCu"],["ACSR","ACSR"],["AAC","AAC"],["AAAC","AAAC"],["ABC","ABC"]]
+        const INSULATION = [["Bare","Bare"],["PVC","PVC"],["XLPE","XLPE"],["HDPE","HDPE"]]
+        return <>
+          <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set("serviceConnections")} ph="e.g. 2" />
+          {parseInt(d.serviceConnections||0,10)>=1&&<WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set("serviceAddresses")} ph="List addresses" />}
+          <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Conductors</div>
+          {(()=>{
+            const firstEmptyIdx=d.conductors.findIndex(c=>!(c.level||c.existing||c.size||c.material||c.insulation))
+            return d.conductors.map((c,i)=>{
+              const hasData=c.level||c.existing||c.size||c.material||c.insulation
+              const isFirstEmpty=i===firstEmptyIdx
+              const isLastRow=i===d.conductors.length-1
+              return (hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}>
+                <button onClick={()=>setD(p=>({...p,conductors:p.conductors.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button>
+                <div style={{fontWeight:600,fontSize:12,marginBottom:8,color:W_PURPLE}}>Row {i+1}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <WSel label="Level" value={c.level} onChange={v=>setCond(i,"level",v)} options={LEVELS} />
+                  <WSel label="Existing / New" value={c.existing} onChange={v=>setCond(i,"existing",v)} options={EN} />
+                  <WF label="Conductor Size" v={c.size} set={v=>setCond(i,"size",v)} ph="e.g. 95mm²" />
+                  <WSel label="Material" value={c.material} onChange={v=>setCond(i,"material",v)} options={MATERIAL} />
+                </div>
+                <WSel label="Insulation Type" value={c.insulation} onChange={v=>setCond(i,"insulation",v)} options={INSULATION} />
+                {isLastRow&&d.conductors.length<7&&<button onClick={()=>setD(p=>({...p,conductors:[...p.conductors,{level:String(p.conductors.length+1),existing:"",size:"",material:"",insulation:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}
+              </div>:null
+            })
+          })()}
+        </>
+      })()}
     </div>,
     <div key="6">
-      <div style={{background:"#fffff0",border:"1px solid #e0e000",borderRadius:8,padding:9,marginBottom:12,fontSize:11,color:"#555"}}><b>End Size:</b> B=100×100, D=100×150 | <b>Length:</b> 20=2m, 23=2.3m<br/><b>Material:</b> T=Timber, S=Steel, C=Composite | <b>Insulators:</b> PN=Pin(LV), PS=Post(HV), TT=Term-Term, DP=Delta Post, EDO</div>
-      <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Crossarms</div>
-      {(()=>{const firstEmptyIdx=d.crossarms.findIndex(c=>!(c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires));return d.crossarms.map((c,i)=>{const hasData=c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires;const isFirstEmpty=i===firstEmptyIdx;const isLastRow=i===d.crossarms.length-1;return(hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}><button onClick={()=>setD(p=>({...p,crossarms:p.crossarms.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button><div style={{fontWeight:600,fontSize:12,marginBottom:6,color:W_PURPLE}}>Crossarm {i+1}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}><WF label="Level" v={c.level} set={v=>setCA(i,"level",v)} ph="LV,11" /><WF label="E or N" v={c.existing} set={v=>setCA(i,"existing",v)} ph="E/N" /><WF label="Rated Voltage" v={c.voltage} set={v=>setCA(i,"voltage",v)} ph="LV/11" /><WF label="End Size" v={c.endSize} set={v=>setCA(i,"endSize",v)} ph="B/D" /><WF label="Length" v={c.length} set={v=>setCA(i,"length",v)} ph="20/23" /><WF label="# Arms" v={c.arms} set={v=>setCA(i,"arms",v)} ph="1/2" /><WF label="Insulator Type" v={c.insulatorType} set={v=>setCA(i,"insulatorType",v)} ph="PN/PS" /><WF label="Arm Material" v={c.armMaterial} set={v=>setCA(i,"armMaterial",v)} ph="T/S/C" /><WF label="# Wires" v={c.wires} set={v=>setCA(i,"wires",v)} ph="2-6" /></div>{isLastRow&&d.crossarms.length<7&&<button onClick={()=>setD(p=>({...p,crossarms:[...p.crossarms,{level:"",existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}</div>:null;});})()}
+      {(()=>{
+        const SEL_STYLE = {...wInp, appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28}
+        const WSel = ({label, value, onChange, options}) => (
+          <div style={{marginBottom:8}}>
+            <label style={wLbl}>{label}</label>
+            <select value={value||""} onChange={e=>onChange(e.target.value)} style={SEL_STYLE}>
+              <option value="">—</option>
+              {options.map(([val,lbl])=><option key={val} value={val}>{lbl}</option>)}
+            </select>
+          </div>
+        )
+        const LEVELS   = [["1","1"],["2","2"],["3","3"],["4","4"],["5","5"],["6","6"],["7","7"]]
+        const EN       = [["E","Existing (E)"],["N","New (N)"]]
+        const VOLTAGE  = [["LV","LV"],["LVTX","LVTX"],["11","11"],["22","22"],["33","33"],["66","66"]]
+        const ARMS     = [["1","1"],["2","2"]]
+        const MATERIAL = [["T","Timber (T)"],["S","Steel (S)"],["C","Composite (C)"]]
+        return <>
+          <div style={{background:"#fffff0",border:"1px solid #e0e000",borderRadius:8,padding:9,marginBottom:12,fontSize:11,color:"#555"}}>
+            <b>End Size:</b> B=100×100, D=100×150 | <b>Length:</b> 20=2m, 23=2.3m<br/>
+            <b>Insulators:</b> PN=Pin(LV), PS=Post(HV), TT=Term-Term, DP=Delta Post, EDO
+          </div>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333"}}>Crossarms</div>
+          {(()=>{
+            const firstEmptyIdx=d.crossarms.findIndex(c=>!(c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires))
+            return d.crossarms.map((c,i)=>{
+              const hasData=c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires
+              const isFirstEmpty=i===firstEmptyIdx
+              const isLastRow=i===d.crossarms.length-1
+              return (hasData||isFirstEmpty)?<div key={i} style={{background:"#f8f8ff",border:"1.5px solid #ddd",borderRadius:10,padding:11,marginBottom:10,position:"relative"}}>
+                <button onClick={()=>setD(p=>({...p,crossarms:p.crossarms.filter((_,idx)=>idx!==i)}))} style={{position:"absolute",top:8,right:8,background:"none",border:"none",fontSize:18,color:"#999",cursor:"pointer",padding:0}}>×</button>
+                <div style={{fontWeight:600,fontSize:12,marginBottom:8,color:W_PURPLE}}>Crossarm {i+1}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <WSel label="Level" value={c.level} onChange={v=>setCA(i,"level",v)} options={LEVELS} />
+                  <WSel label="Existing / New" value={c.existing} onChange={v=>setCA(i,"existing",v)} options={EN} />
+                  <WF label="End Size" v={c.endSize} set={v=>setCA(i,"endSize",v)} ph="B/D" />
+                  <WF label="Length" v={c.length} set={v=>setCA(i,"length",v)} ph="20/23" />
+                </div>
+                <WSel label="Rated Voltage" value={c.voltage} onChange={v=>setCA(i,"voltage",v)} options={VOLTAGE} />
+                <WSel label="# Arms" value={c.arms} onChange={v=>setCA(i,"arms",v)} options={ARMS} />
+                <WF label="Insulator Type" v={c.insulatorType} set={v=>setCA(i,"insulatorType",v)} ph="PN/PS/TT/DP/EDO" />
+                <WSel label="Arm Material" value={c.armMaterial} onChange={v=>setCA(i,"armMaterial",v)} options={MATERIAL} />
+                <WF label="# Wires" v={c.wires} set={v=>setCA(i,"wires",v)} ph="2–6" />
+                {isLastRow&&d.crossarms.length<7&&<button onClick={()=>setD(p=>({...p,crossarms:[...p.crossarms,{level:String(p.crossarms.length+1),existing:"",voltage:"",endSize:"",length:"",arms:"",insulatorType:"",armMaterial:"",wires:""}]}))} style={{marginTop:10,padding:"10px 16px",borderRadius:8,border:"none",background:W_PURPLE,color:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Another Row</button>}
+              </div>:null
+            })
+          })()}
+        </>
+      })()}
     </div>,
     <div key="7">
       <div style={{fontSize:13,color:"#777",marginBottom:10}}>Illustrate asset location if the pole is new or has been moved more than 1 metre. Show any LV break positions.</div>
       <WTA label="Describe the work performed" v={d.workDescription} set={set("workDescription")} rows={12} ph="Describe all work performed..." />
+    </div>,
+    <div key="8">
+      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
     </div>,
   ];
 

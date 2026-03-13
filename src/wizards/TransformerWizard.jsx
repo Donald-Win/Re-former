@@ -10,6 +10,9 @@ import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
+import { PhotoAttachStep } from '../shared/PhotoAttachStep'
+import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
+import { sharePdf } from '../shared/sharePdf'
 import { CoordOverlay } from '../shared/CoordOverlay'
 
 const W_PURPLE = APP_ACCENT
@@ -32,7 +35,7 @@ const STEP_SCHEME = [
   'neutral','neutral',
   'issued','issued','issued','issued','issued',
   'removed','removed','removed','removed','removed',
-  'neutral','neutral',
+  'neutral','neutral','neutral',
 ]
 
 function schemeColors(scheme) {
@@ -60,11 +63,13 @@ const T_STEPS = [
   'Removed – Enclosure & Type',     // 9  red
   'Removed – Make & Model',         // 10 red
   'Removal Details',                // 11 red
-  'Comments & Preview',             // 12 neutral
+  'Comments',                       // 12 neutral
+  'Photos',                         // 13 neutral
+  'Preview & Print',                // 14 neutral
 ]
 
 // ─── PDF generation ────────────────────────────────────────────────────────────
-async function generatePdf(d) {
+async function generatePdf(d, photos = []) {
   const PAGE_H = 842
   const BLUE = rgb(26 / 255, 26 / 255, 1)
 
@@ -272,6 +277,7 @@ async function generatePdf(d) {
   const COMMENT_Y = [90, 104, 118, 132, 146, 160, 174]
   commentLines.slice(0, 7).forEach((line, idx) => t(p2, 60, COMMENT_Y[idx], line))
 
+  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
   return new Uint8Array(await pdfDoc.save())
 }
 
@@ -284,6 +290,7 @@ function TransformerWizardApp({ onClose }) {
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [pdfError, setPdfError] = useState(null)
+  const [photos, setPhotos] = useState([])
   const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
   const blobUrlRef = useRef(null)
 
@@ -337,10 +344,11 @@ function TransformerWizardApp({ onClose }) {
     }
   }, [])
 
-  const triggerGenerate = () => {
+  const triggerGenerate = (photosArg) => {
+    const photoList = photosArg !== undefined ? photosArg : photos
     setPdfBytes(null); setPdfBlobUrl(null)
     setPdfGenerating(true); setPdfError(null)
-    generatePdf(d).then(bytes => {
+    generatePdf(d, photoList).then(bytes => {
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
       const blob = new Blob([bytes], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
@@ -377,29 +385,11 @@ function TransformerWizardApp({ onClose }) {
     return { ...p, removed: { ...p.removed, [k]: a.includes(v) ? a.filter(x => x !== v) : [...a, v] } }
   })
 
-  const handleShare = async () => {
-    if (!pdfBlobUrl) return
-    try {
-      const blob = await fetch(pdfBlobUrl).then(r => r.blob())
-      const filename = (() => {
-      const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-      const proj = sanitise(d.projectName)
-      const np   = sanitise(d.npJobNumber)
-      const form = 'Transformer Record'
-      const parts = [proj, np, form].filter(Boolean)
-      return parts.join(' - ') + '.pdf'
-    })()
-        const file = new File([blob], filename, { type: 'application/pdf' })
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        // iOS Safari — native share sheet with file
-        await navigator.share({ files: [file] })
-        clearFormDraft()
-      } else {
-        // Android / desktop — open in new tab so browser PDF viewer
-        // provides its own share/save controls
-        window.open(pdfBlobUrl, '_blank')
-      }
-    } catch (err) { if (err.name !== 'AbortError') console.error('Share failed:', err) }
+  const handleShare = () => {
+    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Transformer Record'].filter(Boolean)
+    const filename = parts.join(' - ') + '.pdf'
+    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
   // Helper: step-coloured WF / WCB wrappers that auto-inherit accent
@@ -587,16 +577,24 @@ function TransformerWizardApp({ onClose }) {
       <F ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
     </div>,
 
-    // 12 – Comments & Preview
+    // 12 – Comments
     <div key="12">
       <WTA label="Comments" v={d.comments} set={set('comments')} rows={6}
         ph="Add any additional comments here..." accent={G} />
       <div style={{ background: '#f0ebff', border: `1px solid ${W_PURPLE}`, borderRadius: 10, padding: '12px 14px', marginTop: 6 }}>
         <p style={{ margin: 0, fontSize: 13, color: W_PURPLE, fontWeight: 600 }}>
-          ✓ All sections complete — click <strong>Preview Form →</strong> to generate your filled PDF.
+          ✓ All sections complete — add photos on the next step, then preview your PDF.
         </p>
       </div>
     </div>,
+
+    // 13 – Photos
+    <div key="13">
+      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
+    </div>,
+
+    // 14 – Preview & Print (WizardShell renders previewContent when isPreview=true)
+    <div key="14" />,
   ]
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -660,7 +658,7 @@ function TransformerWizardApp({ onClose }) {
           onStepClick={setStep}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate() }}
+          onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(photos) }}
           accent={scheme.accent}
           bg={scheme.bg}
           mid={scheme.mid}
