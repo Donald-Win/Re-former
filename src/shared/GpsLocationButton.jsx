@@ -48,8 +48,8 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           // City/town: prefer city, fall back through smaller place types
           const cityTown = a.city || a.town || a.village || a.hamlet || a.suburb || ''
 
-          // District: NZ uses county or state_district
-          const district = a.county || a.state_district || a.state || ''
+          // District: use NZ regional council (state), strip " Region" suffix
+          const district = (a.state || a.county || a.state_district || '').replace(/ Region$/i, '')
 
           onLocation({ streetRoad, cityTown, district })
           setStatus('idle')
@@ -61,12 +61,24 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
+          const isInsecure = location.protocol !== 'https:' && location.hostname !== 'localhost'
+          if (isInsecure) {
+            setStatus('error')
+            setErrorMsg('GPS is only available on the deployed app (HTTPS). It will not work on the local dev server.')
+            return
+          }
           const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+          const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+          let msg
+          if (isIOS) {
+            msg = 'Location denied. Go to Settings → Safari → Location → Allow.'
+          } else if (isStandalone) {
+            msg = 'Location was previously blocked. Go to Android Settings → Apps → Chrome → Permissions → Location → Allow.'
+          } else {
+            msg = 'Location was previously blocked. In Chrome, tap ⋮ (menu) → Settings → Site settings → Location → find this site and allow it.'
+          }
           setStatus('error')
-          setErrorMsg(isIOS
-            ? 'Location access was denied. Enable it in Settings → Safari → Location.'
-            : 'Location access was denied. Enable it in your browser or device settings.'
-          )
+          setErrorMsg(msg)
         } else if (err.code === err.TIMEOUT) {
           setStatus('error')
           setErrorMsg('Location timed out. Try again outdoors with a clear sky view.')
