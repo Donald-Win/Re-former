@@ -7,6 +7,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const canvasRef = useRef(null)
   const drawing   = useRef(false)
   const lastPos   = useRef(null)
+  const lastMid   = useRef(null)
   const hasMoved  = useRef(false)
 
   // ── Size canvas to physical pixels; re-size on orientation change ───
@@ -69,7 +70,10 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     e.preventDefault()
     drawing.current = true
     hasMoved.current = false
-    lastPos.current = getPos(e, canvasRef.current)
+    
+    const pos = getPos(e, canvasRef.current)
+    lastPos.current = pos
+    lastMid.current = pos // Initialize the starting midpoint exactly at the tap
   }
 
   const draw = e => {
@@ -79,6 +83,34 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     const ctx    = canvas.getContext('2d')
     const pos    = getPos(e, canvas)
     hasMoved.current = true
+
+    // 1. Calculate the new midpoint between the last recorded pointer and current
+    const mid = {
+      x: (lastPos.current.x + pos.x) / 2,
+      y: (lastPos.current.y + pos.y) / 2,
+    }
+
+    ctx.beginPath()
+    
+    // 2. Start the line exactly where the PREVIOUS curve ended
+    ctx.moveTo(lastMid.current.x, lastMid.current.y)
+    
+    // 3. Curve using the last pointer as the tension point, ending at the new midpoint
+    ctx.quadraticCurveTo(lastPos.current.x, lastPos.current.y, mid.x, mid.y)
+    
+    // Pro-tip: A deep, rich color and slightly thicker line looks much better in print
+    ctx.strokeStyle = '#000033' 
+    ctx.lineWidth   = 2.5 
+    ctx.lineCap     = 'round'
+    ctx.lineJoin    = 'round'
+    
+    ctx.stroke()
+
+    // 4. Store current points to be used as the starting points for the next frame
+    lastPos.current = pos
+    lastMid.current = mid
+  }
+
 
     // Quadratic Bézier through the midpoint between the last two positions
     // produces a smooth curve rather than jagged straight-line segments.
