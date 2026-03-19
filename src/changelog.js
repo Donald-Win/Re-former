@@ -13,6 +13,35 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.10.0',
+    changes: [
+      {
+        heading: 'Use my location',
+        detail: 'A new button on the job details step automatically fills in your street address, city, and district using your device GPS.',
+      },
+      {
+        heading: 'Contractor, name & signature remembered',
+        detail: 'Your contractor name, your name, and your signature are saved on the device and pre-filled every time you open a form. Date Work Completed also defaults to today.',
+      },
+      {
+        heading: 'Pole Record — conductor quick-pick',
+        detail: 'Choose Cu or Ali to fast-select conductors. Cu shows common sizes and sets HDCu automatically. Ali lists all named NZ conductors alphabetically with the seven most common pinned at the top. Both ask Bare or PVC to finish. Manual entry is still available.',
+      },
+      {
+        heading: 'Pole Record — crossarm improvements',
+        detail: 'End Size is now a labelled dropdown (A, B, D, Z) with dimensions shown. Arms selects Single or Double. Length and number of wires accept numbers only. End size, length, arms and material are grouped together.',
+      },
+      {
+        heading: 'Signature improvements',
+        detail: 'The signature pad now uses velocity-based stroke thickness for a natural pen feel. Dots and short taps are drawn correctly. Stroke smoothing improved.',
+      },
+      {
+        heading: 'Unified app colour',
+        detail: 'All six wizards now use the same indigo colour scheme. PDF overlay text and the signature ink are also matched so the whole document looks like it was filled with the same pen.',
+      },
+    ],
+  },
+  {
     version: '2.9.0',
     changes: [
       {
