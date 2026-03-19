@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { APP_ACCENT } from '../shared/constants'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -19,10 +20,10 @@ import { useDraft } from '../shared/useDraft'
 const LV_SHOW_OVERLAY = false
 
 // ─── Accent colour ───────────────────────────────────────────
-const LV_TEAL   = '#0d9488'
-const LV_BG     = '#f0fdfa'
-const LV_MID    = '#ccfbf1'
-const LV_BORDER = '#99f6e4'
+const LV_TEAL   = APP_ACCENT
+const LV_BG     = '#eef2ff'
+const LV_MID    = '#e0e7ff'
+const LV_BORDER = '#c7d2fe'
 
 // ─── Step labels ─────────────────────────────────────────────
 const LV_STEPS = [
@@ -82,7 +83,7 @@ async function generateLvPdf(d, photos = []) {
 
   const font   = await pdfDoc.embedFont('Helvetica')
   const PAGE_H = 842
-  const BLUE   = rgb(26/255, 26/255, 1)
+  const BLUE   = rgb(0/255, 20/255, 160/255)
 
   const t = (page, x, cssY, str, size = 8.5) => {
     if (!str) return

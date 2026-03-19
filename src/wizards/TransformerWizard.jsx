@@ -22,12 +22,12 @@ const W_YELLOW = APP_YELLOW
 
 //  360S014EG – AS-BUILT TRANSFORMER RECORD
 
-const W_GREEN  = '#166534'   // issued
+const W_GREEN  = '#15803d'   // issued — green-700
 const W_GREEN_BG  = '#f0fdf4'
 const W_GREEN_MID = '#dcfce7'
 const W_GREEN_BORDER = '#86efac'
-const W_RED    = '#991b1b'   // removed
-const W_RED_BG    = '#fff5f5'
+const W_RED    = '#dc2626'   // removed — red-600
+const W_RED_BG    = '#fef2f2'
 const W_RED_MID   = '#fee2e2'
 const W_RED_BORDER = '#fca5a5'
 
@@ -73,7 +73,7 @@ const T_STEPS = [
 // ─── PDF generation ────────────────────────────────────────────────────────────
 async function generatePdf(d, photos = []) {
   const PAGE_H = 842
-  const BLUE = rgb(26 / 255, 26 / 255, 1)
+  const BLUE = rgb(0/255, 20/255, 160/255)
 
   const existingPdfBytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014EG.pdf').then(r => r.arrayBuffer())
   const pdfDoc = await PDFDocument.load(existingPdfBytes)

@@ -71,7 +71,7 @@ const emptyMultiRow = () => ({
 // Use the Calibrate tab (EE_SHOW_OVERLAY = true) to click fields and verify.
 // Formula reminder:  pdfY = PAGE_H - cssY - fontSize
 const PAGE_H = 842
-const BLUE   = rgb(26 / 255, 26 / 255, 1)
+const BLUE   = rgb(0/255, 20/255, 160/255)
 
 async function generateEEPdf(d, photos = []) {
   const bytes  = await fetch(import.meta.env.BASE_URL + 'forms/360S014EE.pdf').then(r => r.arrayBuffer())

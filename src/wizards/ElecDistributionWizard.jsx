@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { APP_ACCENT } from '../shared/constants'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -19,10 +20,10 @@ import { useDraft } from '../shared/useDraft'
 const EB_SHOW_OVERLAY = false
 
 // ─── Accent colours ───────────────────────────────────────────
-const EB_ORANGE = '#ea580c'
-const EB_BG     = '#fff7ed'
-const EB_MID    = '#fed7aa'
-const EB_BORDER = '#fdba74'
+const EB_ORANGE = APP_ACCENT
+const EB_BG     = '#eef2ff'
+const EB_MID    = '#e0e7ff'
+const EB_BORDER = '#c7d2fe'
 
 // ─── Step labels ──────────────────────────────────────────────
 const EB_STEPS = [
@@ -155,7 +156,7 @@ async function generateEbPdf(d, photos = []) {
   const p1     = pdfDoc.getPages()[0]
   const font   = await pdfDoc.embedFont('Helvetica')
   const PAGE_H = 842
-  const BLUE   = rgb(26/255, 26/255, 1)
+  const BLUE   = rgb(0/255, 20/255, 160/255)
 
   const t = (x, cssY, str, size = 8.5) => {
     if (!str) return

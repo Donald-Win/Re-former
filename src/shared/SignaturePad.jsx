@@ -1,14 +1,20 @@
-// Multi-stroke signature pad — HiDPI aware.
+// Multi-stroke signature pad — HiDPI aware & Velocity-based thickness.
 // Canvas physical pixels = CSS pixels × devicePixelRatio for crisp output.
 import React, { useEffect, useRef } from 'react'
 import { APP_ACCENT } from './constants'
 
 export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const canvasRef = useRef(null)
+  
+  // Drawing state refs
   const drawing   = useRef(false)
-  const lastPos   = useRef(null)
-  const lastMid   = useRef(null) // Crucial for chaining the smooth curves
   const hasMoved  = useRef(false)
+  const lastPos   = useRef(null)
+  const lastMid   = useRef(null)
+  
+  // Physics refs for premium ink effect
+  const lastTime  = useRef(null)
+  const lastWidth = useRef(2.5)
 
   // ── Size canvas to physical pixels; re-size on orientation change ───
   useEffect(() => {
@@ -16,7 +22,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     if (!canvas) return
 
     const resize = () => {
-      // Preserve any existing drawing before resize
       const dpr    = window.devicePixelRatio || 1
       const cssW   = canvas.clientWidth  || 750
       const cssH   = canvas.clientHeight || 160
@@ -24,7 +29,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       const newH   = Math.round(cssH * dpr)
       if (canvas.width === newW && canvas.height === newH) return
 
-      // Snapshot current content
       const snapshot = canvas.toDataURL()
 
       canvas.width  = newW
@@ -32,7 +36,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       const ctx = canvas.getContext('2d')
       ctx.scale(dpr, dpr)
 
-      // Restore previous drawing (if any) so strokes survive rotation
       if (snapshot && snapshot !== 'data:,') {
         const img = new Image()
         img.onload = () => ctx.drawImage(img, 0, 0, cssW, cssH)
@@ -58,7 +61,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   // ── Pointer helpers ───────────────────────────────────────
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect()
-    // Support both Touch events and Mouse events
     const src  = e.touches ? e.touches[0] : e
     return {
       x: src.clientX - rect.left,
@@ -73,7 +75,9 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     
     const pos = getPos(e, canvasRef.current)
     lastPos.current = pos
-    lastMid.current = pos // Initialize the starting midpoint exactly at the tap
+    lastMid.current = pos
+    lastTime.current = Date.now()
+    lastWidth.current = 2.5 // Starting default thickness
   }
 
   const draw = e => {
@@ -83,34 +87,50 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     const canvas = canvasRef.current
     const ctx    = canvas.getContext('2d')
     const pos    = getPos(e, canvas)
+    const time   = Date.now()
+    
     hasMoved.current = true
 
-    // Calculate the new midpoint between the last recorded pointer and current
+    // 1. Calculate Velocity (Distance / Time)
+    const dt = time - lastTime.current || 1
+    const dx = pos.x - lastPos.current.x
+    const dy = pos.y - lastPos.current.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    const velocity = distance / dt
+
+    // 2. Map Velocity to Stroke Width (Faster = Thinner, Slower = Thicker)
+    const minWidth = 1.0
+    const maxWidth = 3.5
+    // Normalize velocity so a speed of 3px/ms caps out the thinness
+    const vFactor = Math.max(0, Math.min(1, velocity / 3)) 
+    const targetWidth = maxWidth - (vFactor * (maxWidth - minWidth))
+
+    // 3. Smooth the width transition so the ink doesn't stutter
+    const currentWidth = lastWidth.current + (targetWidth - lastWidth.current) * 0.2
+
+    // 4. Calculate midpoint for the Bézier curve
     const mid = {
       x: (lastPos.current.x + pos.x) / 2,
       y: (lastPos.current.y + pos.y) / 2,
     }
 
     ctx.beginPath()
-    
-    // Start the line exactly where the PREVIOUS curve ended
     ctx.moveTo(lastMid.current.x, lastMid.current.y)
-    
-    // Curve using the last pointer as the tension point, ending at the new midpoint
     ctx.quadraticCurveTo(lastPos.current.x, lastPos.current.y, mid.x, mid.y)
     
-    // Pro-tip for print: #000033 (Deep Navy) mimics real ink beautifully 
-    // and a 2.5px width scales well on High-DPI screens.
-    ctx.strokeStyle = '#000033' 
-    ctx.lineWidth   = 2.5 
+    // Premium Ballpoint Blue styling
+    ctx.strokeStyle = 'rgba(0, 20, 160, 0.9)' 
+    ctx.lineWidth   = currentWidth 
     ctx.lineCap     = 'round'
     ctx.lineJoin    = 'round'
     
     ctx.stroke()
 
-    // Store current points to be used as the starting points for the next frame
+    // Update refs for the next frame
     lastPos.current = pos
     lastMid.current = mid
+    lastTime.current = time
+    lastWidth.current = currentWidth
   }
 
   const endDraw = () => {
@@ -120,12 +140,12 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     const canvas = canvasRef.current
     const ctx    = canvas.getContext('2d')
 
-    // If the finger/mouse never moved, draw a perfect dot at the tap position
+    // Perfect dot for taps
     if (!hasMoved.current && lastPos.current) {
       const { x, y } = lastPos.current
       ctx.beginPath()
-      ctx.arc(x, y, 1.25, 0, Math.PI * 2) // Radius matches half of our 2.5px line width
-      ctx.fillStyle = '#000033'
+      ctx.arc(x, y, lastWidth.current / 2, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(0, 20, 160, 0.9)'
       ctx.fill()
     }
 
@@ -134,11 +154,11 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     hasMoved.current = false
 
     const dpr  = window.devicePixelRatio || 1
-    const W    = canvas.width   // physical pixels
+    const W    = canvas.width
     const H    = canvas.height
     const data = canvas.getContext('2d').getImageData(0, 0, W, H).data
 
-    // Find tight bounding box in physical pixels to crop whitespace
+    // Tight bounding box crop
     let minX = W, minY = H, maxX = 0, maxY = 0
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -151,7 +171,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       }
     }
 
-    // Use >= so single-pixel dots and perfectly straight strokes are not discarded
     if (minX <= maxX && minY <= maxY) {
       const pad = Math.round(4 * dpr)
       const tc  = document.createElement('canvas')
@@ -184,7 +203,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       </label>
       <div style={{
         position: 'relative',
-        border: `2px solid ${value ? accent : '#ddd'}`,
+        border: `2px solid ${value ? 'rgba(0, 20, 160, 0.5)' : '#ddd'}`,
         borderRadius: 8, background: '#fff',
         overflow: 'hidden', touchAction: 'none',
       }}>
@@ -201,7 +220,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             pointerEvents: 'none',
           }}>
-            <span style={{ fontSize: 13, color: '#bbb', fontStyle: 'italic' }}>Sign here</span>
+            <span style={{ fontSize: 13, color: 'rgba(0, 20, 160, 0.35)', fontStyle: 'italic' }}>Sign here</span>
           </div>
         )}
         {value && (
@@ -220,7 +239,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
         )}
         <div style={{
           position: 'absolute', bottom: 0, left: 12, right: 12,
-          height: 1, background: '#ddd', pointerEvents: 'none',
+          height: 1, background: 'rgba(0, 20, 160, 0.15)', pointerEvents: 'none',
         }} />
       </div>
     </div>

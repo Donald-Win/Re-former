@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { APP_ACCENT } from '../shared/constants'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { Box } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -19,10 +20,10 @@ import { useDraft } from '../shared/useDraft'
 const ED_SHOW_OVERLAY = false
 
 // ─── Accent colours ───────────────────────────────────────────
-const ED_GREEN  = '#16a34a'
-const ED_BG     = '#f0fdf4'
-const ED_MID    = '#bbf7d0'
-const ED_BORDER = '#86efac'
+const ED_GREEN  = APP_ACCENT
+const ED_BG     = '#eef2ff'
+const ED_MID    = '#e0e7ff'
+const ED_BORDER = '#c7d2fe'
 
 // ─── Step labels ──────────────────────────────────────────────
 const ED_STEPS = [
@@ -194,7 +195,7 @@ async function generateEdPdf(d, photos = []) {
 
   // Landscape: width > height
   const PAGE_H = p1.getHeight()   // ≈ 595
-  const BLUE   = rgb(26/255, 26/255, 1)
+  const BLUE   = rgb(0/255, 20/255, 160/255)
 
   const t = (x, cssY, str, size = 7) => {
     if (!str) return

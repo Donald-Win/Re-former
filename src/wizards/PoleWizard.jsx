@@ -28,7 +28,7 @@ const PT_X = [45,174,296,429,45,174,296,429];
 const PT_Y = [610,610,610,610,624,624,624,624];
 async function generateFilledPdf(d, photos = []) {
   const PAGE_H = 842;
-  const BLUE = rgb(26/255, 26/255, 1);
+  const BLUE = rgb(0/255, 20/255, 160/255);
   const existingPdfBytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014EC.pdf').then(r => r.arrayBuffer());
   const pdfDoc = await PDFDocument.load(existingPdfBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
