@@ -1,5 +1,5 @@
-// re-former Service Worker v2.7.0
-const CACHE_VERSION = 're-former-v2.9.0'
+// re-former Service Worker v2.10.0
+const CACHE_VERSION = 're-former-v2.10.1'
 const STATIC_CACHE  = CACHE_VERSION + '-static'
 const PDF_CACHE     = CACHE_VERSION + '-pdfs'
 

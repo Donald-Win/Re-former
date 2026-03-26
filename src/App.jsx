@@ -8,11 +8,12 @@ import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
+import ZoneSubWizard from './wizards/ZoneSubWizard'
 import { AuthGate } from './auth/AuthGate'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.10.0'
+const APP_VERSION = '2.10.1'
 
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork] = useState('');
@@ -37,12 +38,33 @@ const AsBuiltFormSelector = () => {
   const [ebWizardOpen, setEbWizardOpen] = useState(false);
   const [edChoiceOpen, setEdChoiceOpen] = useState(false);
   const [edWizardOpen, setEdWizardOpen] = useState(false);
+  const [efChoiceOpen, setEfChoiceOpen] = useState(false);
+  const [efWizardOpen, setEfWizardOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installDismissed, setInstallDismissed] = useState(false);
   const [changelogQueue, setChangelogQueue] = useState([])
   const [changelogIdx, setChangelogIdx]     = useState(0)
+  const [updateReady, setUpdateReady]       = useState(false)
 
-  // Pick up the install prompt captured in main.jsx before React mounted.
+  // Detect when a new service worker is waiting and prompt the user to update.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return
+      // A new SW is already waiting (page was loaded after update deployed)
+      if (reg.waiting) { setUpdateReady(true); return }
+      // Listen for a new SW installing then moving to waiting
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing
+        if (!newWorker) return
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            setUpdateReady(true)
+          }
+        })
+      })
+    })
+  }, [])
   useEffect(() => {
     if (window.__pwaInstallPrompt) {
       setInstallPrompt(window.__pwaInstallPrompt)
@@ -236,6 +258,7 @@ const AsBuiltFormSelector = () => {
     if (formId === '360S014EA') { setLvChoiceOpen(true);   return; }
     if (formId === '360S014EB') { setEbChoiceOpen(true);   return; }
     if (formId === '360S014ED') { setEdChoiceOpen(true);   return; }
+    if (formId === '360S014EF') { setEfChoiceOpen(true);   return; }
 
     // All platforms: fetch as arrayBuffer, render via PdfCanvasPreview, share as File
     const rawName = name || url.split('/').pop();
@@ -916,6 +939,43 @@ const AsBuiltFormSelector = () => {
       )}
       {edWizardOpen && <LvBoxWizard onClose={() => setEdWizardOpen(false)} />}
 
+      {/* Zone Substation Equipment Record Choice Modal */}
+      {efChoiceOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setEfChoiceOpen(false)}>
+          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-5">
+              <FileText className="text-indigo-600 flex-shrink-0" size={24} />
+              <div>
+                <p className="font-bold text-gray-900 text-base">360S014EF – As-built Zone Substation Equipment Record</p>
+                <p className="text-sm text-gray-500">How would you like to open this form?</p>
+              </div>
+            </div>
+            <button onClick={() => { setEfChoiceOpen(false); setEfWizardOpen(true); }}
+              className="w-full mb-3 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50 text-left hover:bg-indigo-100 active:bg-indigo-200 transition-all">
+              <div className="flex items-center gap-3">
+                <PenLine className="text-indigo-600 flex-shrink-0" size={22} />
+                <div>
+                  <p className="font-semibold text-indigo-900">Fill Out Form</p>
+                  <p className="text-xs text-indigo-600 mt-0.5">Step-by-step wizard — generates a filled PDF</p>
+                </div>
+              </div>
+            </button>
+            <button onClick={() => { setEfChoiceOpen(false); handleFormClick('forms/360S014EF.pdf', 'As-built Zone Substation Equipment Record', null); }}
+              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
+              <div className="flex items-center gap-3">
+                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
+                <div>
+                  <p className="font-semibold text-gray-900">View / Download PDF</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
+                </div>
+              </div>
+            </button>
+            <button onClick={() => setEfChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+      {efWizardOpen && <ZoneSubWizard onClose={() => setEfWizardOpen(false)} />}
+
       {/* Changelog Modal */}
       {changelogQueue.length > 0 && changelogQueue[changelogIdx] && (() => {
         const batch = changelogQueue[changelogIdx]
@@ -961,6 +1021,55 @@ const AsBuiltFormSelector = () => {
           </div>
         )
       })()}
+
+      {/* Update available banner */}
+      {updateReady && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
+          background: '#4f46e5', color: '#fff',
+          padding: '12px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>
+            🎉 A new version is available
+          </span>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                navigator.serviceWorker.getRegistration().then(reg => {
+                  if (reg && reg.waiting) {
+                    reg.waiting.postMessage('SKIP_WAITING')
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                      window.location.reload()
+                    }, { once: true })
+                  } else {
+                    window.location.reload()
+                  }
+                })
+              }}
+              style={{
+                background: '#fff', color: '#4f46e5',
+                border: 'none', borderRadius: 8,
+                padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Update now
+            </button>
+            <button
+              onClick={() => setUpdateReady(false)}
+              style={{
+                background: 'rgba(255,255,255,0.2)', color: '#fff',
+                border: 'none', borderRadius: 8,
+                padding: '6px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Install App Button */}
       {installPrompt && !installDismissed && (

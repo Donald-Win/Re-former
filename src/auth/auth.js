@@ -17,7 +17,10 @@ export const APP_ID = 'reformer'
 
 const DEVICE_ID_KEY  = 'dcw-device-id'
 const AUTH_CACHE_KEY = 're-former-auth-cache'
-const POLL_MS        = 45_000   // 45 seconds — ~1,920 req/day per user, well under free 100k limit
+const POLL_MS        = 300_000  // 5 minutes — ~288 req/day per user
+const CHECK_COOLDOWN = 120_000  // 2 minutes — minimum gap between visibility/online checks
+
+let _lastCheckedAt = 0  // timestamp of most recent successful network check
 
 // ── DEVICE ID ─────────────────────────────────────────────────────────────────
 // Uses crypto.randomUUID() for a truly stable, unpredictable device identity.
@@ -108,6 +111,7 @@ export async function checkAccessOnline() {
   })
   if (!res.ok) throw new Error(`Worker responded ${res.status}`)
   const result = await res.json()
+  _lastCheckedAt = Date.now()
   // Cache all results including denied — so offline behaviour is correct.
   // Denied cache is cleared immediately after the lock screen is shown,
   // so it never persists to block a user who has since been granted access.
@@ -154,6 +158,7 @@ export function stopPolling() {
 /**
  * Re-checks immediately when the browser tab comes back into view.
  * This catches revocations that happened while the tab was backgrounded.
+ * A cooldown prevents hammering the API when the user switches apps rapidly.
  */
 export function addVisibilityListener() {
   if (_listeningVisible) return
@@ -161,6 +166,7 @@ export function addVisibilityListener() {
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState !== 'visible') return
     if (!navigator.onLine || !_onRevoked) return
+    if (Date.now() - _lastCheckedAt < CHECK_COOLDOWN) return  // checked recently — skip
     try {
       const result = await checkAccessOnline()
       if (!result.allowed) {
@@ -180,6 +186,7 @@ export function addOnlineListener() {
   _listeningOnline = true
   window.addEventListener('online', async () => {
     if (!_onRevoked) return
+    if (Date.now() - _lastCheckedAt < CHECK_COOLDOWN) return  // checked recently — skip
     try {
       const result = await checkAccessOnline()
       if (result.allowed) {
