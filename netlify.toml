@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build -- --config vite.config.netlify.js"
+  command = "cp manifest.netlify.json manifest.json && cp index.netlify.html index.html && npm run build -- --config vite.config.netlify.js"
   publish = "dist"
 
 [[redirects]]

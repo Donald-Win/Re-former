@@ -1,5 +1,4 @@
 // 360S014EE — AS-Built Electrical Equipment Record
-// Self-contained wizard. Set EE_SHOW_OVERLAY = true to enable calibration mode.
 import React, { useState, useEffect, useRef } from 'react'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { FileText, X, Share2 } from 'lucide-react'
@@ -21,18 +20,11 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
-// ─── Electrical Equipment Wizard ──────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-//  360S014EE – AS-BUILT ELECTRICAL EQUIPMENT RECORD
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Set true to enable click-to-calibrate overlay (dev only)
 const EE_SHOW_OVERLAY = false
 
-// App colour tokens reused (W_PURPLE = indigo-600 matches main app)
-const EE_BG     = '#eef2ff'   // indigo-50  — page background
-const EE_MID    = '#e0e7ff'   // indigo-100 — progress / nav strip
-const EE_BORDER = '#c7d2fe'   // indigo-200 — card borders
+const EE_BG     = '#eef2ff'
+const EE_MID    = '#e0e7ff'
+const EE_BORDER = '#c7d2fe'
 
 const EE_STEPS = [
   'Job Details',
@@ -63,13 +55,6 @@ const emptyMultiRow = () => ({
   model: '', serialNumber: '', operatingVoltage: '', voltageRating: '', fuseSize: '',
 })
 
-// Section header — EE variant (uses W_PURPLE for accent line)
-
-
-// ── PDF generation ─────────────────────────────────────────────────────────────
-// NOTE: All coordinates below are initial estimates.
-// Use the Calibrate tab (EE_SHOW_OVERLAY = true) to click fields and verify.
-// Formula reminder:  pdfY = PAGE_H - cssY - fontSize
 const PAGE_H = 842
 const BLUE   = rgb(0/255, 20/255, 160/255)
 
@@ -81,21 +66,16 @@ async function generateEEPdf(d, photos = []) {
   const p1     = pages[0]
   const p2     = pages.length > 1 ? pages[1] : null
 
-  // Text overlay (left-aligned)
   const t = (page, x, cssY, str, size = 8.5) => {
     if (!str) return
     page.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
   }
-
-  // Text overlay (centre-aligned within a field)
   const tc = (page, fieldLeft, fieldWidth, cssY, str, size = 8.5) => {
     if (!str) return
     const w = font.widthOfTextAtSize(String(str), size)
     const x = fieldLeft + (fieldWidth / 2) - (w / 2)
     page.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
   }
-
-  // Checkmark (L-shaped tick)
   const ck = (page, x, cssY, show) => {
     if (!show) return
     const by = PAGE_H - cssY - 2
@@ -103,9 +83,6 @@ async function generateEEPdf(d, photos = []) {
     page.drawLine({ start: { x: x + 3, y: by - 9 }, end: { x: x + 9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
 
-  // ── PAGE 1 ─────────────────────────────────────────────────────────────────
-
-  // Header block
   t(p1, 115,  110, d.streetRoad)
   t(p1, 394,  110, d.contractor)
   t(p1, 394,  124, d.dateWorkCompleted)
@@ -113,9 +90,8 @@ async function generateEEPdf(d, photos = []) {
   t(p1, 115,  154, d.district)
   t(p1, 394,  154, d.namePrint)
   t(p1, 170,  168, d.pcoWONo)
-  t(p1, 490,  160, d.ciwrNo)          // Customer Works Application Number
+  t(p1, 490,  160, d.ciwrNo)
 
-  // Signature
   if (d.signed && d.signed.startsWith('data:image')) {
     const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
     const sigImg   = await pdfDoc.embedPng(sigBytes)
@@ -125,7 +101,6 @@ async function generateEEPdf(d, photos = []) {
     p1.drawImage(sigImg, { x: 388, y: PAGE_H - 151, width: sigW, height: sigH, opacity: 1 })
   }
 
-  // Equipment Details (centre-aligned within each column)
   tc(p1,  33, 200, 232, d.newEquipmentId)
   tc(p1, 204, 200, 232, d.oldEquipmentId)
   tc(p1, 374, 200, 232, d.locationPoleSiteId)
@@ -133,7 +108,6 @@ async function generateEEPdf(d, photos = []) {
   tc(p1, 204, 200, 276, d.model)
   tc(p1, 374, 200, 276, d.serialNo)
 
-  // Equipment Type checkboxes
   const EQ_CK = {
     'Flicker ABS':              { x:  45, y: 322 },
     'Fused ABS':                { x:  45, y: 336 },
@@ -160,7 +134,6 @@ async function generateEEPdf(d, photos = []) {
     t(p1, 375, 396, d.equipmentTypeOther)
   }
 
-  // Replacement Details
   const TOC_X = { 'New': 155, 'Removed': 254, 'Replaced': 353 }
   if (TOC_X[d.typeOfChange]) ck(p1, TOC_X[d.typeOfChange], 435, true)
   const OWN_X = { 'Powerco': 155, 'Private': 254, 'Other': 353 }
@@ -168,7 +141,6 @@ async function generateEEPdf(d, photos = []) {
   if (d.ownership === 'Other' && d.ownershipOther) t(p1, 435, 452, d.ownershipOther)
   if (d.reasonForRemoval) t(p1, 140, 467, d.reasonForRemoval)
 
-  // Equipment Rating table
   const RATING_Y = [556, 570, 585, 599, 613]
   ;(d.equipmentRating || []).forEach((row, i) => {
     if (!RATING_Y[i]) return
@@ -181,13 +153,11 @@ async function generateEEPdf(d, photos = []) {
     t(p1, 480, y, row.fuseSize)
   })
 
-  // Additional Detail
   ck(p1, 156, 655, d.remoteControlled === 'Yes')
   ck(p1, 254, 655, d.remoteControlled === 'No')
   ck(p1, 156, 669, d.remoteIndication === 'Yes')
   ck(p1, 254, 669, d.remoteIndication === 'No')
 
-  // Comments — wrap by measured text width, not character count
   const COMMENT_X     = 45
   const COMMENT_MAX_W = 510
   const COMMENT_SIZE  = 8.5
@@ -207,13 +177,8 @@ async function generateEEPdf(d, photos = []) {
   if (currentLine) commentLines.push(currentLine)
   commentLines.slice(0, 4).forEach((line, i) => t(p1, COMMENT_X, COMMENT_Y[i], line))
 
-  // ── PAGE 2 — Multi-item table (landscape page) ──────────────────────────────
-  // Page 2 is landscape so its height is ~595pt, not 842pt.
-  // We read the actual height from the page so the y formula stays correct.
   if (p2) {
     const { width: P2W, height: P2H } = p2.getSize()
-    console.log('Page 2 dimensions:', P2W, 'x', P2H)
-
     const t2 = (x, cssY, str, size = 8.5) => {
       if (!str) return
       p2.drawText(String(str), { x, y: P2H - cssY - size, size, font, color: BLUE })
@@ -224,7 +189,6 @@ async function generateEEPdf(d, photos = []) {
       const x = fieldLeft + (fieldWidth / 2) - (w / 2)
       p2.drawText(String(str), { x, y: P2H - cssY - size, size, font, color: BLUE })
     }
-
     const M_ROWS = (d.multiItems || []).filter(r => r.ir || r.equipmentId || r.equipmentType)
     const M_Y0   = 161
     const M_RH   = 22
@@ -245,6 +209,7 @@ async function generateEEPdf(d, photos = []) {
   if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
   return new Uint8Array(await pdfDoc.save())
 }
+
 function ElecEquipWizard({ onClose = () => {} }) {
   const [tab, setTab]                   = useState('wizard')
   const [calPage, setCalPage]           = useState(1)
@@ -259,33 +224,25 @@ function ElecEquipWizard({ onClose = () => {} }) {
   const blobUrlRef = useRef(null)
 
   const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-    const [d, setD] = useState({
-    // ── Canonical shared fields (Step 0) ──────────────────────────────────────
+  const [d, setD] = useState({
     npJobNumber: '', projectName: '',
     pcoWONo: '', ciwrNo: '',
     streetRoad: '', cityTown: '', district: '',
     contractor: _contractor, dateWorkCompleted: _date,
     signed: _signed, namePrint: _namePrint,
-    // ── Equipment Details (Step 1) ────────────────────────────────────────────
     newEquipmentId: '', oldEquipmentId: '', locationPoleSiteId: '',
     manufacturer: '', model: '', serialNo: '',
-    // ── Equipment Type (Step 2) ───────────────────────────────────────────────
     equipmentType: '', equipmentTypeOther: '',
-    // ── Replacement Details (Step 3) ──────────────────────────────────────────
     typeOfChange: '', ownership: '', ownershipOther: '',
     reasonForRemoval: '',
-    // ── Equipment Rating (Step 4) — starts with 1 row, max 5 ─────────────────
     equipmentRating: [emptyRatingRow()],
-    // ── Additional Detail (Step 5) ────────────────────────────────────────────
     remoteControlled: '', remoteIndication: '',
     comments: '',
-    // ── Multi-item table (Step 6 / page 2) — starts with 1 row, max 15 ───────
     multiItems: [emptyMultiRow()],
   })
 
   const isPreview = step === EE_STEPS.length - 1
 
-  // Load calibration PDF
   useEffect(() => {
     if (!EE_SHOW_OVERLAY) return
     fetch(import.meta.env.BASE_URL + 'forms/360S014EE.pdf')
@@ -310,20 +267,16 @@ function ElecEquipWizard({ onClose = () => {} }) {
     })
   }
 
-  // ── State helpers ──────────────────────────────────────────────────────────
   const set = k => v => setD(p => ({ ...p, [k]: v }))
   React.useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
   React.useEffect(() => { saveUserPref('namePrint', d.namePrint) }, [d.namePrint])
   React.useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
   React.useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
-
   const loadJobHistory = fields => {
     setD(prev => ({ ...prev, ...fields }))
   }
 
-
-  // Auto-save job details when user advances past step 0
   const prevStepRef = React.useRef(0)
   React.useEffect(() => {
     if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
@@ -331,7 +284,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
   }, [step])
   const tog = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
 
-  // Equipment rating rows (max 5)
   const setRating    = (i, field) => v => setD(p => ({
     ...p, equipmentRating: p.equipmentRating.map((r, idx) => idx === i ? { ...r, [field]: v } : r),
   }))
@@ -341,7 +293,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
   const addRatingRow    = () => setD(p => p.equipmentRating.length < 5 ? { ...p, equipmentRating: [...p.equipmentRating, emptyRatingRow()] } : p)
   const removeRatingRow = i  => setD(p => p.equipmentRating.length > 1 ? { ...p, equipmentRating: p.equipmentRating.filter((_, idx) => idx !== i) } : p)
 
-  // Multi-item rows (max 15)
   const setMulti    = (i, field) => v => setD(p => ({
     ...p, multiItems: p.multiItems.map((r, idx) => idx === i ? { ...r, [field]: v } : r),
   }))
@@ -353,12 +304,13 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Elec Equipment Record'].filter(Boolean)
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.newEquipmentId), 'Elec Equipment Record'].filter(Boolean)
     const filename = parts.join(' - ') + '.pdf'
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  // ── Form steps ─────────────────────────────────────────────────────────────
+  const handleSaveAndClose = () => onClose()
+
   const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, setD, setStep)
 
   const formSteps = [
@@ -584,10 +536,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
     </div>,
   ]
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  const progressPct = (step + 1) / EE_STEPS.length * 100
-
-  // ── Computed values for shell ──────────────────────────────────────────
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
     !d.streetRoad && 'Street/Road',
@@ -615,7 +563,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
   return (
     <>
-      {/* Dev overlay tab bar — visible only when EE_SHOW_OVERLAY = true */}
       {EE_SHOW_OVERLAY && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300, display: 'flex', background: '#1e1b4b', padding: '6px 12px', gap: 8, alignItems: 'center' }}>
           {['wizard', 'calibrate'].map(t2 => (
@@ -660,6 +607,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const next = step + 1; setStep(next); if (next === EE_STEPS.length - 1) triggerGenerate(photos) }}
+          onSaveAndClose={handleSaveAndClose}
           accent={W_PURPLE}
           bg={EE_BG}
           mid={EE_MID}

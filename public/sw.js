@@ -1,5 +1,5 @@
-// re-former Service Worker v2.10.0
-const CACHE_VERSION = 're-former-v2.10.1'
+// re-former Service Worker v2.11.0
+const CACHE_VERSION = 're-former-v2.11.0'
 const STATIC_CACHE  = CACHE_VERSION + '-static'
 const PDF_CACHE     = CACHE_VERSION + '-pdfs'
 
@@ -75,6 +75,7 @@ self.addEventListener('fetch', event => {
 })
 
 self.addEventListener('message', event => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting()
-  if (event.data === 'CHECK_UPDATE') self.registration.update()
+  const msg = event.data?.type ?? event.data
+  if (msg === 'SKIP_WAITING') self.skipWaiting()
+  if (msg === 'CHECK_UPDATE') self.registration.update()
 })

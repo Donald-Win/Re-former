@@ -14,14 +14,19 @@
  * @param {PDFDocument} pdfDoc  – pdf-lib PDFDocument to mutate in place
  * @param {Array}       photos  – array of { dataUrl: string, name?: string }
  */
+
+const MAX_PHOTO_PX = 1600  // longest edge cap — reduces file size significantly
+const JPEG_QUALITY = 0.75  // was 0.92
+
 export async function appendPhotosToPdf(pdfDoc, photos) {
   if (!photos || photos.length === 0) return
 
-  for (const photo of photos) {
+  // Step 1: Process all photos in parallel (load + canvas normalise)
+  const processed = await Promise.all(photos.map(async (photo) => {
     const { dataUrl } = photo
-    if (!dataUrl || !dataUrl.startsWith('data:image')) continue
+    if (!dataUrl || !dataUrl.startsWith('data:image')) return null
 
-    // 1. Load through <img> to get EXIF-corrected display dimensions
+    // Load through <img> to get EXIF-corrected display dimensions
     let imgEl
     try {
       imgEl = await new Promise((resolve, reject) => {
@@ -32,55 +37,65 @@ export async function appendPhotosToPdf(pdfDoc, photos) {
       })
     } catch {
       console.warn('appendPhotosToPdf: could not load image', photo.name)
-      continue
+      return null
     }
 
     const natW = imgEl.naturalWidth
     const natH = imgEl.naturalHeight
-    if (!natW || !natH) continue
+    if (!natW || !natH) return null
 
-    // 2. Normalise EXIF via canvas.
-    // Drawing an <img> onto a canvas always produces correctly-oriented pixels.
-    // The resulting re-encoded JPEG has no EXIF rotation tag and is safe for pdf-lib.
+    // Normalise EXIF via canvas, scaling down if oversized
+    let canvasW = natW
+    let canvasH = natH
+    if (natW > MAX_PHOTO_PX || natH > MAX_PHOTO_PX) {
+      const scale = MAX_PHOTO_PX / Math.max(natW, natH)
+      canvasW = Math.round(natW * scale)
+      canvasH = Math.round(natH * scale)
+    }
+
     let normBytes
     try {
       const canvas = document.createElement('canvas')
-      canvas.width  = natW
-      canvas.height = natH
+      canvas.width  = canvasW
+      canvas.height = canvasH
       const ctx = canvas.getContext('2d')
-      ctx.drawImage(imgEl, 0, 0, natW, natH)
-      const normDataUrl = canvas.toDataURL('image/jpeg', 0.92)
+      ctx.drawImage(imgEl, 0, 0, canvasW, canvasH)
+      const normDataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
       const b64 = normDataUrl.split(',')[1]
       normBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
     } catch (err) {
       console.warn('appendPhotosToPdf: canvas normalisation failed', photo.name, err)
-      continue
+      return null
     }
 
-    // 3. Choose A4 page orientation from EXIF-corrected dimensions.
-    //    Portrait  (h >= w) → portrait  A4: 595 × 842 pt
-    //    Landscape (w  > h) → landscape A4: 842 × 595 pt
+    return { normBytes, natW, natH, canvasW, canvasH }
+  }))
+
+  // Step 2: Embed and draw pages sequentially (pdf-lib is not thread-safe)
+  for (const result of processed) {
+    if (!result) continue
+    const { normBytes, natW, natH, canvasW, canvasH } = result
+
+    // Choose A4 page orientation from EXIF-corrected dimensions
     const isLandscape = natW > natH
     const pageW = isLandscape ? 842 : 595
     const pageH = isLandscape ? 595 : 842
 
-    // 4. Scale to fill page (minus margin) preserving aspect ratio, then centre.
+    // Scale to fill page (minus margin) preserving aspect ratio, then centre
     const MARGIN = 20
     const availW = pageW - 2 * MARGIN
     const availH = pageH - 2 * MARGIN
-    const scale  = Math.min(availW / natW, availH / natH)
-    const drawW  = natW * scale
-    const drawH  = natH * scale
-    // pdf-lib origin is bottom-left
+    const scale  = Math.min(availW / canvasW, availH / canvasH)
+    const drawW  = canvasW * scale
+    const drawH  = canvasH * scale
     const x = MARGIN + (availW - drawW) / 2
     const y = MARGIN + (availH - drawH) / 2
 
-    // 5. Embed canvas-normalised JPEG and draw onto a new page.
     let embedded
     try {
       embedded = await pdfDoc.embedJpg(normBytes)
     } catch (err) {
-      console.warn('appendPhotosToPdf: embedJpg failed for', photo.name, err)
+      console.warn('appendPhotosToPdf: embedJpg failed', err)
       continue
     }
 

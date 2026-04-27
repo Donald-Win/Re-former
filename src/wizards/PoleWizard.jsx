@@ -196,11 +196,9 @@ function PoleRecordWizard({ onClose }) {
 
   const set = k => v => setD(p=>({...p,[k]:v}));
 
-
   const loadJobHistory = fields => {
     setD(prev => ({ ...prev, ...fields }))
   }
-
 
   // Auto-save job details when user advances past step 0
   const prevStepRef = React.useRef(0)
@@ -220,10 +218,12 @@ function PoleRecordWizard({ onClose }) {
 
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Pole Record'].filter(Boolean)
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.oldPoleId), 'Pole Record'].filter(Boolean)
     const filename = parts.join(' - ') + '.pdf'
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
+
+  const handleSaveAndClose = () => onClose()
 
   const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, setD, setStep)
 
@@ -352,9 +352,7 @@ function PoleRecordWizard({ onClose }) {
         const LEVELS     = [["1","1"],["2","2"],["3","3"],["4","4"],["5","5"],["6","6"],["7","7"]]
         const EN         = [["E","Existing (E)"],["N","New (N)"]]
         const MATERIAL   = [["HDCu","HDCu"],["ACSR","ACSR"],["AAC","AAC"],["AAAC","AAAC"],["ABC","ABC"]]
-        // ── Conductor quick-pick data ─────────────────────────────────────────
         const CU_SIZES = ['10mm²','16mm²','25mm²','35mm²','50mm²','70mm²','95mm²','120mm²','150mm²','185mm²','240mm²']
-
         const ALI_COMMON = ['Namu','Squirrel','Ferret','Flourine','Kutu','Iodine','Wasp']
         const ALI_ALL = [
           {name:'Argon',type:'AAAC'},{name:'Bee',type:'AAC'},{name:'Beetle',type:'AAC'},
@@ -382,8 +380,6 @@ function PoleRecordWizard({ onClose }) {
         ]
         const ALI_COMMON_ITEMS = ALI_COMMON.map(n => ALI_ALL.find(c => c.name === n)).filter(Boolean)
         const ALI_REST = ALI_ALL.filter(c => !ALI_COMMON.includes(c.name))
-
-        // ── Per-row picker UI ─────────────────────────────────────────────────
         const pathBtn = (label, active, onClick, color='#6366f1') => (
           <button type="button" onClick={onClick} style={{
             flex:1, padding:'8px 4px', borderRadius:7, fontFamily:'inherit', fontSize:13,
@@ -402,7 +398,6 @@ function PoleRecordWizard({ onClose }) {
             color: active ? '#fff' : '#555',
           }}>{label}</button>
         )
-
         const ConductorPicker = ({c, i}) => {
           const picker = c.picker || (c.size||c.material ? 'manual' : null)
           const setField = (field, val) => setCond(i, field, val)
@@ -411,7 +406,6 @@ function PoleRecordWizard({ onClose }) {
             conds[i] = {...conds[i], ...fields}
             return {...p, conductors: conds}
           })
-
           const summary = c.size && c.material && c.insulation ? (
             <div style={{
               background:'#eef2ff', border:`1px solid ${W_PURPLE}`, borderRadius:7,
@@ -423,7 +417,6 @@ function PoleRecordWizard({ onClose }) {
                 style={{background:'none',border:'none',color:W_PURPLE,cursor:'pointer',fontSize:18,padding:0,lineHeight:1}}>↺</button>
             </div>
           ) : null
-
           const pathRow = (active) => (
             <div style={{display:'flex',gap:6,marginBottom:8}}>
               {pathBtn('Cu', active==='cu', ()=>setMulti({size:'',material:'',insulation:'',picker:'cu'}), '#b45309')}
@@ -431,7 +424,6 @@ function PoleRecordWizard({ onClose }) {
               {pathBtn('Manual', active==='manual', ()=>setMulti({size:'',material:'',insulation:'',picker:'manual'}), '#6b7280')}
             </div>
           )
-
           if (!picker) return (
             <div>
               {summary}
@@ -439,7 +431,6 @@ function PoleRecordWizard({ onClose }) {
               {pathRow(null)}
             </div>
           )
-
           if (picker === 'cu') return (
             <div>
               {summary}
@@ -464,7 +455,6 @@ function PoleRecordWizard({ onClose }) {
               </>}
             </div>
           )
-
           if (picker === 'ali') return (
             <div>
               {summary}
@@ -500,8 +490,6 @@ function PoleRecordWizard({ onClose }) {
               </>}
             </div>
           )
-
-          // Manual — plain text inputs, no dropdowns
           return (
             <div>
               {summary}
@@ -514,7 +502,6 @@ function PoleRecordWizard({ onClose }) {
             </div>
           )
         }
-
         const INSULATION = [["Bare","Bare"],["PVC","PVC"],["XLPE","XLPE"],["HDPE","HDPE"]]
         return <>
           <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set("serviceConnections")} ph="e.g. 2" />
@@ -610,7 +597,6 @@ function PoleRecordWizard({ onClose }) {
     </div>,
   ];
 
-  // ── Computed values for shell ──────────────────────────────────────────
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
     !d.streetRoad && 'Street/Road',
@@ -648,6 +634,7 @@ function PoleRecordWizard({ onClose }) {
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
         onNext={() => setStep(s => s + 1)}
+        onSaveAndClose={handleSaveAndClose}
         accent={W_PURPLE}
         bg="#f4f4f8"
         mid="#fff"
@@ -669,6 +656,5 @@ function PoleRecordWizard({ onClose }) {
     </>
   );
 }
-
 
 export default PoleRecordWizard

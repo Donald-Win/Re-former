@@ -14,6 +14,7 @@ export const JOB_FIELDS = [
   'streetRoad', 'cityTown', 'district',
   'contractor',
   'dateWorkCompleted', 'namePrint',
+  'formType',
 ]
 
 function makeId(d) {
@@ -80,12 +81,13 @@ export function saveDraft(formKey, data, step) {
   if (step === 0 && !hasContent) return
 
   const draft = {
+    version: 1,
     step,
     savedAt: Date.now(),
     data: Object.fromEntries(
-      Object.entries(data).filter(([, v]) =>
-        // Exclude signature (Uint8Array / large string) and null
-        typeof v !== 'object' || v === null || Array.isArray(v)
+      Object.entries(data).filter(([k, v]) =>
+        // Exclude signature data URL (large string) and non-serialisable objects
+        k !== 'signed' && (typeof v !== 'object' || v === null || Array.isArray(v))
       )
     ),
   }
@@ -102,6 +104,11 @@ export function loadDraft(formKey) {
     const draft = JSON.parse(raw)
     // Discard drafts older than 7 days — they're stale
     if (Date.now() - draft.savedAt > 7 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(DRAFT_PREFIX + formKey)
+      return null
+    }
+    // Discard drafts from an older schema version
+    if (!draft.version || draft.version < 1) {
       localStorage.removeItem(DRAFT_PREFIX + formKey)
       return null
     }
