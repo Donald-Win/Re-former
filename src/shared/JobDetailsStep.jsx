@@ -24,7 +24,6 @@ export function JobDetailsStep({
   DraftBanner,
   onPickerOpen,
   showNamePrint = true,
-  topChildren,
   children,
 }) {
   const set = (k, v) => setD(p => ({ ...p, [k]: v }))
@@ -49,8 +48,6 @@ export function JobDetailsStep({
       >
         📋 Load Previous Job
       </button>
-
-      {topChildren}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={accent} />

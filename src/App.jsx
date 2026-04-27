@@ -8,46 +8,188 @@ import ElecEquipWizard from './wizards/ElecEquipWizard'
 import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
+import ZoneSubWizard from './wizards/ZoneSubWizard'
 import { AuthGate } from './auth/AuthGate'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.10.0'
+const APP_VERSION = '2.11.0'
 
+// ── Wizard config ─────────────────────────────────────────────────────────────
+// Each entry maps a form ID to its wizard component, display name, PDF file,
+// and accent colour. To add a new wizard: add one entry here.
+const WIZARD_CONFIG = {
+  '360S014EC': {
+    label:     '360S014EC – As-built Pole Record',
+    pdfName:   'As-built Pole Record',
+    fileName:  '360S014EC.pdf',
+    accent:    '#4f46e5',
+    Component: PoleRecordWizard,
+  },
+  '360S014EG': {
+    label:     '360S014EG – AS-Built Transformer Record',
+    pdfName:   'AS-Built Transformer Record',
+    fileName:  '360S014EG.pdf',
+    accent:    '#4f46e5',
+    Component: TransformerWizardApp,
+  },
+  '360S014EE': {
+    label:     '360S014EE – As-built Electrical Equipment Record',
+    pdfName:   'As-built Electrical Equipment Record',
+    fileName:  '360S014EE.pdf',
+    accent:    '#4f46e5',
+    Component: ElecEquipWizard,
+  },
+  '360S014EA': {
+    label:     '360S014EA – As-built LV Connection Record',
+    pdfName:   'As-built LV Connection Record',
+    fileName:  '360S014EA.pdf',
+    accent:    '#0d9488',
+    Component: LvConnectionWizard,
+  },
+  '360S014EB': {
+    label:     '360S014EB – As-built Electrical Distribution Record',
+    pdfName:   'As-built Electrical Distribution Record',
+    fileName:  '360S014EB.pdf',
+    accent:    '#ea580c',
+    Component: ElecDistributionWizard,
+  },
+  '360S014ED': {
+    label:     '360S014ED – As-built LV Box Record',
+    pdfName:   'As-built LV Box Record',
+    fileName:  '360S014ED.pdf',
+    accent:    '#16a34a',
+    Component: LvBoxWizard,
+  },
+  '360S014EF': {
+    label:     '360S014EF – As-built Zone Substation Equipment Record',
+    pdfName:   'As-built Zone Substation Equipment Record',
+    fileName:  '360S014EF.pdf',
+    accent:    '#4f46e5',
+    Component: ZoneSubWizard,
+  },
+}
+
+// ── WizardChoiceModal ─────────────────────────────────────────────────────────
+// Single shared modal — replaces 7 near-identical JSX blocks.
+function WizardChoiceModal({ formId, onFillOut, onViewPdf, onClose }) {
+  const cfg = WIZARD_CONFIG[formId]
+  if (!cfg) return null
+  const { label, accent } = cfg
+
+  const fillBtnStyle = {
+    borderColor: accent,
+    background: accent + '18',
+  }
+  const fillTextStyle  = { color: accent }
+  const fillLabelStyle = { color: accent, fontSize: 12, marginTop: 2 }
+  const fillHeadStyle  = { color: `color-mix(in srgb, ${accent} 80%, #000)`, fontWeight: 600 }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <FileText style={{ color: accent, flexShrink: 0 }} size={24} />
+          <div>
+            <p className="font-bold text-gray-900 text-base">{label}</p>
+            <p className="text-sm text-gray-500">How would you like to open this form?</p>
+          </div>
+        </div>
+
+        {/* Fill Out button */}
+        <button
+          onClick={onFillOut}
+          className="w-full mb-3 p-4 rounded-xl border-2 text-left transition-all hover:opacity-90 active:opacity-75"
+          style={fillBtnStyle}
+        >
+          <div className="flex items-center gap-3">
+            <PenLine style={{ ...fillTextStyle, flexShrink: 0 }} size={22} />
+            <div>
+              <p style={fillHeadStyle}>Fill Out Form</p>
+              <p style={fillLabelStyle}>Step-by-step wizard — generates a filled PDF</p>
+            </div>
+          </div>
+        </button>
+
+        {/* View / Download button */}
+        <button
+          onClick={onViewPdf}
+          className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
+            <div>
+              <p className="font-semibold text-gray-900">View / Download PDF</p>
+              <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 const AsBuiltFormSelector = () => {
-  const [selectedWork, setSelectedWork] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showCommissioning, setShowCommissioning] = useState(false);
-  const [viewMode, setViewMode] = useState('workType');
-  const [formSearchTerm, setFormSearchTerm] = useState('');
-  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
-  const [currentPdfUrl, setCurrentPdfUrl] = useState('');
-  const [currentPdfName, setCurrentPdfName] = useState('');
-  const [pdfBytes, setPdfBytes] = useState(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
-  const [poleChoiceOpen, setPoleChoiceOpen] = useState(false);
-  const [poleWizardOpen, setPoleWizardOpen] = useState(false);
-  const [txChoiceOpen, setTxChoiceOpen] = useState(false);
-  const [txWizardOpen, setTxWizardOpen] = useState(false);
-  const [eeChoiceOpen, setEeChoiceOpen] = useState(false);
-  const [eeWizardOpen, setEeWizardOpen] = useState(false);
-  const [lvChoiceOpen, setLvChoiceOpen] = useState(false);
-  const [lvWizardOpen, setLvWizardOpen] = useState(false);
-  const [ebChoiceOpen, setEbChoiceOpen] = useState(false);
-  const [ebWizardOpen, setEbWizardOpen] = useState(false);
-  const [edChoiceOpen, setEdChoiceOpen] = useState(false);
-  const [edWizardOpen, setEdWizardOpen] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [installDismissed, setInstallDismissed] = useState(false);
+  const [selectedWork, setSelectedWork]     = useState('')
+  const [searchTerm, setSearchTerm]         = useState('')
+  const [showCommissioning, setShowCommissioning] = useState(false)
+  const [viewMode, setViewMode]             = useState('workType')
+  const [formSearchTerm, setFormSearchTerm] = useState('')
+  const [pdfViewerOpen, setPdfViewerOpen]   = useState(false)
+  const [currentPdfUrl, setCurrentPdfUrl]   = useState('')
+  const [currentPdfName, setCurrentPdfName] = useState('')
+  const [pdfBytes, setPdfBytes]             = useState(null)
+  const [pdfBlobUrl, setPdfBlobUrl]         = useState(null)
+
+  // Replaces 14 individual choice/wizard open state vars
+  // null = nothing open
+  // { formId, mode: 'choice' } = choice modal open
+  // { formId, mode: 'wizard' } = wizard open
+  const [activeWizard, setActiveWizard] = useState(null)
+
+  const [installPrompt, setInstallPrompt]   = useState(null)
+  const [installDismissed, setInstallDismissed] = useState(false)
   const [changelogQueue, setChangelogQueue] = useState([])
   const [changelogIdx, setChangelogIdx]     = useState(0)
+  const [updateReady, setUpdateReady]       = useState(false)
 
-  // Pick up the install prompt captured in main.jsx before React mounted.
+  // ── Service worker update detection ──────────────────────────────────────
   useEffect(() => {
-    if (window.__pwaInstallPrompt) {
-      setInstallPrompt(window.__pwaInstallPrompt)
-    }
-    const onReady = () => setInstallPrompt(window.__pwaInstallPrompt)
+    if (!('serviceWorker' in navigator)) return
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return
+      if (reg.waiting) { setUpdateReady(true); return }
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing
+        if (!newWorker) return
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            setUpdateReady(true)
+          }
+        })
+      })
+    })
+  }, [])
+
+  // ── PWA install prompt ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (window.__pwaInstallPrompt) setInstallPrompt(window.__pwaInstallPrompt)
+    const onReady     = () => setInstallPrompt(window.__pwaInstallPrompt)
     const onInstalled = () => setInstallPrompt(null)
     window.addEventListener('pwaPromptReady', onReady)
     window.addEventListener('pwaInstalled', onInstalled)
@@ -57,8 +199,7 @@ const AsBuiltFormSelector = () => {
     }
   }, [])
 
-  // Show changelog for any unseen version batches.
-  // Migrates from old plain-string format ('1') to new JSON array format.
+  // ── Changelog ─────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
       const raw = localStorage.getItem('re-former-changelog-seen')
@@ -67,18 +208,11 @@ const AsBuiltFormSelector = () => {
         try {
           const parsed = JSON.parse(raw)
           seen = Array.isArray(parsed) ? parsed : [String(parsed)]
-        } catch {
-          seen = [raw]
-        }
+        } catch { seen = [raw] }
       }
       const unseen = CHANGELOGS.filter(b => !seen.includes(b.version))
-      if (unseen.length > 0) {
-        setChangelogQueue(unseen)
-        setChangelogIdx(0)
-      }
-    } catch {
-      setChangelogQueue([])
-    }
+      if (unseen.length > 0) { setChangelogQueue(unseen); setChangelogIdx(0) }
+    } catch { setChangelogQueue([]) }
   }, [])
 
   const dismissChangelog = () => {
@@ -91,9 +225,7 @@ const AsBuiltFormSelector = () => {
         try {
           const parsed = JSON.parse(raw)
           seen = Array.isArray(parsed) ? parsed : [String(parsed)]
-        } catch {
-          seen = [raw]
-        }
+        } catch { seen = [raw] }
       }
       if (!seen.includes(current.version)) {
         localStorage.setItem('re-former-changelog-seen', JSON.stringify([...seen, current.version]))
@@ -115,159 +247,156 @@ const AsBuiltFormSelector = () => {
     else setInstallDismissed(true)
   }
 
+  // ── Form definitions ──────────────────────────────────────────────────────
   const formDefinitions = {
-    '360S014EA': { name: 'As-built Low Voltage Connection Record', fileName: '360S014EA.pdf' },
-    '360S014EB': { name: 'As-built Electrical Distribution Record', fileName: '360S014EB.pdf' },
-    '360S014EC': { name: 'As-built Pole Record', fileName: '360S014EC.pdf' },
-    '360S014ED': { name: 'As-built LV Box Record', fileName: '360S014ED.pdf' },
-    '360S014EE': { name: 'As-built Electrical Equipment Record', fileName: '360S014EE.pdf' },
-    '360S014EF': { name: 'As-built Zone Substation Equipment Record', fileName: '360S014EF.pdf' },
-    '360S014EG': { name: 'As-built Transformer Record', fileName: '360S014EG.pdf' },
-    '360S014EH': { name: 'As-built Equipment Record Cards', fileName: '360S014EH.pdf' },
-    '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record', fileName: '360S014EI.pdf' },
-    '360S014EJ': { name: 'As-built Earth Installation and Test Record', fileName: '360S014EJ.pdf' },
-    '360S014EK': { name: 'As-built Streetlight Alteration/Installation Record', fileName: '360S014EK.pdf' },
-    '360S014EL': { name: 'As-built Cable Test Report', fileName: '360S014EL.pdf' },
-    '360S014EM': { name: 'As-built Requirements Checklist - Zone Substation', fileName: '360S014EM.pdf' },
-    '360S014EO': { name: 'As-built Transformer ICP Change Form', fileName: '360S014EO.pdf' },
-    '360S014EP': { name: 'As-built Protection Relay Record', fileName: '360S014EP.pdf' },
-    '360S014EQ': { name: 'Commissioning Conductor Tension Method & Results/Run Form', fileName: '360S014EQ.pdf' },
-    '360S014ER': { name: 'As-built Line Fault Indicator Record LM2SAT', fileName: '360S014ER.pdf' },
-    '360S014ES': { name: 'As-built Line Fault Indicator Record PM3SAT', fileName: '360S014ES.pdf' },
-    '360S014ET': { name: 'As-built Line Fault Indicator Record PM6SAT', fileName: '360S014ET.pdf' },
-    '360S014EU': { name: 'As-built Line Fault Indicator Record PM9SAT', fileName: '360S014EU.pdf' },
-    '360S014EV': { name: 'As-built Network Communications Equipment Record', fileName: '360S014EV.pdf' },
-    '360S014EW': { name: 'As-built Remote Terminal Unit Equipment Record', fileName: '360S014EW.pdf' },
-    '360F019CA': { name: 'Drawing Approval Form', fileName: '360F019CA.pdf' },
-    'MFG_CERT':  { name: 'Manufacturer Test Certificates', fileName: null }
-  };
+    '360S014EA': { name: 'As-built Low Voltage Connection Record',                          fileName: '360S014EA.pdf' },
+    '360S014EB': { name: 'As-built Electrical Distribution Record',                         fileName: '360S014EB.pdf' },
+    '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
+    '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
+    '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
+    '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
+    '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
+    '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
+    '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record',   fileName: '360S014EI.pdf' },
+    '360S014EJ': { name: 'As-built Earth Installation and Test Record',                     fileName: '360S014EJ.pdf' },
+    '360S014EK': { name: 'As-built Streetlight Alteration/Installation Record',             fileName: '360S014EK.pdf' },
+    '360S014EL': { name: 'As-built Cable Test Report',                                      fileName: '360S014EL.pdf' },
+    '360S014EM': { name: 'As-built Requirements Checklist - Zone Substation',               fileName: '360S014EM.pdf' },
+    '360S014EO': { name: 'As-built Transformer ICP Change Form',                            fileName: '360S014EO.pdf' },
+    '360S014EP': { name: 'As-built Protection Relay Record',                                fileName: '360S014EP.pdf' },
+    '360S014EQ': { name: 'Commissioning Conductor Tension Method & Results/Run Form',       fileName: '360S014EQ.pdf' },
+    '360S014ER': { name: 'As-built Line Fault Indicator Record LM2SAT',                     fileName: '360S014ER.pdf' },
+    '360S014ES': { name: 'As-built Line Fault Indicator Record PM3SAT',                     fileName: '360S014ES.pdf' },
+    '360S014ET': { name: 'As-built Line Fault Indicator Record PM6SAT',                     fileName: '360S014ET.pdf' },
+    '360S014EU': { name: 'As-built Line Fault Indicator Record PM9SAT',                     fileName: '360S014EU.pdf' },
+    '360S014EV': { name: 'As-built Network Communications Equipment Record',                fileName: '360S014EV.pdf' },
+    '360S014EW': { name: 'As-built Remote Terminal Unit Equipment Record',                  fileName: '360S014EW.pdf' },
+    '360F019CA': { name: 'Drawing Approval Form',                                           fileName: '360F019CA.pdf' },
+    'MFG_CERT':  { name: 'Manufacturer Test Certificates',                                  fileName: null },
+  }
 
   const commissioningCerts = {
-    '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works', fileName: '220F028A.pdf' },
-    '220F028B': { name: 'Distribution Transformer Commissioning Certificate', fileName: '220F028B.pdf' },
+    '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works',                    fileName: '220F028A.pdf' },
+    '220F028B': { name: 'Distribution Transformer Commissioning Certificate',                           fileName: '220F028B.pdf' },
     '220F028C': { name: 'LV Service Boxes, Cabinets and Subterranean Vaults Commissioning Certificate', fileName: '220F028C.pdf' },
-    '220F028D': { name: 'LV Link Boxes and Link Cabinets Test Certificate', fileName: '220F028D.pdf' },
-    '220F028E': { name: 'LV Customer Connection and Polarity Checks Test Certificate', fileName: '220F028E.pdf' },
-    '220F028F': { name: 'Overhead LV Distribution Circuit Test Certificate', fileName: '220F028F.pdf' },
-    '220F028G': { name: 'Underground LV Distribution Circuit Test Certificate', fileName: '220F028G.pdf' }
-  };
+    '220F028D': { name: 'LV Link Boxes and Link Cabinets Test Certificate',                             fileName: '220F028D.pdf' },
+    '220F028E': { name: 'LV Customer Connection and Polarity Checks Test Certificate',                  fileName: '220F028E.pdf' },
+    '220F028F': { name: 'Overhead LV Distribution Circuit Test Certificate',                            fileName: '220F028F.pdf' },
+    '220F028G': { name: 'Underground LV Distribution Circuit Test Certificate',                         fileName: '220F028G.pdf' },
+  }
 
   const tailgateForm = {
     id: 'TAILGATE',
     name: 'Pre-Work Risk Assessment (Tailgate) Form',
-    fileName: 'Tailgate.pdf'
-  };
+    fileName: 'Tailgate.pdf',
+  }
 
   const testSheets = {
-    'TSTSHT-0051-1': { name: 'LV Connection Testing Verification Sheet', fileName: '51-1_Test_Sheet.PDF' },
-    'DIST-TX-TEST':  { name: 'Distribution Transformer Test Verification Sheet', fileName: 'Distribution_Transformer_Test_Verification_Check_Sheet.PDF' },
-    'HV-CABLE-TEST': { name: 'HV Cables Test Sheet', fileName: 'HV_Cables_Test_Check_Sheet.PDF' }
-  };
+    'TSTSHT-0051-1': { name: 'LV Connection Testing Verification Sheet',                    fileName: '51-1_Test_Sheet.PDF' },
+    'DIST-TX-TEST':  { name: 'Distribution Transformer Test Verification Sheet',            fileName: 'Distribution_Transformer_Test_Verification_Check_Sheet.PDF' },
+    'HV-CABLE-TEST': { name: 'HV Cables Test Sheet',                                        fileName: 'HV_Cables_Test_Check_Sheet.PDF' },
+  }
 
   const workTypeMapping = {
     'LV Service Connection - OH and UG': {
       forms: ['360S014EA'],
       notes: 'New or Altered Connections',
-      commissioningCerts: ['220F028E']
+      commissioningCerts: ['220F028E'],
     },
     'LV Distribution Network': {
       forms: ['360S014EB', '360S014EC', '360S014EL'],
       notes: 'For UG Distribution Network (360S014EL)',
-      commissioningCerts: ['220F028F', '220F028G', '220F028C']
+      commissioningCerts: ['220F028F', '220F028G', '220F028C'],
     },
     'HV Distribution Network': {
       forms: ['360S014EB', '360S014EC', '360S014EE', '360S014EL'],
       notes: 'For UG Distribution Network (360S014EL)',
-      commissioningCerts: ['220F028A', '220F028F', '220F028G']
+      commissioningCerts: ['220F028A', '220F028F', '220F028G'],
     },
     'Poles': {
       forms: ['360S014EC', '360S014EE'],
       notes: 'Either As-Built Pole Record Form or Network Asset Design Register can be used',
-      commissioningCerts: []
+      commissioningCerts: [],
     },
     'Crossarms': { forms: ['360S014EC'], commissioningCerts: [] },
     'Equipment (installation/changes)': {
       forms: ['360S014EE', '360S014EH', '360S014EJ', 'MFG_CERT'],
       notes: 'EE: Any equipment not specified elsewhere; EH: For Critical Spares; EJ: Where an Earth Test has been taken',
-      commissioningCerts: ['220F028A']
+      commissioningCerts: ['220F028A'],
     },
     'Zone Substations': {
       forms: ['360S014EF', '360S014EE', '360S014EH', '360F019CA'],
       notes: 'For any Engineering as-built drawings (360F019CA)',
-      commissioningCerts: ['220F028A']
+      commissioningCerts: ['220F028A'],
     },
     'Transformers - Overhead': {
       forms: ['360S014EC', '360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
       notes: 'Equip Record Card or Form (EG or EH)',
-      commissioningCerts: ['220F028A', '220F028B']
+      commissioningCerts: ['220F028A', '220F028B'],
     },
     'Transformers - Ground mount': {
       forms: ['360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
       notes: 'Equip Record Card or Form (EG or EH)',
-      commissioningCerts: ['220F028A', '220F028B']
+      commissioningCerts: ['220F028A', '220F028B'],
     },
     'LV Service Box': {
       forms: ['360S014ED'],
       notes: 'For boxes containing service fuses only',
-      commissioningCerts: ['220F028C']
+      commissioningCerts: ['220F028C'],
     },
     'LV Distribution Box': {
       forms: ['360S014EC', '360S014ED', '360S014EJ'],
       notes: 'For vertical disconnects (Pillar) use ED; For horizontal disconnects (Link) use ED',
-      commissioningCerts: ['220F028C', '220F028D']
+      commissioningCerts: ['220F028C', '220F028D'],
     },
-    'Earth Test / Alterations': { forms: ['360S014EJ'], commissioningCerts: [] },
-    'Streetlights': { forms: ['360S014EK'], commissioningCerts: [] },
-    'Protection Relays': { forms: ['360S014EP'], commissioningCerts: ['220F028A'] },
-    'Conductor Tension Works': { forms: ['360S014EQ'], commissioningCerts: [] },
+    'Earth Test / Alterations':          { forms: ['360S014EJ'], commissioningCerts: [] },
+    'Streetlights':                      { forms: ['360S014EK'], commissioningCerts: [] },
+    'Protection Relays':                 { forms: ['360S014EP'], commissioningCerts: ['220F028A'] },
+    'Conductor Tension Works':           { forms: ['360S014EQ'], commissioningCerts: [] },
     'Line Fault Indicators': {
       forms: ['360S014ER', '360S014ES', '360S014ET', '360S014EU'],
       notes: 'Select appropriate form based on indicator model',
-      commissioningCerts: []
+      commissioningCerts: [],
     },
     'Network Communications Equipment': { forms: ['360S014EV'], commissioningCerts: [] },
-    'Remote Terminal Unit (RTU)': { forms: ['360S014EW'], commissioningCerts: [] }
-  };
+    'Remote Terminal Unit (RTU)':        { forms: ['360S014EW'], commissioningCerts: [] },
+  }
 
+  // ── PDF viewer ────────────────────────────────────────────────────────────
   const handleFormClick = (url, name, formId) => {
-    if (formId === '360S014EC') { setPoleChoiceOpen(true); return; }
-    if (formId === '360S014EG') { setTxChoiceOpen(true);   return; }
-    if (formId === '360S014EE') { setEeChoiceOpen(true);   return; }
-    if (formId === '360S014EA') { setLvChoiceOpen(true);   return; }
-    if (formId === '360S014EB') { setEbChoiceOpen(true);   return; }
-    if (formId === '360S014ED') { setEdChoiceOpen(true);   return; }
-
-    // All platforms: fetch as arrayBuffer, render via PdfCanvasPreview, share as File
-    const rawName = name || url.split('/').pop();
-    const displayName = rawName.endsWith('.pdf') ? rawName : rawName + '.pdf';
-    setCurrentPdfUrl(url);
-    setCurrentPdfName(displayName);
-    setPdfBytes(null);
-    setPdfBlobUrl(null);
-    setPdfViewerOpen(true);
+    // If this form has a wizard, show the choice modal
+    if (formId && WIZARD_CONFIG[formId]) {
+      setActiveWizard({ formId, mode: 'choice' })
+      return
+    }
+    // Otherwise open the blank PDF directly
+    const rawName = name || url.split('/').pop()
+    const displayName = rawName.endsWith('.pdf') ? rawName : rawName + '.pdf'
+    setCurrentPdfUrl(url)
+    setCurrentPdfName(displayName)
+    setPdfBytes(null)
+    setPdfBlobUrl(null)
+    setPdfViewerOpen(true)
     fetch(url)
       .then(r => r.arrayBuffer())
       .then(buf => {
-        const bytes = new Uint8Array(buf);
-        setPdfBytes(bytes);
-        const blob = new Blob([bytes], { type: 'application/pdf' });
-        setPdfBlobUrl(URL.createObjectURL(blob));
+        const bytes = new Uint8Array(buf)
+        setPdfBytes(bytes)
+        const blob = new Blob([bytes], { type: 'application/pdf' })
+        setPdfBlobUrl(URL.createObjectURL(blob))
       })
       .catch(() => {
-        setPdfViewerOpen(false);
-        window.open(url, '_blank', 'noopener,noreferrer');
-      });
-  };
+        setPdfViewerOpen(false)
+        window.open(url, '_blank', 'noopener,noreferrer')
+      })
+  }
 
   const handleClosePdf = () => {
     setPdfViewerOpen(false)
     setCurrentPdfUrl('')
     setCurrentPdfName('')
     setPdfBytes(null)
-    if (pdfBlobUrl) {
-      URL.revokeObjectURL(pdfBlobUrl)
-      setPdfBlobUrl(null)
-    }
+    if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null) }
   }
 
   const handleShare = async () => {
@@ -283,9 +412,10 @@ const AsBuiltFormSelector = () => {
     } catch (err) { if (err.name !== 'AbortError') console.error('Share failed:', err) }
   }
 
+  // ── Derived lists ─────────────────────────────────────────────────────────
   const filteredWorkTypes = Object.keys(workTypeMapping).filter(work =>
     work.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  )
 
   const requiredForms = selectedWork && workTypeMapping[selectedWork]
     ? workTypeMapping[selectedWork].forms.map(formId => ({
@@ -293,18 +423,18 @@ const AsBuiltFormSelector = () => {
         name: formDefinitions[formId]?.name || 'Unknown Form',
         url: formDefinitions[formId]?.fileName ? `forms/${formDefinitions[formId].fileName}` : null,
         alternateUrl: formDefinitions[formId]?.alternateFileName ? `forms/${formDefinitions[formId].alternateFileName}` : null,
-        hasLink: !!formDefinitions[formId]?.fileName
+        hasLink: !!formDefinitions[formId]?.fileName,
       }))
-    : [];
+    : []
 
   const requiredCerts = selectedWork && workTypeMapping[selectedWork]
     ? workTypeMapping[selectedWork].commissioningCerts.map(certId => ({
         id: certId,
         name: commissioningCerts[certId]?.name || 'Unknown Certificate',
         url: commissioningCerts[certId]?.fileName ? `forms/${commissioningCerts[certId].fileName}` : null,
-        hasLink: !!commissioningCerts[certId]?.fileName
+        hasLink: !!commissioningCerts[certId]?.fileName,
       }))
-    : [];
+    : []
 
   const allAsBuiltForms = Object.entries(formDefinitions)
     .filter(([id]) => id !== 'MFG_CERT')
@@ -313,35 +443,41 @@ const AsBuiltFormSelector = () => {
       name: form.name,
       url: form.fileName ? `forms/${form.fileName}` : null,
       alternateUrl: form.alternateFileName ? `forms/${form.alternateFileName}` : null,
-      hasLink: !!form.fileName
+      hasLink: !!form.fileName,
     }))
     .filter(form =>
       form.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
       form.name.toLowerCase().includes(formSearchTerm.toLowerCase())
-    );
+    )
 
   const allCommissioningForms = Object.entries(commissioningCerts)
     .map(([id, cert]) => ({
       id,
       name: cert.name,
       url: cert.fileName ? `forms/${cert.fileName}` : null,
-      hasLink: !!cert.fileName
+      hasLink: !!cert.fileName,
     }))
     .filter(cert =>
       cert.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
       cert.name.toLowerCase().includes(formSearchTerm.toLowerCase())
-    );
+    )
 
   const showTailgate = formSearchTerm === '' ||
     tailgateForm.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
-    tailgateForm.name.toLowerCase().includes(formSearchTerm.toLowerCase());
+    tailgateForm.name.toLowerCase().includes(formSearchTerm.toLowerCase())
 
   const filteredTestSheets = Object.entries(testSheets).filter(([id, sheet]) =>
     formSearchTerm === '' ||
     id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
     sheet.name.toLowerCase().includes(formSearchTerm.toLowerCase())
-  );
+  )
 
+  // ── Active wizard component ───────────────────────────────────────────────
+  const ActiveWizardComponent = activeWizard?.mode === 'wizard'
+    ? WIZARD_CONFIG[activeWizard.formId]?.Component
+    : null
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="max-w-6xl mx-auto p-4 md:p-6 pb-16">
@@ -382,7 +518,7 @@ const AsBuiltFormSelector = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
                 <input type="text" placeholder="Search work types..." value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={e => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none bg-white shadow-sm" />
               </div>
             </div>
@@ -390,7 +526,7 @@ const AsBuiltFormSelector = () => {
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Type of Work</h2>
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {filteredWorkTypes.map((work) => (
+                {filteredWorkTypes.map(work => (
                   <button key={work} onClick={() => setSelectedWork(work)}
                     className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                       selectedWork === work ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300 bg-white'
@@ -438,7 +574,7 @@ const AsBuiltFormSelector = () => {
                           </div>
                           <p className="text-sm text-gray-700 mt-1">{form.name}</p>
                           {form.alternateUrl && (
-                            <button onClick={(e) => { e.stopPropagation(); handleFormClick(form.alternateUrl, form.name); }}
+                            <button onClick={e => { e.stopPropagation(); handleFormClick(form.alternateUrl, form.name) }}
                               className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1">
                               <ExternalLink size={12} />Download Excel version
                             </button>
@@ -523,7 +659,7 @@ const AsBuiltFormSelector = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
                 <input type="text" placeholder="Search forms by name or ID..." value={formSearchTerm}
-                  onChange={(e) => setFormSearchTerm(e.target.value)}
+                  onChange={e => setFormSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none bg-white shadow-sm" />
               </div>
             </div>
@@ -579,7 +715,7 @@ const AsBuiltFormSelector = () => {
                 <FileText className="text-indigo-600" size={24} />As-Built Forms ({allAsBuiltForms.length})
               </h2>
               <div className="grid md:grid-cols-2 gap-3">
-                {allAsBuiltForms.map((form) => (
+                {allAsBuiltForms.map(form => (
                   <div key={form.id} onClick={() => form.hasLink && handleFormClick(form.url, form.name, form.id)}
                     className="p-4 border-2 border-indigo-200 bg-indigo-50 rounded-lg cursor-pointer hover:bg-indigo-100 hover:border-indigo-300 active:bg-indigo-200 transition-all">
                     <div className="flex items-start gap-3">
@@ -590,7 +726,7 @@ const AsBuiltFormSelector = () => {
                         </div>
                         <p className="text-sm text-gray-700">{form.name}</p>
                         {form.alternateUrl && (
-                          <button onClick={(e) => { e.stopPropagation(); handleFormClick(form.alternateUrl); }}
+                          <button onClick={e => { e.stopPropagation(); handleFormClick(form.alternateUrl) }}
                             className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1">
                             <ExternalLink size={10} />Excel version
                           </button>
@@ -608,7 +744,7 @@ const AsBuiltFormSelector = () => {
                 <FileText className="text-green-600" size={24} />Commissioning & Test Certificates ({allCommissioningForms.length})
               </h2>
               <div className="grid md:grid-cols-2 gap-3">
-                {allCommissioningForms.map((cert) => (
+                {allCommissioningForms.map(cert => (
                   <div key={cert.id} onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name)}
                     className="p-4 border-2 border-green-200 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 hover:border-green-300 active:bg-green-200 transition-all">
                     <div className="flex items-start gap-3">
@@ -629,19 +765,16 @@ const AsBuiltFormSelector = () => {
         )}
       </div>
 
-      {/* PDF Viewer Modal — identical style to WizardShell PDF overlay */}
+      {/* ── PDF Viewer Modal ──────────────────────────────────────────────── */}
       {pdfViewerOpen && (
         <div style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.9)', zIndex: 50,
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 50,
           display: 'flex', flexDirection: 'column',
         }}>
-          {/* Header — matches WizardShell preview header exactly */}
           <div style={{
             background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             padding: '12px 16px',
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
               <FileText size={22} color="#4f46e5" style={{ flexShrink: 0 }} />
@@ -674,8 +807,6 @@ const AsBuiltFormSelector = () => {
               </button>
             </div>
           </div>
-
-          {/* PDF content — canvas render via pdf.js, same as wizard */}
           <div style={{ flex: 1, background: '#111827', overflowY: 'auto', padding: 16 }}>
             {pdfBytes ? (
               <PdfCanvasPreview pdfBytes={pdfBytes} />
@@ -691,235 +822,29 @@ const AsBuiltFormSelector = () => {
         </div>
       )}
 
-      {/* Pole Record Choice Modal */}
-      {poleChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setPoleChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-indigo-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014EC – As-built Pole Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setPoleChoiceOpen(false); setPoleWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50 text-left hover:bg-indigo-100 active:bg-indigo-200 transition-all">
-              <div className="flex items-center gap-3">
-                <PenLine className="text-indigo-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-indigo-900">Fill Out Form</p>
-                  <p className="text-xs text-indigo-600 mt-0.5">Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setPoleChoiceOpen(false); handleFormClick('forms/360S014EC.pdf', 'As-built Pole Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setPoleChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
+      {/* ── Wizard choice modal — single component, data-driven ───────────── */}
+      {activeWizard?.mode === 'choice' && (
+        <WizardChoiceModal
+          formId={activeWizard.formId}
+          onFillOut={() => setActiveWizard({ formId: activeWizard.formId, mode: 'wizard' })}
+          onViewPdf={() => {
+            const cfg = WIZARD_CONFIG[activeWizard.formId]
+            setActiveWizard(null)
+            handleFormClick(`forms/${cfg.fileName}`, cfg.pdfName, null)
+          }}
+          onClose={() => setActiveWizard(null)}
+        />
       )}
-      {poleWizardOpen && <PoleRecordWizard onClose={() => setPoleWizardOpen(false)} />}
 
-      {/* Transformer Record Choice Modal */}
-      {txChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setTxChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-indigo-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014EG – AS-Built Transformer Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setTxChoiceOpen(false); setTxWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50 text-left hover:bg-indigo-100 active:bg-indigo-200 transition-all">
-              <div className="flex items-center gap-3">
-                <PenLine className="text-indigo-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-indigo-900">Fill Out Form</p>
-                  <p className="text-xs text-indigo-600 mt-0.5">Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setTxChoiceOpen(false); handleFormClick('forms/360S014EG.pdf', 'AS-Built Transformer Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setTxChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
+      {/* ── Active wizard ─────────────────────────────────────────────────── */}
+      {ActiveWizardComponent && (
+        <ActiveWizardComponent onClose={() => setActiveWizard(null)} />
       )}
-      {txWizardOpen && <TransformerWizardApp onClose={() => setTxWizardOpen(false)} />}
 
-      {/* Electrical Equipment Record Choice Modal */}
-      {eeChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setEeChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-indigo-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014EE – As-built Electrical Equipment Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setEeChoiceOpen(false); setEeWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50 text-left hover:bg-indigo-100 active:bg-indigo-200 transition-all">
-              <div className="flex items-center gap-3">
-                <PenLine className="text-indigo-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-indigo-900">Fill Out Form</p>
-                  <p className="text-xs text-indigo-600 mt-0.5">Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setEeChoiceOpen(false); handleFormClick('forms/360S014EE.pdf', 'As-built Electrical Equipment Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setEeChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
-      )}
-      {eeWizardOpen && <ElecEquipWizard onClose={() => setEeWizardOpen(false)} />}
-
-      {/* LV Connection Record Choice Modal */}
-      {lvChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setLvChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-teal-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014EA – As-built LV Connection Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setLvChoiceOpen(false); setLvWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 text-left transition-all"
-              style={{ borderColor: '#0d9488', background: '#f0fdfa' }}>
-              <div className="flex items-center gap-3">
-                <PenLine style={{ color: '#0d9488', flexShrink: 0 }} size={22} />
-                <div>
-                  <p className="font-semibold" style={{ color: '#134e4a' }}>Fill Out Form</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#0d9488' }}>Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setLvChoiceOpen(false); handleFormClick('forms/360S014EA.pdf', 'As-built LV Connection Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setLvChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
-      )}
-      {lvWizardOpen && <LvConnectionWizard onClose={() => setLvWizardOpen(false)} />}
-
-      {/* Electrical Distribution Record Choice Modal */}
-      {ebChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setEbChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-orange-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014EB – As-built Electrical Distribution Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setEbChoiceOpen(false); setEbWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 text-left transition-all"
-              style={{ borderColor: '#ea580c', background: '#fff7ed' }}>
-              <div className="flex items-center gap-3">
-                <PenLine style={{ color: '#ea580c', flexShrink: 0 }} size={22} />
-                <div>
-                  <p className="font-semibold" style={{ color: '#7c2d12' }}>Fill Out Form</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#ea580c' }}>Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setEbChoiceOpen(false); handleFormClick('forms/360S014EB.pdf', 'As-built Electrical Distribution Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setEbChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
-      )}
-      {ebWizardOpen && <ElecDistributionWizard onClose={() => setEbWizardOpen(false)} />}
-
-      {/* LV Box Record Choice Modal */}
-      {edChoiceOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-end justify-center" onClick={() => setEdChoiceOpen(false)}>
-          <div className="w-full bg-white rounded-t-2xl p-6 pb-8 max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-5">
-              <FileText className="text-green-600 flex-shrink-0" size={24} />
-              <div>
-                <p className="font-bold text-gray-900 text-base">360S014ED – As-built LV Box Record</p>
-                <p className="text-sm text-gray-500">How would you like to open this form?</p>
-              </div>
-            </div>
-            <button onClick={() => { setEdChoiceOpen(false); setEdWizardOpen(true); }}
-              className="w-full mb-3 p-4 rounded-xl border-2 text-left transition-all"
-              style={{ borderColor: '#16a34a', background: '#f0fdf4' }}>
-              <div className="flex items-center gap-3">
-                <PenLine style={{ color: '#16a34a', flexShrink: 0 }} size={22} />
-                <div>
-                  <p className="font-semibold" style={{ color: '#14532d' }}>Fill Out Form</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#16a34a' }}>Step-by-step wizard — generates a filled PDF</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => { setEdChoiceOpen(false); handleFormClick('forms/360S014ED.pdf', 'As-built LV Box Record', null); }}
-              className="w-full p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-left hover:bg-gray-100 active:bg-gray-200 transition-all">
-              <div className="flex items-center gap-3">
-                <ExternalLink className="text-gray-600 flex-shrink-0" size={22} />
-                <div>
-                  <p className="font-semibold text-gray-900">View / Download PDF</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Open the blank form to print or save</p>
-                </div>
-              </div>
-            </button>
-            <button onClick={() => setEdChoiceOpen(false)} className="w-full mt-3 py-3 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
-          </div>
-        </div>
-      )}
-      {edWizardOpen && <LvBoxWizard onClose={() => setEdWizardOpen(false)} />}
-
-      {/* Changelog Modal */}
+      {/* ── Changelog Modal ───────────────────────────────────────────────── */}
       {changelogQueue.length > 0 && changelogQueue[changelogIdx] && (() => {
-        const batch = changelogQueue[changelogIdx]
-        const total = changelogQueue.length
+        const batch   = changelogQueue[changelogIdx]
+        const total   = changelogQueue.length
         const current = changelogIdx + 1
         return (
           <div style={{
@@ -936,17 +861,13 @@ const AsBuiltFormSelector = () => {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                 <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>What's New</h2>
-                {total > 1 && (
-                  <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{current} of {total}</span>
-                )}
+                {total > 1 && <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{current} of {total}</span>}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                 {batch.changes.map((item, i) => (
                   <div key={i} style={{ borderLeft: '3px solid #4f46e5', paddingLeft: '0.875rem' }}>
                     <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>{item.heading}</div>
-                    {item.detail && (
-                      <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>{item.detail}</div>
-                    )}
+                    {item.detail && <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>{item.detail}</div>}
                   </div>
                 ))}
               </div>
@@ -962,7 +883,52 @@ const AsBuiltFormSelector = () => {
         )
       })()}
 
-      {/* Install App Button */}
+      {/* ── Update available banner ───────────────────────────────────────── */}
+      {updateReady && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
+          background: '#4f46e5', color: '#fff',
+          padding: '12px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>🎉 A new version is available</span>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                navigator.serviceWorker.getRegistration().then(reg => {
+                  if (reg && reg.waiting) {
+                    reg.waiting.postMessage('SKIP_WAITING')
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                      window.location.reload()
+                    }, { once: true })
+                  } else {
+                    window.location.reload()
+                  }
+                })
+              }}
+              style={{
+                background: '#fff', color: '#4f46e5', border: 'none', borderRadius: 8,
+                padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Update now
+            </button>
+            <button
+              onClick={() => setUpdateReady(false)}
+              style={{
+                background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: 8,
+                padding: '6px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Install App Button ────────────────────────────────────────────── */}
       {installPrompt && !installDismissed && (
         <div style={{
           position: 'fixed', bottom: '44px', left: '50%',
@@ -986,7 +952,7 @@ const AsBuiltFormSelector = () => {
         </div>
       )}
 
-      {/* Version Number */}
+      {/* ── Version Number ────────────────────────────────────────────────── */}
       <div style={{
         position: 'fixed', bottom: '12px', right: '12px',
         fontSize: '11px', color: '#6b7280',
@@ -998,8 +964,8 @@ const AsBuiltFormSelector = () => {
         v{APP_VERSION}
       </div>
     </div>
-  );
-};
+  )
+}
 
 function App() {
   return (
@@ -1009,4 +975,4 @@ function App() {
   )
 }
 
-export default App;
+export default App

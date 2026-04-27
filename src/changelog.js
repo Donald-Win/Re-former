@@ -13,6 +13,27 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.11.0',
+    changes: [
+      {
+        heading: 'Save for later',
+        detail: 'A new 💾 button in the bottom nav bar lets you save your progress and close a wizard mid-fill. When you reopen the form, a prompt appears asking if you want to continue where you left off or start fresh. Perfect for filling in what you know beforehand and adding photos on the day.',
+      },
+      {
+        heading: 'Smarter file names',
+        detail: 'Saved PDFs now include the site-specific ID in the filename. Pole Record uses the Old Pole ID, Transformer uses the Transformer Site ID, LV Connection uses the ICP Number, Elec Equipment uses the Equipment ID, LV Box uses the Box Equipment ID, and Zone Sub uses the Substation name.',
+      },
+      {
+        heading: 'Smaller PDF file sizes',
+        detail: 'Photos attached to PDFs are now compressed more aggressively — capped at 1600px on the longest edge and exported at 75% quality instead of 92%. A typical 4-photo PDF is now 60–80% smaller.',
+      },
+      {
+        heading: 'Bug fixes',
+        detail: 'Fixed a crash when generating any PDF where a signature had been drawn. Fixed automatic app updates not applying on iOS. Fixed the signature being accidentally saved into the draft cache. Fixed a memory leak when previewing PDFs multiple times in one session.',
+      },
+    ],
+  },
+  {
     version: '2.10.0',
     changes: [
       {

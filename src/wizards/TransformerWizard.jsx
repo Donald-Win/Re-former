@@ -20,19 +20,15 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
-//  360S014EG – AS-BUILT TRANSFORMER RECORD
-
-const W_GREEN  = '#15803d'   // issued — green-700
+const W_GREEN  = '#15803d'
 const W_GREEN_BG  = '#f0fdf4'
 const W_GREEN_MID = '#dcfce7'
 const W_GREEN_BORDER = '#86efac'
-const W_RED    = '#dc2626'   // removed — red-600
+const W_RED    = '#dc2626'
 const W_RED_BG    = '#fef2f2'
 const W_RED_MID   = '#fee2e2'
 const W_RED_BORDER = '#fca5a5'
 
-// Which step index colour scheme to use
-// 0,1 = neutral  2-6 = issued (green)  7-11 = removed (red)  12,13 = neutral
 const STEP_SCHEME = [
   'neutral','neutral',
   'issued','issued','issued','issued','issued',
@@ -46,31 +42,26 @@ function schemeColors(scheme) {
   return { bg: '#f4f4f8', mid: '#eee', border: '#ddd', accent: W_PURPLE, label: '' }
 }
 
-// ─── Input helpers ─────────────────────────────────────────────────────────────
+const TX_SHOW_OVERLAY = false
 
-
-const TX_SHOW_OVERLAY = false   // set true to enable calibration tab
-
-// ─── Step definitions ──────────────────────────────────────────────────────────
 const T_STEPS = [
-  'Job Details',           // 0  neutral
-  'Site Details',          // 1  neutral
-  'Issued – Voltage & Connection',  // 2  green
-  'Issued – Capacity & Phases',     // 3  green
-  'Issued – Enclosure & Type',      // 4  green
-  'Issued – Make, Model & Test',    // 5  green
-  'Issued – Technical',             // 6  green
-  'Removed – Voltage & Connection', // 7  red
-  'Removed – Capacity & Phases',    // 8  red
-  'Removed – Enclosure & Type',     // 9  red
-  'Removed – Make & Model',         // 10 red
-  'Removal Details',                // 11 red
-  'Comments',                       // 12 neutral
-  'Photos',                         // 13 neutral
-  'Preview & Print',                // 14 neutral
+  'Job Details',
+  'Site Details',
+  'Issued – Voltage & Connection',
+  'Issued – Capacity & Phases',
+  'Issued – Enclosure & Type',
+  'Issued – Make, Model & Test',
+  'Issued – Technical',
+  'Removed – Voltage & Connection',
+  'Removed – Capacity & Phases',
+  'Removed – Enclosure & Type',
+  'Removed – Make & Model',
+  'Removal Details',
+  'Comments',
+  'Photos',
+  'Preview & Print',
 ]
 
-// ─── PDF generation ────────────────────────────────────────────────────────────
 async function generatePdf(d, photos = []) {
   const PAGE_H = 842
   const BLUE = rgb(0/255, 20/255, 160/255)
@@ -104,7 +95,6 @@ async function generatePdf(d, photos = []) {
   const i = d.issued
   const r = d.removed
 
-  // ── ADDRESS BLOCK ──────────────────────────────────────────────────────────
   t(p1, 115,  88, d.streetRoad)
   t(p1, 440,  88, d.contractor)
   t(p1, 115, 106, d.cityTown)
@@ -123,59 +113,49 @@ async function generatePdf(d, photos = []) {
   t(p1, 160, 140, d.npJobNumber)
   t(p1, 440, 141, d.namePrint)
 
-  // ── DETAILS: IDs ───────────────────────────────────────────────────────────
   tc(p1,  33, 128, 195, d.transformerSiteId)
   tc(p1, 162, 128, 195, d.poleId)
   tc(p1, 296, 128, 195, d.zoneSubstation)
   tc(p1, 439, 126, 195, d.feederId)
 
-  // ── INSTALLATION TYPE ──────────────────────────────────────────────────────
   ck(p1, 144, 222, d.installationType === 'New')
   ck(p1, 218, 222, d.installationType === 'Refurbished')
   ck(p1, 317, 222, d.installationType === 'Emergency / Stock')
   ck(p1, 446, 222, d.installationType === 'Removal Only')
 
-  // ── OWNERSHIP ──────────────────────────────────────────────────────────────
   ck(p1, 144, 243, d.ownership === 'Powerco')
   ck(p1, 218, 243, d.ownership === 'Customer')
   ck(p1, 317, 243, d.ownership === 'Other')
   if (d.ownership === 'Other') t(p1, 360, 219, d.ownershipOther)
 
-  // ── VOLTAGE ────────────────────────────────────────────────────────────────
   tc(p1, 150,  85, 311, i.voltageHV)
   tc(p1, 250,  85, 311, i.voltageLV)
   tc(p1, 360,  95, 311, r.voltageHV)
   tc(p1, 480,  70, 311, r.voltageLV)
 
-  // ── CONNECTION TYPE – Issued HV ────────────────────────────────────────────
   ck(p1, 148, 327, i.connectionTypeHV === 'Bushing')
   ck(p1, 148, 344, i.connectionTypeHV === 'Cable Box')
   ck(p1, 148, 361, i.connectionTypeHV === 'Dead Break')
   ck(p1, 148, 378, i.connectionTypeHV === 'Pitch Box')
 
-  // ── CONNECTION TYPE – Issued LV ────────────────────────────────────────────
   ck(p1, 247, 327, i.connectionTypeLV === 'Bushing')
   ck(p1, 247, 344, i.connectionTypeLV === 'Cable Box')
   ck(p1, 247, 361, i.connectionTypeLV === 'Dead Break')
   ck(p1, 247, 378, i.connectionTypeLV === 'Resin')
 
-  // ── CONNECTION TYPE – Removed HV ───────────────────────────────────────────
   ck(p1, 361, 327, r.connectionTypeHV === 'Bushing')
   ck(p1, 361, 344, r.connectionTypeHV === 'Cable Box')
   ck(p1, 361, 361, r.connectionTypeHV === 'Dead Break')
   ck(p1, 361, 378, r.connectionTypeHV === 'Pitch Box')
 
-  // ── CONNECTION TYPE – Removed LV ───────────────────────────────────────────
   ck(p1, 467, 327, r.connectionTypeLV === 'Bushing')
   ck(p1, 467, 344, r.connectionTypeLV === 'Cable Box')
   ck(p1, 466, 361, r.connectionTypeLV === 'Dead Break')
   ck(p1, 467, 378, r.connectionTypeLV === 'Resin')
 
-  // ── CAPACITY ───────────────────────────────────────────────────────────────
   tc(p1, 155, 170, 400, i.capacityKVA)
   tc(p1, 330, 260, 400, r.capacityKVA)
 
-  // ── PHASES ─────────────────────────────────────────────────────────────────
   circ(p1, 216, 428, 16, 7, i.phases === 'Three')
   circ(p1, 240, 428, 11, 7, i.phases === 'One')
   circ(p1, 265, 428, 14, 7, i.phases === 'SWER')
@@ -183,11 +163,9 @@ async function generatePdf(d, photos = []) {
   circ(p1, 458, 428, 11, 7, r.phases === 'One')
   circ(p1, 483, 428, 14, 7, r.phases === 'SWER')
 
-  // ── SERIAL NUMBER ──────────────────────────────────────────────────────────
   tc(p1, 155, 170, 445, i.serialNumber)
   tc(p1, 330, 260, 445, r.serialNumber)
 
-  // ── ENCLOSURE TYPE ─────────────────────────────────────────────────────────
   ck(p1, 148, 464, i.enclosureType === 'Pole Mount')
   ck(p1, 247, 464, i.enclosureType === 'Plastic')
   ck(p1, 148, 481, i.enclosureType === 'Fibreglass')
@@ -204,11 +182,9 @@ async function generatePdf(d, photos = []) {
   ck(p1, 467, 498, r.enclosureType === 'Metal Cover')
   ck(p1, 361, 515, r.enclosureType === 'Customer Premise')
 
-  // ── ENCLOSURE MODEL ────────────────────────────────────────────────────────
   tc(p1, 155, 170, 536, i.enclosureModel)
   tc(p1, 330, 260, 536, r.enclosureModel)
 
-  // ── TRANSFORMER TYPE ───────────────────────────────────────────────────────
   circ(p1, 172, 565, 16, 8, i.transformerType === 'Bearer')
   circ(p1, 219, 565, 26, 8, i.transformerType === 'Grnd Mount')
   circ(p1, 265, 565, 17, 8, i.transformerType === 'Hanger')
@@ -218,16 +194,13 @@ async function generatePdf(d, photos = []) {
   circ(p1, 483, 565, 17, 8, r.transformerType === 'Hanger')
   circ(p1, 523, 565, 20, 8, r.transformerType === 'Pedestal')
 
-  // ── MAKE / MODEL ───────────────────────────────────────────────────────────
   tc(p1, 155, 170, 581, i.make)
   tc(p1, 330, 260, 581, r.make)
   tc(p1, 155, 170, 604, i.model)
   tc(p1, 330, 260, 604, r.model)
 
-  // ── VOLT TEST ──────────────────────────────────────────────────────────────
   tc(p1, 155, 170, 628, i.voltTest)
 
-  // ── REASON FOR REMOVAL ─────────────────────────────────────────────────────
   ck(p1, 361, 647, r.reasonForRemoval.includes('Relocation'))
   ck(p1, 467, 647, r.reasonForRemoval.includes('Vegetation'))
   ck(p1, 361, 664, r.reasonForRemoval.includes('Site Dismantled'))
@@ -239,7 +212,6 @@ async function generatePdf(d, photos = []) {
   ck(p1, 361, 725, r.reasonForRemoval.includes('Adverse Weather'))
   ck(p1, 467, 725, r.reasonForRemoval.includes('Vandalism'))
 
-  // ── TAP SETTING ────────────────────────────────────────────────────────────
   const TAP_CIRCS = [
     { val: '-10',  cx: 164, rx: 10 },
     { val: '-7.5', cx: 191, rx: 10 },
@@ -251,30 +223,23 @@ async function generatePdf(d, photos = []) {
   ]
   TAP_CIRCS.forEach(({ val, cx, rx }) => circ(p1, cx, 654, rx, 6, i.tapSetting === val))
 
-  // ── MDI FITTED ─────────────────────────────────────────────────────────────
   ck(p1, 148, 663, i.mdiFitted === 'YES')
   ck(p1, 247, 663, i.mdiFitted === 'NO')
 
-  // ── CT RATIO ───────────────────────────────────────────────────────────────
   tc(p1, 155, 170, 682, i.ctRatio)
 
-  // ── EARTH TEST ─────────────────────────────────────────────────────────────
   t(p1, 160, 699, i.earthTest1)
   t(p1, 221, 699, i.earthTest2)
   t(p1, 300, 699, i.totalMEN)
 
-  // ── FUSE SIZE ──────────────────────────────────────────────────────────────
   t(p1, 175, 717, i.fuseSizeHV)
   t(p1, 275, 717, i.fuseSizeLV)
 
-  // ── LV DISCONNECTOR ────────────────────────────────────────────────────────
   t(p1, 175, 737, i.lvDisconnectorMake)
   t(p1, 275, 737, i.lvDisconnectorModel)
 
-  // ── REMOVED TO STORE ───────────────────────────────────────────────────────
   t(p1, 178, 755, d.removedToStore)
 
-  // ── PAGE 2 – COMMENTS ──────────────────────────────────────────────────────
   const commentLines = (d.comments || '').split('\n')
   const COMMENT_Y = [90, 104, 118, 132, 146, 160, 174]
   commentLines.slice(0, 7).forEach((line, idx) => t(p2, 60, COMMENT_Y[idx], line))
@@ -283,7 +248,6 @@ async function generatePdf(d, photos = []) {
   return new Uint8Array(await pdfDoc.save())
 }
 
-// ─── Main App ──────────────────────────────────────────────────────────────────
 function TransformerWizardApp({ onClose }) {
   const [tab, setTab] = useState('wizard')
   const [step, setStep] = useState(0)
@@ -337,7 +301,7 @@ function TransformerWizardApp({ onClose }) {
 
   const isPreview = step === T_STEPS.length - 1
   const scheme = schemeColors(STEP_SCHEME[step])
-  const G = scheme.accent  // active accent colour for this step
+  const G = scheme.accent
 
   useEffect(() => {
     if (TX_SHOW_OVERLAY) {
@@ -370,13 +334,10 @@ function TransformerWizardApp({ onClose }) {
   React.useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
   React.useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
-
   const loadJobHistory = fields => {
     setD(prev => ({ ...prev, ...fields }))
   }
 
-
-  // Auto-save job details when user advances past step 0
   const prevStepRef = React.useRef(0)
   React.useEffect(() => {
     if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
@@ -394,21 +355,20 @@ function TransformerWizardApp({ onClose }) {
 
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), 'Transformer Record'].filter(Boolean)
+    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.transformerSiteId), 'Transformer Record'].filter(Boolean)
     const filename = parts.join(' - ') + '.pdf'
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  // Helper: step-coloured WF / WCB wrappers that auto-inherit accent
+  const handleSaveAndClose = () => onClose()
+
   const F  = (props) => <WF  {...props} accent={G} />
   const CB = (props) => <WCB {...props} accent={G} />
   const SH = (props) => <SectionHead {...props} accent={G} />
 
-  // ─── Form steps ────────────────────────────────────────────────────────────
   const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, setD, setStep)
 
   const formSteps = [
-
     // 0 – Job Details
     <div key="0">
       <DraftBanner />
@@ -601,15 +561,13 @@ function TransformerWizardApp({ onClose }) {
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
     </div>,
 
-    // 14 – Preview & Print (WizardShell renders previewContent when isPreview=true)
+    // 14 – Preview & Print
     <div key="14" />,
   ]
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
   const progressPct = (step + 1) / T_STEPS.length * 100
   const progressColor = STEP_SCHEME[step] === 'issued' ? W_GREEN : STEP_SCHEME[step] === 'removed' ? W_RED : W_YELLOW
 
-  // ── Computed values for shell ──────────────────────────────────────────
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
     !d.streetRoad && 'Street/Road',
@@ -637,7 +595,6 @@ function TransformerWizardApp({ onClose }) {
 
   return (
     <>
-      {/* Dev overlay tab bar — visible only when TX_SHOW_OVERLAY = true */}
       {TX_SHOW_OVERLAY && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300, display: 'flex', background: '#1e1b4b', padding: '6px 12px', gap: 8 }}>
           {['wizard', 'calibrate'].map(t2 => (
@@ -667,6 +624,7 @@ function TransformerWizardApp({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(photos) }}
+          onSaveAndClose={handleSaveAndClose}
           accent={scheme.accent}
           bg={scheme.bg}
           mid={scheme.mid}

@@ -43,5 +43,7 @@ export function saveUserPref(key, value) {
   if (!KEYS[key]) return
   if (value) {
     localStorage.setItem(KEYS[key], value)
+  } else {
+    localStorage.removeItem(KEYS[key])
   }
 }
