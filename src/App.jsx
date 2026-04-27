@@ -13,7 +13,7 @@ import { AuthGate } from './auth/AuthGate'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.11.0'
+const APP_VERSION = '2.11.1'
 
 // ── Wizard config ─────────────────────────────────────────────────────────────
 // Each entry maps a form ID to its wizard component, display name, PDF file,
