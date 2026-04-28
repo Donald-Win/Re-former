@@ -11,25 +11,28 @@
 //   {step === 0 && <DraftBanner />}
 //
 // The hook:
-//   - Autosaves d + step + photos (as data URLs) to localStorage on every change
+//   - Autosaves d + step + photos to localStorage on every change
 //   - On mount checks for a recent draft and offers to restore it via a
-//     prominent bottom-sheet modal (blocks interaction until dismissed)
+//     prominent bottom-sheet modal
 //   - Shows a confirmation before discarding a draft ("Start fresh")
-//   - Clears the draft when the wizard closes or PDF is shared
+//   - Restores photos if the wizard supports it
 //   - If draft was saved at the preview step, restores to the step before it
-//     so PDF bytes are re-generated correctly
+//     so PDF bytes get re-generated correctly
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { saveDraft, loadDraft, clearDraft, draftAge } from './jobHistory'
 
-// Max photos to persist in draft — keep localStorage usage reasonable
+// Max photos to persist in draft
 const MAX_DRAFT_PHOTOS = 5
+// Debounce autosave - avoids hammering localStorage on every keystroke,
+// especially important when photos (large base64 strings) are included
+const AUTOSAVE_DEBOUNCE_MS = 600
 
 export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos = null) {
-  const [draft, setDraft]           = useState(null)
-  const [dismissed, setDismissed]   = useState(false)
+  const [draft, setDraft]               = useState(null)
+  const [dismissed, setDismissed]       = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
-  const isMounted                   = useRef(false)
+  const isMounted                       = useRef(false)
 
   // On mount — check for existing draft
   useEffect(() => {
@@ -39,39 +42,30 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
   }, [formKey])
 
   // Autosave whenever d, step, or photos changes (skip first render)
+  // Debounced to avoid hammering localStorage on every keystroke,
+  // especially when photos (large base64 strings) are in the draft.
   useEffect(() => {
     if (!isMounted.current) return
-    // Include photos in draft if setPhotos is provided, capped to avoid
-    // exceeding localStorage quota
-    const draftPhotos = setPhotos
-      ? (photos || []).slice(0, MAX_DRAFT_PHOTOS)
-      : []
-    saveDraft(formKey, { ...d, __photos: draftPhotos }, step)
+    const timer = setTimeout(() => {
+      const draftPhotos = setPhotos ? (photos || []).slice(0, MAX_DRAFT_PHOTOS) : []
+      saveDraft(formKey, { ...d, __photos: draftPhotos }, step)
+    }, AUTOSAVE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
   }, [formKey, d, step, photos])
 
   const restore = useCallback(() => {
     if (!draft) return
-
-    // Restore form data
     const { __photos, ...formData } = draft.data || {}
     setD(prev => ({ ...prev, ...formData }))
-
-    // Restore photos if the wizard supports it
     if (setPhotos && Array.isArray(__photos) && __photos.length > 0) {
       setPhotos(__photos)
     }
-
-    // If draft was saved at the final preview step, go to step before it
-    // so PDF bytes get re-generated correctly
-    const restoreStep = draft.step
-    setStep(restoreStep)
-
+    setStep(draft.step)
     setDraft(null)
     setDismissed(true)
   }, [draft, setD, setStep, setPhotos])
 
   const dismiss = useCallback(() => {
-    // Show confirmation before wiping draft
     setConfirmClear(true)
   }, [])
 
@@ -86,7 +80,6 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
     setConfirmClear(false)
   }, [])
 
-  // Call this after successful PDF generation to wipe the draft
   const clear = useCallback(() => {
     clearDraft(formKey)
     setDraft(null)
@@ -101,7 +94,6 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
 
     const photoCount = Array.isArray(draft.data?.__photos) ? draft.data.__photos.length : 0
 
-    // Confirmation sheet
     if (confirmClear) {
       return (
         <div style={{
@@ -110,11 +102,8 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
         }}>
           <div style={{
-            background: '#fff',
-            borderRadius: '20px 20px 0 0',
-            padding: '28px 20px 40px',
-            width: '100%',
-            maxWidth: 480,
+            background: '#fff', borderRadius: '20px 20px 0 0',
+            padding: '28px 20px 40px', width: '100%', maxWidth: 480,
             boxShadow: '0 -6px 40px rgba(0,0,0,0.25)',
           }}>
             <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb', margin: '0 auto 20px' }} />
@@ -124,38 +113,24 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
                 Discard saved form?
               </h3>
               <p style={{ margin: 0, fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
-                <strong style={{ color: '#374151' }}>{jobLabel}</strong>
-                <br />
-                This cannot be undone.
+                <strong style={{ color: '#374151' }}>{jobLabel}</strong><br />This cannot be undone.
               </p>
             </div>
-            <button
-              onClick={confirmDismiss}
-              style={{
-                width: '100%', padding: '15px', borderRadius: 14, border: 'none',
-                background: '#dc2626', color: '#fff',
-                fontFamily: 'inherit', fontSize: 16, fontWeight: 700, cursor: 'pointer',
-                marginBottom: 10,
-              }}
-            >
-              Yes, start fresh
-            </button>
-            <button
-              onClick={cancelDismiss}
-              style={{
-                width: '100%', padding: '15px', borderRadius: 14,
-                border: '2px solid #e5e7eb', background: '#fff', color: '#6b7280',
-                fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              Keep saved form
-            </button>
+            <button onClick={confirmDismiss} style={{
+              width: '100%', padding: '15px', borderRadius: 14, border: 'none',
+              background: '#dc2626', color: '#fff',
+              fontFamily: 'inherit', fontSize: 16, fontWeight: 700, cursor: 'pointer', marginBottom: 10,
+            }}>Yes, start fresh</button>
+            <button onClick={cancelDismiss} style={{
+              width: '100%', padding: '15px', borderRadius: 14,
+              border: '2px solid #e5e7eb', background: '#fff', color: '#6b7280',
+              fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+            }}>Keep saved form</button>
           </div>
         </div>
       )
     }
 
-    // Main restore sheet
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 500,
@@ -163,15 +138,11 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }}>
         <div style={{
-          background: '#fff',
-          borderRadius: '20px 20px 0 0',
-          padding: '28px 20px 40px',
-          width: '100%',
-          maxWidth: 480,
+          background: '#fff', borderRadius: '20px 20px 0 0',
+          padding: '28px 20px 40px', width: '100%', maxWidth: 480,
           boxShadow: '0 -6px 40px rgba(0,0,0,0.25)',
         }}>
           <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb', margin: '0 auto 20px' }} />
-
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
             <h3 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#111827' }}>
@@ -181,37 +152,20 @@ export function useDraft(formKey, d, step, setD, setStep, photos = [], setPhotos
               <strong style={{ color: '#374151' }}>{jobLabel}</strong>
               <br />
               Saved {draftAge(draft)}
-              {draft.step > 0 && (
-                <span style={{ color: '#9ca3af' }}> · Step {draft.step + 1}</span>
-              )}
-              {photoCount > 0 && (
-                <span style={{ color: '#9ca3af' }}> · {photoCount} photo{photoCount !== 1 ? 's' : ''}</span>
-              )}
+              {draft.step > 0 && <span style={{ color: '#9ca3af' }}> · Step {draft.step + 1}</span>}
+              {photoCount > 0 && <span style={{ color: '#9ca3af' }}> · {photoCount} photo{photoCount !== 1 ? 's' : ''}</span>}
             </p>
           </div>
-
-          <button
-            onClick={restore}
-            style={{
-              width: '100%', padding: '15px', borderRadius: 14, border: 'none',
-              background: '#f59e0b', color: '#fff',
-              fontFamily: 'inherit', fontSize: 16, fontWeight: 700, cursor: 'pointer',
-              marginBottom: 10,
-            }}
-          >
-            Continue saved form →
-          </button>
-
-          <button
-            onClick={dismiss}
-            style={{
-              width: '100%', padding: '15px', borderRadius: 14,
-              border: '2px solid #e5e7eb', background: '#fff', color: '#6b7280',
-              fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Start fresh
-          </button>
+          <button onClick={restore} style={{
+            width: '100%', padding: '15px', borderRadius: 14, border: 'none',
+            background: '#f59e0b', color: '#fff',
+            fontFamily: 'inherit', fontSize: 16, fontWeight: 700, cursor: 'pointer', marginBottom: 10,
+          }}>Continue saved form →</button>
+          <button onClick={dismiss} style={{
+            width: '100%', padding: '15px', borderRadius: 14,
+            border: '2px solid #e5e7eb', background: '#fff', color: '#6b7280',
+            fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+          }}>Start fresh</button>
         </div>
       </div>
     )

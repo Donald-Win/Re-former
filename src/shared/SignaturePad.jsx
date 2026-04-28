@@ -22,7 +22,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     if (!canvas) return
 
     const resize = () => {
-      const dpr    = window.devicePixelRatio || 1
+      const dpr    = Math.min(window.devicePixelRatio || 1, 2)  // cap at 2 to reduce export size
       const cssW   = canvas.clientWidth  || 750
       const cssH   = canvas.clientHeight || 160
       const newW   = Math.round(cssW * dpr)
@@ -54,7 +54,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || value) return
-    const dpr = window.devicePixelRatio || 1
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
   }, [value])
 
@@ -77,7 +77,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     lastPos.current = pos
     lastMid.current = pos
     lastTime.current = Date.now()
-    lastWidth.current = 2.5 // Starting default thickness
+    lastWidth.current = 2.5
   }
 
   const draw = e => {
@@ -101,7 +101,6 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     // 2. Map Velocity to Stroke Width (Faster = Thinner, Slower = Thicker)
     const minWidth = 1.0
     const maxWidth = 3.5
-    // Normalize velocity so a speed of 3px/ms caps out the thinness
     const vFactor = Math.max(0, Math.min(1, velocity / 3)) 
     const targetWidth = maxWidth - (vFactor * (maxWidth - minWidth))
 
@@ -153,7 +152,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     lastMid.current = null
     hasMoved.current = false
 
-    const dpr  = window.devicePixelRatio || 1
+    const dpr  = Math.min(window.devicePixelRatio || 1, 2)
     const W    = canvas.width
     const H    = canvas.height
     const data = canvas.getContext('2d').getImageData(0, 0, W, H).data
@@ -181,6 +180,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
         minX - pad, minY - pad, tc.width, tc.height,
         0, 0, tc.width, tc.height
       )
+      // Export as PNG to preserve transparency — signature overlays a printed line
       onChange(tc.toDataURL('image/png'))
     }
   }
@@ -188,7 +188,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const handleClear = () => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
     onChange('')
   }

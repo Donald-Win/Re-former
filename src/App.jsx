@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Search, FileText, CheckCircle2, Circle, ExternalLink, Download,
-  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine } from 'lucide-react'
+  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, Settings } from 'lucide-react'
 
 import PoleRecordWizard from './wizards/PoleWizard'
 import TransformerWizardApp from './wizards/TransformerWizard'
@@ -10,10 +10,12 @@ import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import ZoneSubWizard from './wizards/ZoneSubWizard'
 import { AuthGate } from './auth/AuthGate'
+import { UserSettings } from './shared/UserSettings'
+import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '3.0.0'
+const APP_VERSION = '2.11.0'
 
 // ── Wizard config ─────────────────────────────────────────────────────────────
 // Each entry maps a form ID to its wizard component, display name, PDF file,
@@ -161,6 +163,19 @@ const AsBuiltFormSelector = () => {
   // { formId, mode: 'choice' } = choice modal open
   // { formId, mode: 'wizard' } = wizard open
   const [activeWizard, setActiveWizard] = useState(null)
+  const [showSettings, setShowSettings]   = useState(false)
+
+  // Nudge user to configure settings if not yet done
+  const [settingsReady, setSettingsReady] = useState(() => {
+    const prefs = getUserPrefs()
+    return !!(prefs.contractor && prefs.namePrint && prefs.signed)
+  })
+  // Re-check when settings closes
+  const handleSettingsClose = () => {
+    setShowSettings(false)
+    const prefs = getUserPrefs()
+    setSettingsReady(!!(prefs.contractor && prefs.namePrint && prefs.signed))
+  }
 
   const [installPrompt, setInstallPrompt]   = useState(null)
   const [installDismissed, setInstallDismissed] = useState(false)
@@ -486,10 +501,30 @@ const AsBuiltFormSelector = () => {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <FileText className="text-indigo-600" size={32} />
-            <div>
+            <div style={{ flex: 1 }}>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Don's Field Forms</h1>
               <p className="text-sm text-gray-600 mt-1">Select forms by work type or browse all available forms</p>
             </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              title="My Details"
+              style={{
+                background: settingsReady ? '#eef2ff' : '#fef3c7',
+                border: `2px solid ${settingsReady ? '#c7d2fe' : '#f59e0b'}`,
+                borderRadius: 10, padding: '8px 10px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, position: 'relative',
+              }}
+            >
+              <Settings size={22} color={settingsReady ? '#4f46e5' : '#d97706'} />
+              {!settingsReady && (
+                <span style={{
+                  position: 'absolute', top: -4, right: -4,
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: '#ef4444', border: '2px solid #fff',
+                }} />
+              )}
+            </button>
           </div>
           <div className="flex gap-2 mt-4">
             <button
@@ -840,6 +875,9 @@ const AsBuiltFormSelector = () => {
       {ActiveWizardComponent && (
         <ActiveWizardComponent onClose={() => setActiveWizard(null)} />
       )}
+
+      {/* ── User Settings ────────────────────────────────────────────── */}
+      {showSettings && <UserSettings onClose={handleSettingsClose} />}
 
       {/* ── Changelog Modal ───────────────────────────────────────────────── */}
       {changelogQueue.length > 0 && changelogQueue[changelogIdx] && (() => {

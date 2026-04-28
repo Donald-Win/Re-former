@@ -4,17 +4,16 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { FileText, X, Share2 } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
-import { saveToHistory } from '../shared/jobHistory'
+import { useWizardSetup } from '../shared/useWizardSetup'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
-import { SignaturePad } from '../shared/SignaturePad'
-import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs, saveUserPref } from '../shared/userPrefs'
-import { GpsLocationButton } from '../shared/GpsLocationButton'
+import { getUserPrefs } from '../shared/userPrefs'
+import { JobDetailsStep } from '../shared/JobDetailsStep'
+import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 
 const W_PURPLE = APP_ACCENT
@@ -103,8 +102,9 @@ async function generatePdf(d, photos = []) {
   t(p1, 115, 123, d.pcoWONo)
   t(p1, 250, 123, d.ciwrNo)
   if (d.signed && d.signed.startsWith("data:image")) {
+    const sigMime = d.signed.split(",")[0].includes("jpeg") ? "jpeg" : "png";
     const sigBytes = Uint8Array.from(atob(d.signed.split(",")[1]), c => c.charCodeAt(0));
-    const sigImg = await pdfDoc.embedPng(sigBytes);
+    const sigImg = sigMime === "jpeg" ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes);
     const sigDimsTx = sigImg.scale(1);
     const sigMaxHTx = 20;
     const sigWTx = (sigMaxHTx / sigDimsTx.height) * sigDimsTx.width;
@@ -251,14 +251,9 @@ async function generatePdf(d, photos = []) {
 function TransformerWizardApp({ onClose }) {
   const [tab, setTab] = useState('wizard')
   const [step, setStep] = useState(0)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [pdfBytes, setPdfBytes] = useState(null)
-  const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
-  const [pdfGenerating, setPdfGenerating] = useState(false)
-  const [pdfError, setPdfError] = useState(null)
   const [photos, setPhotos] = useState([])
   const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
-  const blobUrlRef = useRef(null)
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generatePdf)
 
   const ENC_OPTIONS = ['Pole Mount', 'Plastic', 'Fibreglass', 'Building', 'Fenced', 'Metal Cover', 'Customer Premise']
   const CONN_HV = ['Bushing', 'Cable Box', 'Dead Break', 'Pitch Box']
@@ -311,38 +306,8 @@ function TransformerWizardApp({ onClose }) {
     }
   }, [])
 
-  const triggerGenerate = (photosArg) => {
-    const photoList = photosArg !== undefined ? photosArg : photos
-    setPdfBytes(null); setPdfBlobUrl(null)
-    setPdfGenerating(true); setPdfError(null)
-    generatePdf(d, photoList).then(bytes => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-      setPdfBytes(bytes); setPdfBlobUrl(url); setPdfGenerating(false)
-    }).catch(err => {
-      console.error('PDF generation failed:', err)
-      setPdfError('Could not generate PDF — check console for details.')
-      setPdfGenerating(false)
-    })
-  }
 
-  const set   = k => v => setD(p => ({ ...p, [k]: v }))
-  React.useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  React.useEffect(() => { saveUserPref('namePrint', d.namePrint) }, [d.namePrint])
-  React.useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
-  React.useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
-  const loadJobHistory = fields => {
-    setD(prev => ({ ...prev, ...fields }))
-  }
-
-  const prevStepRef = React.useRef(0)
-  React.useEffect(() => {
-    if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
-    prevStepRef.current = step
-  }, [step])
   const tog   = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
   const setI  = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: v } }))
   const togI  = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: p.issued[k]  === v ? '' : v } }))
@@ -360,44 +325,17 @@ function TransformerWizardApp({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  const handleSaveAndClose = () => onClose()
 
   const F  = (props) => <WF  {...props} accent={G} />
   const CB = (props) => <WCB {...props} accent={G} />
   const SH = (props) => <SectionHead {...props} accent={G} />
 
-  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, setD, setStep)
+  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EG')
+    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
     // 0 – Job Details
-    <div key="0">
-      <DraftBanner />
-      <button onClick={() => setPickerOpen(true)} style={{
-        width: '100%', padding: '10px 0', marginBottom: 16,
-        borderRadius: 8, border: `2px dashed ${APP_ACCENT}`,
-        background: '#eef2ff', color: APP_ACCENT,
-        fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-      }}>📋 Load Previous Job</button>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <F label="Project Name"   v={d.projectName} set={set('projectName')} />
-        <F label="NP Job Number"  v={d.npJobNumber}  set={set('npJobNumber')} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <F label="PCo W/O No."  v={d.pcoWONo}  set={set('pcoWONo')} />
-        <F label="CIWR No."     v={d.ciwrNo}   set={set('ciwrNo')} />
-      </div>
-      <GpsLocationButton accent={G} onLocation={loc => setD(p => ({...p, ...loc}))} />
-      <F label="No./Street/Road" v={d.streetRoad} set={set('streetRoad')} ph="123 Example Road" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <F label="City / Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" />
-        <F label="District"    v={d.district} set={set('district')} ph="Waikato" />
-      </div>
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-      <F label="Contractor" v={d.contractor} set={set('contractor')} />
-      <F label="Date Work Completed" v={d.dateWorkCompleted} set={set('dateWorkCompleted')} type="date" />
-      <F label="Name (Print)" v={d.namePrint} set={set('namePrint')} />
-      <SignaturePad value={d.signed} onChange={set('signed')} accent={G} />
-    </div>,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={G} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)} />,
 
     // 1 – Site Details
     <div key="1">
@@ -575,23 +513,7 @@ function TransformerWizardApp({ onClose }) {
     !d.namePrint  && 'Name (Print)',
   ].filter(Boolean)
 
-  const previewContent = (
-    <>
-      {pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Generating PDF…</div>
-        </div>
-      )}
-      {pdfError && !pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12 }}>{pdfError}</div>
-          <button onClick={() => triggerGenerate()} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: W_PURPLE, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
-        </div>
-      )}
-      {!pdfGenerating && !pdfError && pdfBytes && <PdfCanvasPreview pdfBytes={pdfBytes} />}
-    </>
-  )
+  const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), scheme.accent)
 
   return (
     <>
@@ -623,8 +545,8 @@ function TransformerWizardApp({ onClose }) {
           onStepClick={setStep}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(photos) }}
-          onSaveAndClose={handleSaveAndClose}
+          onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveAndClose={onClose}
           accent={scheme.accent}
           bg={scheme.bg}
           mid={scheme.mid}
@@ -634,7 +556,7 @@ function TransformerWizardApp({ onClose }) {
           devPaddingTop={TX_SHOW_OVERLAY ? 44 : 0}
           isPreview={isPreview}
           onShare={handleShare}
-          onClosePreview={() => { setStep(s => s - 1); setPdfBytes(null); setPdfBlobUrl(null) }}
+          onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
           missingFields={missingFields}
           previewContent={previewContent}
         >

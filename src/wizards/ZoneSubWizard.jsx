@@ -4,14 +4,13 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { Building2 } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
-import { SignaturePad } from '../shared/SignaturePad'
-import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs, saveUserPref } from '../shared/userPrefs'
-import { GpsLocationButton } from '../shared/GpsLocationButton'
-import { saveToHistory } from '../shared/jobHistory'
+import { getUserPrefs } from '../shared/userPrefs'
+import { JobDetailsStep } from '../shared/JobDetailsStep'
+import { usePdfGenerate } from '../shared/usePdfGenerate'
+import { useWizardSetup } from '../shared/useWizardSetup'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 import { APP_ACCENT } from '../shared/constants'
@@ -83,8 +82,9 @@ async function generateEfPdf(d, photos = []) {
 
   if (d.signed && d.signed.startsWith('data:image')) {
     try {
+      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
       const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = await pdfDoc.embedPng(sigBytes)
+      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
       const { width: sw, height: sh } = sigImg.scale(1)
       const maxW = 120, maxH = 22
       const scale = Math.min(maxW / sw, maxH / sh)
@@ -132,7 +132,7 @@ async function generateEfPdf(d, photos = []) {
 
   if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
 
-  return pdfDoc.save()
+  return await pdfDoc.save()
 }
 
 const emptyRow = () => ({
@@ -146,13 +146,8 @@ const emptyRow = () => ({
 
 function ZoneSubWizard({ onClose }) {
   const [step, setStep]               = useState(0)
-  const [pickerOpen, setPickerOpen]   = useState(false)
-  const [pdfBytes, setPdfBytes]       = useState(null)
-  const [pdfBlobUrl, setPdfBlobUrl]   = useState(null)
-  const [pdfGenerating, setPdfGenerating] = useState(false)
-  const [pdfError, setPdfError]       = useState(null)
   const [photos, setPhotos]           = useState([])
-  const blobUrlRef = useRef(null)
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEfPdf)
 
   const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
 
@@ -188,40 +183,13 @@ function ZoneSubWizard({ onClose }) {
 
   const isPreview = step === EF_STEPS.length - 1
 
-  const set = (k, v) => setD(prev => ({ ...prev, [k]: v }))
   const setRow = (i, field, val) => setD(p => {
     const items = [...p.additionalItems]
     items[i] = { ...items[i], [field]: val }
     return { ...p, additionalItems: items }
   })
 
-  useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  useEffect(() => { saveUserPref('namePrint', d.namePrint) }, [d.namePrint])
-  useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
-  useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
-  const prevStepRef = useRef(0)
-  useEffect(() => {
-    if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
-    prevStepRef.current = step
-  }, [step])
-
-  const triggerGenerate = (photosArg) => {
-    const photoList = photosArg !== undefined ? photosArg : photos
-    setPdfBytes(null); setPdfBlobUrl(null)
-    setPdfGenerating(true); setPdfError(null)
-    generateEfPdf(d, photoList).then(bytes => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      const url  = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-      setPdfBytes(bytes); setPdfBlobUrl(url); setPdfGenerating(false)
-    }).catch(err => {
-      console.error('PDF generation failed:', err)
-      setPdfError('Could not generate PDF — check console for details.')
-      setPdfGenerating(false)
-    })
-  }
 
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
@@ -230,9 +198,7 @@ function ZoneSubWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  const handleSaveAndClose = () => onClose()
 
-  const loadJobHistory = fields => setD(prev => ({ ...prev, ...fields }))
 
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
@@ -242,7 +208,8 @@ function ZoneSubWizard({ onClose }) {
     !d.maintenanceApplies && !d.replacementApplies && 'Select at least one work type',
   ].filter(Boolean)
 
-  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, setD, setStep)
+  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
+    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, setD, setStep, photos, setPhotos)
 
   const AppliesToggle = ({ applies, label, onToggle }) => (
     <button type="button" onClick={onToggle} style={{
@@ -261,36 +228,12 @@ function ZoneSubWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Job Details
-    <div key="s0">
-      <DraftBanner />
-      <button onClick={() => setPickerOpen(true)} style={{
-        width: '100%', padding: '10px 0', marginBottom: 16,
-        borderRadius: 8, border: `2px dashed ${ACCENT}`,
-        background: EF_BG, color: ACCENT,
-        fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-      }}>📋 Load Previous Job</button>
-      <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Project Name"  v={d.projectName}  set={v => set('projectName', v)}  accent={ACCENT} />
-        <WF label="NP Job Number" v={d.npJobNumber}   set={v => set('npJobNumber', v)}  accent={ACCENT} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="PCo W/O No." v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={ACCENT} />
-        <WF label="CIWR No."    v={d.ciwrNo}  set={v => set('ciwrNo', v)}  accent={ACCENT} />
-      </div>
-      <GpsLocationButton accent={ACCENT} onLocation={loc => setD(p => ({ ...p, ...loc }))} />
-      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={ACCENT} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={ACCENT} />
-        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={ACCENT} />
-      </div>
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-      <WF label="Contractor"              v={d.contractor}             set={v => set('contractor', v)}             accent={ACCENT} />
-      <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
-      <WF label="Date Work Completed"     v={d.dateWorkCompleted}       set={v => set('dateWorkCompleted', v)}     type="date" accent={ACCENT} />
-      <WF label="Name (Print)"            v={d.namePrint}               set={v => set('namePrint', v)}             accent={ACCENT} />
-      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={ACCENT} />
-    </div>,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)}
+      topChildren={<>
+        <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
+        <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
+      </>}
+    />,
 
     // 1 — Maintenance / Modification
     <div key="s1">
@@ -393,25 +336,7 @@ function ZoneSubWizard({ onClose }) {
     <div key="s5" />,
   ]
 
-  const previewContent = (
-    <>
-      {pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Generating PDF…</div>
-        </div>
-      )}
-      {pdfError && !pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12 }}>{pdfError}</div>
-          <button onClick={() => triggerGenerate()} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: ACCENT, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
-        </div>
-      )}
-      {!pdfGenerating && !pdfError && pdfBytes && (
-        <PdfCanvasPreview pdfBytes={pdfBytes} />
-      )}
-    </>
-  )
+  const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), ACCENT)
 
   return (
     <>
@@ -427,16 +352,16 @@ function ZoneSubWizard({ onClose }) {
         onNext={() => {
           const next = step + 1
           setStep(next)
-          if (next === EF_STEPS.length - 1) triggerGenerate(photos)
+          if (next === EF_STEPS.length - 1) triggerGenerate(d, photos)
         }}
-        onSaveAndClose={handleSaveAndClose}
+        onSaveAndClose={onClose}
         accent={ACCENT}
         bg="#f4f4f8"
         mid={EF_MID}
         border={EF_BORDER}
         isPreview={isPreview}
         onShare={handleShare}
-        onClosePreview={() => { setStep(s => s - 1); setPdfBytes(null); setPdfBlobUrl(null) }}
+        onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
         missingFields={missingFields}
         previewContent={previewContent}
       >

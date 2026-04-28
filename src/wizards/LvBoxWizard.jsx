@@ -4,15 +4,14 @@ import { PDFDocument, rgb } from 'pdf-lib'
 import { Box } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
-import { SignaturePad } from '../shared/SignaturePad'
-import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs, saveUserPref } from '../shared/userPrefs'
-import { GpsLocationButton } from '../shared/GpsLocationButton'
+import { getUserPrefs } from '../shared/userPrefs'
+import { JobDetailsStep } from '../shared/JobDetailsStep'
+import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
-import { saveToHistory } from '../shared/jobHistory'
+import { useWizardSetup } from '../shared/useWizardSetup'
 import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 
@@ -147,8 +146,9 @@ async function generateEdPdf(d, photos = []) {
 
   if (d.signed) {
     try {
+      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
       const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = await pdfDoc.embedPng(sigBytes)
+      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
       p1.drawImage(sigImg, { x: 460, y: PAGE_H - 190, width: 90, height: 15, opacity: 1 })
     } catch (_) {}
   }
@@ -188,31 +188,18 @@ export default function LvBoxWizard({ onClose }) {
     comments: '',
   })
 
-  const [pdfBytes,      setPdfBytes]      = useState(null)
-  const [pdfBlobUrl,    setPdfBlobUrl]    = useState(null)
-  const [pdfGenerating, setPdfGenerating] = useState(false)
-  const [pdfError,      setPdfError]      = useState(null)
-  const [isPreview,     setIsPreview]     = useState(false)
-  const [pickerOpen,    setPickerOpen]    = useState(false)
+  const isPreview = step === ED_STEPS.length - 1
   const [overlayTab,    setOverlayTab]    = useState('form')
   const [overlayBytes,  setOverlayBytes]  = useState(null)
   const [photos,        setPhotos]        = useState([])
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEdPdf)
 
-  const prevStepRef = useRef(step)
-  const set    = (k, v) => setD(prev => ({ ...prev, [k]: v }))
-  useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
-  useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, boxRows: rows }
   })
 
-  useEffect(() => {
-    if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
-    prevStepRef.current = step
-  }, [step])
 
   useEffect(() => {
     if (ED_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -223,21 +210,6 @@ export default function LvBoxWizard({ onClose }) {
     }
   }, [overlayTab, overlayBytes])
 
-  const triggerGenerate = async (photosArg) => {
-    const photoList = photosArg !== undefined ? photosArg : photos
-    setIsPreview(true); setPdfGenerating(true); setPdfError(null); setPdfBytes(null)
-    try {
-      const bytes = await generateEdPdf(d, photoList)
-      setPdfBytes(bytes)
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      setPdfBlobUrl(URL.createObjectURL(blob))
-    } catch (e) {
-      setPdfError('PDF generation failed: ' + e.message)
-    } finally {
-      setPdfGenerating(false)
-    }
-  }
-
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
     const siteId = d.boxRows?.[0]?.equipIdNew || d.boxRows?.[0]?.equipIdOld || ''
@@ -246,9 +218,7 @@ export default function LvBoxWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  const handleSaveAndClose = () => onClose()
 
-  const loadJobHistory = fields => setD(prev => ({ ...prev, ...fields }))
 
   const missingFields = [
     !d.pcoWONo     && 'Powerco WO No.',
@@ -257,32 +227,12 @@ export default function LvBoxWizard({ onClose }) {
     !d.signed      && 'Signature',
   ].filter(Boolean)
 
-  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, setD, setStep)
+  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
+    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
 
-    <div key="s0">
-      <DraftBanner />
-      <button onClick={() => setPickerOpen(true)} style={{ width: '100%', padding: '10px 0', marginBottom: 16, borderRadius: 8, border: `2px dashed ${ED_GREEN}`, background: ED_BG, color: ED_GREEN, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>📋 Load Previous Job</button>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={ED_GREEN} />
-        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber',  v)} accent={ED_GREEN} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="PCo W/O No."  v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={ED_GREEN} />
-        <WF label="CIWR No."     v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={ED_GREEN} />
-      </div>
-      <GpsLocationButton accent={ED_GREEN} onLocation={loc => setD(p => ({...p, ...loc}))} />
-      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={ED_GREEN} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={ED_GREEN} />
-        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={ED_GREEN} />
-      </div>
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-      <WF label="Contractor"               v={d.contractor}            set={v => set('contractor',            v)} accent={ED_GREEN} />
-      <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={ED_GREEN} />
-      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={ED_GREEN} />
-    </div>,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)} />,
 
     <div key="s1">
       <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
@@ -310,23 +260,7 @@ export default function LvBoxWizard({ onClose }) {
     <div key="s4" />,
   ]
 
-  const previewContent = (
-    <>
-      {pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Generating PDF…</div>
-        </div>
-      )}
-      {pdfError && !pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12 }}>{pdfError}</div>
-          <button onClick={triggerGenerate} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: ED_GREEN, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
-        </div>
-      )}
-      {!pdfGenerating && !pdfError && pdfBytes && <PdfCanvasPreview pdfBytes={pdfBytes} />}
-    </>
-  )
+  const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), ED_GREEN)
 
   return (
     <>
@@ -352,11 +286,11 @@ export default function LvBoxWizard({ onClose }) {
           headerIcon={<Box size={20} color="#fff" />}
           steps={ED_STEPS}
           step={step}
-          onStepClick={i => { setStep(i); if (i === ED_STEPS.length - 1) triggerGenerate(photos) }}
+          onStepClick={i => { setStep(i); if (i === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(photos) }}
-          onSaveAndClose={handleSaveAndClose}
+          onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveAndClose={onClose}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
@@ -364,7 +298,7 @@ export default function LvBoxWizard({ onClose }) {
           devPaddingTop={ED_SHOW_OVERLAY ? 44 : 0}
           isPreview={isPreview}
           onShare={handleShare}
-          onClosePreview={() => { setIsPreview(false); setStep(s => s - 1); setPdfBytes(null); setPdfBlobUrl(null) }}
+          onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
           missingFields={missingFields}
           previewContent={previewContent}
         >

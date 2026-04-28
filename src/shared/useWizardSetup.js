@@ -36,8 +36,16 @@ export function useWizardSetup(d, setD, step, formType) {
     setD(prev => ({ ...prev, ...fields }))
   }
 
-  // Convenience field setter: set('fieldName')(value)
-  const set = (k) => (v) => setD(p => ({ ...p, [k]: v }))
+  // Convenience field setter — supports both calling styles:
+  //   Curried:  set('fieldName')(value)   — used as: set={set('fieldName')}
+  //   Two-arg:  set('fieldName', value)   — used as: set={v => set('fieldName', v)}
+  const set = (k, v) => {
+    if (v !== undefined) {
+      setD(p => ({ ...p, [k]: v }))
+    } else {
+      return (val) => setD(p => ({ ...p, [k]: val }))
+    }
+  }
 
   return { pickerOpen, setPickerOpen, loadJobHistory, set }
 }
