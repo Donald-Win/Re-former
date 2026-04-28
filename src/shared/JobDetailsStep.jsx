@@ -1,20 +1,21 @@
 /**
  * JobDetailsStep — shared Step 0 for all wizards.
  *
+ * Contractor, name (print) and signature are NO LONGER shown here.
+ * They are set once in User Settings and loaded silently into wizard
+ * state via getUserPrefs() when each wizard initialises.
+ *
  * Props:
- *   d              object   — wizard form state
- *   setD           fn       — wizard setD
- *   accent         string   — colour
- *   DraftBanner    component — from useDraft
- *   onPickerOpen   fn       — opens JobHistoryPicker
- *   showNamePrint  bool     — false for LvBoxWizard which has no namePrint field
- *   children       node     — extra fields appended after signature (e.g. LvConnection ICP fields)
+ *   d            object    — wizard form state
+ *   setD         fn        — wizard setD
+ *   accent       string    — colour
+ *   DraftBanner  component — from useDraft
+ *   onPickerOpen fn        — opens JobHistoryPicker
+ *   topChildren  node      — extra fields before project name (e.g. ZoneSub substation)
+ *   children     node      — extra fields after date (e.g. LvConnection ICP fields)
  */
-import { useEffect } from 'react'
 import { WF } from './WizardInputs'
-import { SignaturePad } from './SignaturePad'
 import { GpsLocationButton } from './GpsLocationButton'
-import { saveUserPref } from './userPrefs'
 import { APP_ACCENT } from './constants'
 
 export function JobDetailsStep({
@@ -23,15 +24,16 @@ export function JobDetailsStep({
   accent = APP_ACCENT,
   DraftBanner,
   onPickerOpen,
-  showNamePrint = true,
+  topChildren,
   children,
 }) {
-  const set = (k, v) => setD(p => ({ ...p, [k]: v }))
-
-  // Persist user prefs whenever values change
-  useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  useEffect(() => { saveUserPref('namePrint',  d.namePrint)  }, [d.namePrint])
-  useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
+  const set = (k, v) => {
+    if (v !== undefined) {
+      setD(p => ({ ...p, [k]: v }))
+    } else {
+      return (val) => setD(p => ({ ...p, [k]: val }))
+    }
+  }
 
   return (
     <div>
@@ -49,31 +51,26 @@ export function JobDetailsStep({
         📋 Load Previous Job
       </button>
 
+      {topChildren}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={accent} />
-        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber', v)} accent={accent} />
+        <WF label="Project Name"  v={d.projectName} set={set('projectName')} accent={accent} />
+        <WF label="NP Job Number" v={d.npJobNumber}  set={set('npJobNumber')} accent={accent} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="PCo W/O No." v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={accent} />
-        <WF label="CIWR No."    v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={accent} />
+        <WF label="PCo W/O No." v={d.pcoWONo} set={set('pcoWONo')} accent={accent} />
+        <WF label="CIWR No."    v={d.ciwrNo}  set={set('ciwrNo')}  accent={accent} />
       </div>
 
       <GpsLocationButton accent={accent} onLocation={loc => setD(p => ({ ...p, ...loc }))} />
 
-      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={accent} />
+      <WF label="No./Street/Road" v={d.streetRoad} set={set('streetRoad')} ph="123 Example Road" accent={accent} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={accent} />
-        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={accent} />
+        <WF label="City / Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" accent={accent} />
+        <WF label="District"    v={d.district} set={set('district')} ph="Waikato"  accent={accent} />
       </div>
 
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-
-      <WF label="Contractor"          v={d.contractor}        set={v => set('contractor',        v)} accent={accent} />
-      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} type="date" accent={accent} />
-      {showNamePrint && (
-        <WF label="Name (Print)" v={d.namePrint} set={v => set('namePrint', v)} accent={accent} />
-      )}
-      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={accent} />
+      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={set('dateWorkCompleted')} type="date" accent={accent} />
 
       {children}
     </div>
