@@ -5,7 +5,6 @@ import { FileText, X, Share2 } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
@@ -276,13 +275,13 @@ function ElecEquipWizard({ onClose = () => {} }) {
   }
 
 
-  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EE')
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EE')
     const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} />,
 
     // 1 — Equipment Details
     <div key="1">
@@ -545,13 +544,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
           {formSteps[step]}
         </WizardShell>
       )}
-
-      <JobHistoryPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={loadJobHistory}
-        accent={W_PURPLE}
-      />
     </>
   )
 }

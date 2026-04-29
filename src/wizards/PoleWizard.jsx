@@ -5,7 +5,6 @@ import { FileText, X, Share2, PenLine } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
@@ -188,11 +187,11 @@ function PoleRecordWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EC')
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EC')
     const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} />,
     <div key="1">
       <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set("oldPoleId")} />
       <WCB label="Type of Pole Activity" options={["New","Removed","Replaced","Relocation","Label Replaced"]} value={d.poleActivity} onChange={tog("poleActivity")} />
@@ -568,12 +567,6 @@ function PoleRecordWizard({ onClose }) {
       >
         {formSteps[step]}
       </WizardShell>
-      <JobHistoryPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={loadJobHistory}
-        accent={APP_ACCENT}
-      />
     </>
   );
 }

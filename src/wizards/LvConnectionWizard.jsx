@@ -12,7 +12,6 @@ import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 
 const LV_SHOW_OVERLAY = false
@@ -224,12 +223,12 @@ export default function LvConnectionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EA')
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EA')
     const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)}><div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} DraftBanner={DraftBanner}><div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
       <SectionHead label="Connection Identifiers" accent={LV_TEAL} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <WF label="C.O.C Number"           v={d.cocNumber}     set={v => set('cocNumber',     v)} accent={LV_TEAL} />
@@ -344,7 +343,6 @@ export default function LvConnectionWizard({ onClose }) {
         </WizardShell>
       )}
 
-      <JobHistoryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={loadJobHistory} accent={LV_TEAL} />
     </>
   )
 }

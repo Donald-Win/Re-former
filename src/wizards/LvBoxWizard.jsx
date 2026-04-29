@@ -12,7 +12,6 @@ import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 
 const ED_SHOW_OVERLAY = false
@@ -227,12 +226,12 @@ export default function LvBoxWizard({ onClose }) {
     !d.signed      && 'Signature',
   ].filter(Boolean)
 
-  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
     const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, setD, setStep, photos, setPhotos)
 
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} DraftBanner={DraftBanner} />,
 
     <div key="s1">
       <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
@@ -306,7 +305,6 @@ export default function LvBoxWizard({ onClose }) {
         </WizardShell>
       )}
 
-      <JobHistoryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={loadJobHistory} accent={ED_GREEN} />
     </>
   )
 }

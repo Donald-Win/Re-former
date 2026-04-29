@@ -11,7 +11,6 @@ import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
 import { useDraft } from '../shared/useDraft'
 import { APP_ACCENT } from '../shared/constants'
 
@@ -208,7 +207,7 @@ function ZoneSubWizard({ onClose }) {
     !d.maintenanceApplies && !d.replacementApplies && 'Select at least one work type',
   ].filter(Boolean)
 
-  const { pickerOpen, setPickerOpen, loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
     const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, setD, setStep, photos, setPhotos)
 
   const AppliesToggle = ({ applies, label, onToggle }) => (
@@ -228,7 +227,7 @@ function ZoneSubWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} DraftBanner={DraftBanner} onPickerOpen={() => setPickerOpen(true)}
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} DraftBanner={DraftBanner}
       topChildren={<>
         <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
         <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
@@ -367,12 +366,6 @@ function ZoneSubWizard({ onClose }) {
       >
         {formSteps[step]}
       </WizardShell>
-      <JobHistoryPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={loadJobHistory}
-        accent={ACCENT}
-      />
     </>
   )
 }
