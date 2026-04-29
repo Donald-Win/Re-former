@@ -65,6 +65,9 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
   }
 
   const hasContent = form.projectName || form.npJobNumber || form.pcoWONo || form.ciwrNo
+  const npValid = !form.npJobNumber || /^(TC|WF|WA)\d{7}$/.test(form.npJobNumber)
+  const woValid = !form.pcoWONo || /^50\d{6}$/.test(form.pcoWONo)
+  const formValid = hasContent && npValid && woValid
 
   // Shared sheet layout — NOT a nested component (avoids unmount/remount on re-render)
   const sheetContainer = {
@@ -145,31 +148,117 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
         {renderHeader('New Project', () => setMode('menu'))}
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 18px 32px' }}>
           <div style={{ marginTop: 8 }}>
-            {[
-              ['Project Name',  'projectName', 'e.g. Pyes Pa Blitz'],
-              ['NP Job Number', 'npJobNumber', 'e.g. TC1234567'],
-              ['PCo W/O No.',   'pcoWONo',     'e.g. 123456'],
-              ['CIWR No.',      'ciwrNo',      'e.g. 78901'],
-            ].map(([label, key, ph]) => (
-              <div key={key} style={{ marginBottom: 14 }}>
-                <label style={wLbl}>{label}</label>
-                <input
-                  type="text"
-                  value={form[key]}
-                  onChange={setF(key)}
-                  placeholder={ph}
-                  style={{ ...wInp, borderColor: form[key] ? accent : '#ddd' }}
-                />
-              </div>
-            ))}
+            {/* Project Name */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={wLbl}>Project Name</label>
+              <input
+                type="text"
+                value={form.projectName}
+                onChange={setF('projectName')}
+                placeholder="e.g. Pyes Pa Blitz"
+                style={{ ...wInp, borderColor: form.projectName ? accent : '#ddd' }}
+              />
+            </div>
+
+            {/* NP Job Number — TC/WF/WA + 7 digits */}
+            {(() => {
+              const val = form.npJobNumber
+              const valid = /^(TC|WF|WA)\d{7}$/.test(val)
+              const invalid = val.length > 0 && !valid
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={wLbl}>NP Job Number</label>
+                  <input
+                    type="text"
+                    value={val}
+                    onChange={e => {
+                      // Auto-uppercase prefix, strip non-alphanumeric
+                      let v = e.target.value.toUpperCase()
+                      // After 2 chars, only allow digits
+                      if (v.length > 2) {
+                        v = v.slice(0, 2) + v.slice(2).replace(/\D/g, '')
+                      }
+                      // Max 9 chars (2 prefix + 7 digits)
+                      v = v.slice(0, 9)
+                      setForm(p => ({ ...p, npJobNumber: v }))
+                    }}
+                    placeholder="e.g. TC1234567"
+                    inputMode="text"
+                    autoCapitalize="characters"
+                    style={{
+                      ...wInp,
+                      borderColor: valid ? '#16a34a' : invalid ? '#dc2626' : '#ddd',
+                      background: valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
+                    }}
+                  />
+                  {invalid && (
+                    <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
+                      Must be TC, WF or WA followed by 7 digits — e.g. TC1234567
+                    </div>
+                  )}
+                  {valid && (
+                    <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* PCo W/O No. — 8 digits starting with 50 */}
+            {(() => {
+              const val = form.pcoWONo
+              const valid = /^50\d{6}$/.test(val)
+              const invalid = val.length > 0 && !valid
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={wLbl}>PCo W/O No.</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={val}
+                    onChange={e => {
+                      // Digits only, max 8 chars
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 8)
+                      setForm(p => ({ ...p, pcoWONo: v }))
+                    }}
+                    placeholder="e.g. 50512345"
+                    style={{
+                      ...wInp,
+                      borderColor: valid ? '#16a34a' : invalid ? '#dc2626' : '#ddd',
+                      background: valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
+                    }}
+                  />
+                  {invalid && (
+                    <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
+                      Must be 8 digits starting with 50 — e.g. 50512345
+                    </div>
+                  )}
+                  {valid && (
+                    <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* CIWR No. */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={wLbl}>CIWR No.</label>
+              <input
+                type="text"
+                value={form.ciwrNo}
+                onChange={setF('ciwrNo')}
+                placeholder="e.g. 78901"
+                style={{ ...wInp, borderColor: form.ciwrNo ? accent : '#ddd' }}
+              />
+            </div>
+
             <button
               onClick={handleSaveAndLoad}
-              disabled={!hasContent}
+              disabled={!formValid}
               style={{
                 width: '100%', padding: '15px', borderRadius: 14, border: 'none',
-                background: saved ? '#16a34a' : hasContent ? accent : '#d1d5db',
+                background: saved ? '#16a34a' : formValid ? accent : '#d1d5db',
                 color: '#fff', fontFamily: 'inherit', fontSize: 16,
-                fontWeight: 700, cursor: hasContent ? 'pointer' : 'default',
+                fontWeight: 700, cursor: formValid ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 transition: 'background 0.2s',
               }}
