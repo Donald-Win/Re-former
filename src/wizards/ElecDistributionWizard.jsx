@@ -245,11 +245,11 @@ export default function ElecDistributionWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EB')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
 
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} DraftBanner={DraftBanner} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} formKey="360S014EB" formLabel="Elec Distribution Record" step={step} photos={photos} setPhotos={setPhotos} />,
 
     <div key="s1">
       <SectionHead label="Distribution Connection Details" accent={EB_ORANGE} />
@@ -375,7 +375,6 @@ export default function ElecDistributionWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
-          onSaveAndClose={onClose}
           accent={EB_ORANGE}
           bg={EB_BG}
           mid={EB_MID}

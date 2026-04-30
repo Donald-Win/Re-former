@@ -188,10 +188,10 @@ function PoleRecordWizard({ onClose }) {
   }
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EC')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, photos)
 
   const formSteps = [
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} formKey="360S014EC" formLabel="Pole Record" step={step} photos={photos} setPhotos={setPhotos} />,
     <div key="1">
       <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set("oldPoleId")} />
       <WCB label="Type of Pole Activity" options={["New","Removed","Replaced","Relocation","Label Replaced"]} value={d.poleActivity} onChange={tog("poleActivity")} />
@@ -554,7 +554,6 @@ function PoleRecordWizard({ onClose }) {
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
         onNext={() => { const n = step + 1; setStep(n); if (n === W_STEPS.length - 1) triggerGenerate(d, photos) }}
-        onSaveAndClose={onClose}
         accent={W_PURPLE}
         bg="#f4f4f8"
         mid="#fff"

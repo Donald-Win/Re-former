@@ -330,11 +330,11 @@ function TransformerWizardApp({ onClose }) {
   const SH = (props) => <SectionHead {...props} accent={G} />
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EG')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
 
   const formSteps = [
     // 0 – Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={G} DraftBanner={DraftBanner} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={G} formKey="360S014EG" formLabel="Transformer Record" step={step} photos={photos} setPhotos={setPhotos} />,
 
     // 1 – Site Details
     <div key="1">
@@ -545,7 +545,6 @@ function TransformerWizardApp({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(d, photos) }}
-          onSaveAndClose={onClose}
           accent={scheme.accent}
           bg={scheme.bg}
           mid={scheme.mid}

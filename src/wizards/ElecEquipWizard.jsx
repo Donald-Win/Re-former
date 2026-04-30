@@ -276,12 +276,12 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EE')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, photos)
 
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} DraftBanner={DraftBanner} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} formKey="360S014EE" formLabel="Elec Equipment Record" step={step} photos={photos} setPhotos={setPhotos} />,
 
     // 1 — Equipment Details
     <div key="1">
@@ -529,7 +529,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const next = step + 1; setStep(next); if (next === EE_STEPS.length - 1) triggerGenerate(d, photos) }}
-          onSaveAndClose={onClose}
           accent={W_PURPLE}
           bg={EE_BG}
           mid={EE_MID}

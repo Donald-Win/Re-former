@@ -17,7 +17,6 @@ import { APP_YELLOW } from './constants'
  *   onClose        fn()          — X button in header
  *   onBack         fn()          — ← Back button (hidden on step 0)
  *   onNext         fn()          — Next / Preview button
- *   onSaveAndClose fn()          — optional: shows 💾 Save button in nav bar
  *
  *   accent         string        — header bg, card shadow, active dot, nav buttons
  *   bg             string        — outer background colour
@@ -49,8 +48,6 @@ export function WizardShell({
   onClose,
   onBack,
   onNext,
-  onSaveAndClose,
-
   // Colours
   accent,
   bg = '#f4f4f8',
@@ -75,17 +72,6 @@ export function WizardShell({
   const resolvedDotColor = getDotColor || (() => accent)
   const isLastStep  = step === steps.length - 1
   const isFirstStep = step === 0
-
-  // Brief "Saved ✓" flash before closing
-  const [saving, setSaving] = React.useState(false)
-  const handleSaveClick = () => {
-    if (saving || !onSaveAndClose) return
-    setSaving(true)
-    setTimeout(() => {
-      setSaving(false)
-      onSaveAndClose()
-    }, 700)
-  }
 
   return (
     <div style={{
@@ -188,24 +174,7 @@ export function WizardShell({
         padding: '10px 16px', display: 'flex', gap: 10,
         transition: 'background 0.3s',
       }}>
-        {/* Save for later button */}
-        {onSaveAndClose && !isPreview && (
-          <button
-            onClick={handleSaveClick}
-            title="Save progress and close"
-            style={{
-              padding: '13px 14px', borderRadius: 12, flexShrink: 0,
-              border: `2px solid ${saving ? '#16a34a' : accent}`,
-              background: saving ? '#f0fdf4' : '#fff',
-              color: saving ? '#16a34a' : accent,
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-              cursor: saving ? 'default' : 'pointer',
-              transition: 'all 0.2s', minWidth: 52,
-            }}
-          >
-            {saving ? '✓' : '💾'}
-          </button>
-        )}
+
         {!isFirstStep && (
           <button onClick={onBack} style={{
             flex: 1, padding: 13, borderRadius: 12,

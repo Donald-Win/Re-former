@@ -208,7 +208,7 @@ function ZoneSubWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
 
   const AppliesToggle = ({ applies, label, onToggle }) => (
     <button type="button" onClick={onToggle} style={{
@@ -227,7 +227,7 @@ function ZoneSubWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} DraftBanner={DraftBanner}
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} formKey="360S014EF" formLabel="Zone Sub Equipment Record" step={step} photos={photos} setPhotos={setPhotos}
       topChildren={<>
         <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
         <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
@@ -353,7 +353,6 @@ function ZoneSubWizard({ onClose }) {
           setStep(next)
           if (next === EF_STEPS.length - 1) triggerGenerate(d, photos)
         }}
-        onSaveAndClose={onClose}
         accent={ACCENT}
         bg="#f4f4f8"
         mid={EF_MID}

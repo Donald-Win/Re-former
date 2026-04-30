@@ -227,11 +227,11 @@ export default function LvBoxWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
-    const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, setD, setStep, photos, setPhotos)
+    const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
 
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} DraftBanner={DraftBanner} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} formKey="360S014ED" formLabel="LV Box Record" step={step} photos={photos} setPhotos={setPhotos} />,
 
     <div key="s1">
       <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
@@ -289,7 +289,6 @@ export default function LvBoxWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
-          onSaveAndClose={onClose}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
