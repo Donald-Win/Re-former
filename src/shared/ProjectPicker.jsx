@@ -13,7 +13,7 @@
  *   accent    string
  */
 import { useState, useEffect } from 'react'
-import { Plus, FolderOpen, Trash2, X, ChevronRight, Check } from 'lucide-react'
+import { Plus, FolderOpen, Trash2, X, ChevronRight, Check, Pencil } from 'lucide-react'
 import { listProjects, saveProject, deleteProject, projectLabel, projectSub } from './projectStore'
 import { APP_ACCENT } from './constants'
 import { wInp, wLbl } from './WizardInputs'
@@ -30,6 +30,7 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
   const [form, setForm]         = useState({ projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '' })
   const [saved, setSaved]       = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [editingProject, setEditingProject] = useState(null) // project being edited
 
   useEffect(() => {
     if (open) {
@@ -37,6 +38,7 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
       setForm({ projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '' })
       setSaved(false)
       setConfirmDelete(null)
+      setEditingProject(null)
       setProjects(listProjects())
     }
   }, [open])
@@ -46,11 +48,14 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
   const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
 
   const handleSaveAndLoad = () => {
-    const entry = saveProject(form)
+    const entry = saveProject({ ...form, id: editingProject?.id })
     setProjects(listProjects())
-    onSelect({ projectName: entry.projectName, npJobNumber: entry.npJobNumber, pcoWONo: entry.pcoWONo, ciwrNo: entry.ciwrNo })
+    if (!editingProject) {
+      // New project - load it into the form
+      onSelect({ projectName: entry.projectName, npJobNumber: entry.npJobNumber, pcoWONo: entry.pcoWONo, ciwrNo: entry.ciwrNo })
+    }
     setSaved(true)
-    setTimeout(() => { setSaved(false); onClose() }, 800)
+    setTimeout(() => { setSaved(false); setEditingProject(null); setMode('list') }, 900)
   }
 
   const handleLoad = (project) => {
@@ -145,7 +150,7 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400 }} />
       <div style={sheetContainer}>
-        {renderHeader('New Project', () => setMode('menu'))}
+        {renderHeader(editingProject ? 'Edit Project' : 'New Project', () => { setEditingProject(null); setMode(editingProject ? 'list' : 'menu') })}
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 18px 32px' }}>
           <div style={{ marginTop: 8 }}>
             {/* Project Name */}
@@ -263,7 +268,7 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                 transition: 'background 0.2s',
               }}
             >
-              {saved ? <><Check size={20} /> Saved &amp; Loaded!</> : 'Save & Load Project'}
+              {saved ? <><Check size={20} /> {editingProject ? 'Saved!' : 'Saved & Loaded!'}</> : editingProject ? 'Save Changes' : 'Save & Load Project'}
             </button>
           </div>
         </div>
