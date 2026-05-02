@@ -335,16 +335,25 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                         Saved {new Date(project.savedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </div>
                     </button>
+                    <button onClick={() => {
+                        setEditingProject(project)
+                        setForm({ projectName: project.projectName, npJobNumber: project.npJobNumber, pcoWONo: project.pcoWONo, ciwrNo: project.ciwrNo })
+                        setSaved(false)
+                        setMode('create')
+                      }} style={{
+                        padding: '14px 12px', background: 'transparent',
+                        border: 'none', borderLeft: '1px solid #f0f0f0',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      }}>
+                      <Pencil size={15} color="#6b7280" />
+                    </button>
                     <button onClick={() => setConfirmDelete(project.id)} style={{
-                      padding: '14px 14px', background: 'transparent',
+                      padding: '14px 12px', background: 'transparent',
                       border: 'none', borderLeft: '1px solid #f0f0f0',
                       cursor: 'pointer', display: 'flex', alignItems: 'center',
                     }}>
                       <Trash2 size={16} color="#ef4444" />
                     </button>
-                    <div style={{ padding: '14px 12px 14px 0', color: '#d1d5db' }}>
-                      <ChevronRight size={16} />
-                    </div>
                   </div>
                 )}
               </div>
