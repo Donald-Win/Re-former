@@ -209,6 +209,8 @@ export default function ElecDistributionWizard({ onClose }) {
   const isPreview = step === EB_STEPS.length - 1
   const [overlayTab,    setOverlayTab]    = useState('form')
   const [overlayBytes,  setOverlayBytes]  = useState(null)
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
+  const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos,        setPhotos]        = useState([])
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEbPdf)
 

@@ -191,6 +191,8 @@ export default function LvBoxWizard({ onClose }) {
   const isPreview = step === ED_STEPS.length - 1
   const [overlayTab,    setOverlayTab]    = useState('form')
   const [overlayBytes,  setOverlayBytes]  = useState(null)
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
+  const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos,        setPhotos]        = useState([])
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEdPdf)
 
