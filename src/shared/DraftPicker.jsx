@@ -33,6 +33,7 @@ export function DraftPicker({
   photos = [],
   onLoad,
   accent = APP_ACCENT,
+  initialMode = 'menu',
 }) {
   const [mode, setMode]         = useState('menu')
   const [drafts, setDrafts]     = useState([])
@@ -42,7 +43,7 @@ export function DraftPicker({
 
   useEffect(() => {
     if (open) {
-      setMode('menu')
+      setMode(initialMode)
       setSaved(false)
       setConfirmDelete(null)
       setDrafts(listDrafts(formKey))

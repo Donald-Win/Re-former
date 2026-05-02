@@ -17,6 +17,7 @@ import { APP_YELLOW } from './constants'
  *   onClose        fn()          — X button in header
  *   onBack         fn()          — ← Back button (hidden on step 0)
  *   onNext         fn()          — Next / Preview button
+ *   onSaveDraft    fn()|null     — optional: shows 💾 button in nav bar on all steps
  *
  *   accent         string        — header bg, card shadow, active dot, nav buttons
  *   bg             string        — outer background colour
@@ -48,6 +49,7 @@ export function WizardShell({
   onClose,
   onBack,
   onNext,
+  onSaveDraft,
   // Colours
   accent,
   bg = '#f4f4f8',
@@ -175,6 +177,23 @@ export function WizardShell({
         transition: 'background 0.3s',
       }}>
 
+        {/* Save draft button — shown on all steps when handler provided */}
+        {onSaveDraft && !isPreview && (
+          <button
+            onClick={onSaveDraft}
+            title="Save draft"
+            style={{
+              padding: '13px 14px', borderRadius: 12, flexShrink: 0,
+              border: `2px solid ${accent}`,
+              background: '#fff', color: accent,
+              fontFamily: 'inherit', fontSize: 16, fontWeight: 700,
+              cursor: 'pointer', minWidth: 48,
+              transition: 'all 0.15s',
+            }}
+          >
+            💾
+          </button>
+        )}
         {!isFirstStep && (
           <button onClick={onBack} style={{
             flex: 1, padding: 13, borderRadius: 12,

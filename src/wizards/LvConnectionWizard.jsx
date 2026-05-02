@@ -13,6 +13,7 @@ import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 
 const LV_SHOW_OVERLAY = false
 
@@ -226,9 +227,16 @@ export default function LvConnectionWizard({ onClose }) {
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EA')
     const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
 
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
+
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} formKey="360S014EA" formLabel="LV Connection Record" step={step} photos={photos} setPhotos={setPhotos}><div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}><div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
       <SectionHead label="Connection Identifiers" accent={LV_TEAL} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <WF label="C.O.C Number"           v={d.cocNumber}     set={v => set('cocNumber',     v)} accent={LV_TEAL} />
@@ -326,7 +334,8 @@ export default function LvConnectionWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={LV_TEAL}
           bg={LV_BG}
           mid={LV_MID}
@@ -342,6 +351,18 @@ export default function LvConnectionWizard({ onClose }) {
         </WizardShell>
       )}
 
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014EA"
+        formLabel="LV Connection Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={LV_TEAL}
+        initialMode={draftPickerMode}
+      />
     </>
   )
 }

@@ -13,6 +13,7 @@ import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 
 const EB_SHOW_OVERLAY = false
 
@@ -247,9 +248,16 @@ export default function ElecDistributionWizard({ onClose }) {
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EB')
     const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
 
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
+
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} formKey="360S014EB" formLabel="Elec Distribution Record" step={step} photos={photos} setPhotos={setPhotos} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
 
     <div key="s1">
       <SectionHead label="Distribution Connection Details" accent={EB_ORANGE} />
@@ -374,7 +382,8 @@ export default function ElecDistributionWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={EB_ORANGE}
           bg={EB_BG}
           mid={EB_MID}
@@ -390,6 +399,18 @@ export default function ElecDistributionWizard({ onClose }) {
         </WizardShell>
       )}
 
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014EB"
+        formLabel="Elec Distribution Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={EB_ORANGE}
+        initialMode={draftPickerMode}
+      />
     </>
   )
 }

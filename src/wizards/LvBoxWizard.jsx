@@ -13,6 +13,7 @@ import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 
 const ED_SHOW_OVERLAY = false
 
@@ -229,9 +230,16 @@ export default function LvBoxWizard({ onClose }) {
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
     const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
 
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
+
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} formKey="360S014ED" formLabel="LV Box Record" step={step} photos={photos} setPhotos={setPhotos} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
 
     <div key="s1">
       <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
@@ -288,7 +296,8 @@ export default function LvBoxWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
@@ -304,6 +313,18 @@ export default function LvBoxWizard({ onClose }) {
         </WizardShell>
       )}
 
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014ED"
+        formLabel="LV Box Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={ED_GREEN}
+        initialMode={draftPickerMode}
+      />
     </>
   )
 }

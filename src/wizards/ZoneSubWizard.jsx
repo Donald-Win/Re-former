@@ -12,6 +12,7 @@ import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 import { APP_ACCENT } from '../shared/constants'
 
 const EF_SHOW_OVERLAY = false
@@ -145,6 +146,8 @@ const emptyRow = () => ({
 
 function ZoneSubWizard({ onClose }) {
   const [step, setStep]               = useState(0)
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
+  const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos, setPhotos]           = useState([])
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEfPdf)
 
@@ -210,6 +213,13 @@ function ZoneSubWizard({ onClose }) {
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
     const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
 
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
+
   const AppliesToggle = ({ applies, label, onToggle }) => (
     <button type="button" onClick={onToggle} style={{
       width: '100%', padding: '12px 16px', borderRadius: 8, marginBottom: 16,
@@ -227,7 +237,7 @@ function ZoneSubWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} formKey="360S014EF" formLabel="Zone Sub Equipment Record" step={step} photos={photos} setPhotos={setPhotos}
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
       topChildren={<>
         <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
         <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
@@ -348,6 +358,7 @@ function ZoneSubWizard({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
+        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
         onNext={() => {
           const next = step + 1
           setStep(next)
@@ -365,6 +376,18 @@ function ZoneSubWizard({ onClose }) {
       >
         {formSteps[step]}
       </WizardShell>
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014EF"
+        formLabel="Zone Sub Equipment Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={ACCENT}
+        initialMode={draftPickerMode}
+      />
     </>
   )
 }

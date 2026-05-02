@@ -6,6 +6,7 @@ import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
@@ -156,6 +157,8 @@ function DateBoxInput({ label, value, onChange }) {
 
 function PoleRecordWizard({ onClose }) {
   const [step, setStep] = useState(0)
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
+  const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos, setPhotos] = useState([]);
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateFilledPdf)
   const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
@@ -190,8 +193,15 @@ function PoleRecordWizard({ onClose }) {
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EC')
     const { clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, photos)
 
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
+
   const formSteps = [
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} formKey="360S014EC" formLabel="Pole Record" step={step} photos={photos} setPhotos={setPhotos} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
     <div key="1">
       <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set("oldPoleId")} />
       <WCB label="Type of Pole Activity" options={["New","Removed","Replaced","Relocation","Label Replaced"]} value={d.poleActivity} onChange={tog("poleActivity")} />
@@ -553,6 +563,7 @@ function PoleRecordWizard({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
+        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
         onNext={() => { const n = step + 1; setStep(n); if (n === W_STEPS.length - 1) triggerGenerate(d, photos) }}
         accent={W_PURPLE}
         bg="#f4f4f8"
@@ -566,6 +577,18 @@ function PoleRecordWizard({ onClose }) {
       >
         {formSteps[step]}
       </WizardShell>
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014EC"
+        formLabel="Pole Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={W_PURPLE}
+        initialMode={draftPickerMode}
+      />
     </>
   );
 }
