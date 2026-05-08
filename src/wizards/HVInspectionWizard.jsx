@@ -155,8 +155,8 @@ function initState() {
     visualChecks:      initChecks(VISUAL_CHECKS),
     operationChecks:   initChecks(OPERATION_CHECKS),
     performanceChecks: initChecks(PERFORMANCE_CHECKS),
-    qaChecks:          { qa0: {}, qa1: {} },
-    docChecks:         { dc0: {}, dc1: {} },
+    qaChecks:          initChecks(QA_CHECKS),
+    docChecks:         initChecks(DOC_CHECKS),
     // Signatures
     wtlName: '', wtlSigned: '', wtlCertNo: '', wtlDate: '',
     fsName:  '', fsSigned:  '', fsSinNapa: '',
@@ -177,12 +177,12 @@ async function generateHvPdf(d, photos) {
   const p2    = pages[1]
   const p3    = pages[2]
 
+  const BLUE = rgb(0, 0.2, 0.63)
+  // Two-line checkmark matching all other wizards
+  // x, y are pdf-lib bottom-origin coordinates (centre of cell)
   const tick = (page, x, y) => {
-    page.drawText('✓', {
-      x: x - 5, y: y - 4,
-      size: 9, font,
-      color: rgb(0, 0.2, 0.63),
-    })
+    page.drawLine({ start: { x: x,   y: y - 4 }, end: { x: x+3, y: y - 7 }, thickness: 1.5, color: BLUE, opacity: 1 })
+    page.drawLine({ start: { x: x+3, y: y - 7 }, end: { x: x+9, y: y + 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
 
   const textAt = (page, text, x, y, size = 8) => {
