@@ -9,6 +9,7 @@ import LvConnectionWizard from './wizards/LvConnectionWizard'
 import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import ZoneSubWizard from './wizards/ZoneSubWizard'
+import HVInspectionWizard from './wizards/HVInspectionWizard'
 import { AuthGate } from './auth/AuthGate'
 import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
@@ -62,6 +63,13 @@ const WIZARD_CONFIG = {
     fileName:  '360S014ED.pdf',
     accent:    '#16a34a',
     Component: LvBoxWizard,
+  },
+  '220F028A': {
+    label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
+    pdfName:   'HV Inspection Certificate',
+    fileName:  '220F028A.pdf',
+    accent:    '#4f46e5',
+    Component: HVInspectionWizard,
   },
   '360S014EF': {
     label:     '360S014EF – As-built Zone Substation Equipment Record',
@@ -269,7 +277,14 @@ const AsBuiltFormSelector = () => {
     '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
     '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
     '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
-    '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
+    '220F028A': {
+    label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
+    pdfName:   'HV Inspection Certificate',
+    fileName:  '220F028A.pdf',
+    accent:    '#4f46e5',
+    Component: HVInspectionWizard,
+  },
+  '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
     '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
     '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
     '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record',   fileName: '360S014EI.pdf' },
@@ -642,7 +657,7 @@ const AsBuiltFormSelector = () => {
                       <div className="mt-3 space-y-3 animate-fadeIn">
                         {requiredCerts.map((cert, index) => (
                           <div key={cert.id}
-                            onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name)}
+                            onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name, cert.id)}
                             className={`p-4 border-2 rounded-lg ${
                               cert.hasLink
                                 ? 'border-green-200 bg-green-50 cursor-pointer hover:bg-green-100 hover:border-green-300 active:bg-green-200 transition-all'
@@ -780,7 +795,7 @@ const AsBuiltFormSelector = () => {
               </h2>
               <div className="grid md:grid-cols-2 gap-3">
                 {allCommissioningForms.map(cert => (
-                  <div key={cert.id} onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name)}
+                  <div key={cert.id} onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name, cert.id)}
                     className="p-4 border-2 border-green-200 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 hover:border-green-300 active:bg-green-200 transition-all">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
