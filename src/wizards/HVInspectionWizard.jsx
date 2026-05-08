@@ -228,12 +228,16 @@ async function generateHvPdf(d, photos) {
   const p2    = pages[1]
   const p3    = pages[2]
 
-  const BLUE = rgb(0, 0.2, 0.63)
+  const BLUE = rgb(0/255, 20/255, 160/255)
   // Two-line checkmark matching all other wizards
   // x, y are pdf-lib bottom-origin coordinates (centre of cell)
+  // Tick positioned relative to cell centre (x, y = bottom-origin pdf coords)
+  // Matches PoleWizard/TransformerWizard tick exactly - centre of cell adjusted
   const tick = (page, x, y) => {
-    page.drawLine({ start: { x: x,   y: y - 4 }, end: { x: x+3, y: y - 7 }, thickness: 1.5, color: BLUE, opacity: 1 })
-    page.drawLine({ start: { x: x+3, y: y - 7 }, end: { x: x+9, y: y + 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
+    const bx = x - 5  // left-align within cell
+    const by = y + 2  // slight vertical offset to centre in cell
+    page.drawLine({ start: { x: bx,   y: by - 6 }, end: { x: bx+3, y: by - 9 }, thickness: 1.5, color: BLUE, opacity: 1 })
+    page.drawLine({ start: { x: bx+3, y: by - 9 }, end: { x: bx+9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
 
   const textAt = (page, text, x, y, size = 8) => {
@@ -424,39 +428,35 @@ function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent, checkGrou
             {/* Equipment type buttons */}
             <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {activeEquip.map(equip => {
+                const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
+                const na     = checkGroup && isNA(checkGroup, checks.indexOf(check), colIdx)
                 const ticked = vals[equip.id]
+                if (na) return (
+                  <span key={equip.id} style={{
+                    padding: '5px 9px', borderRadius: 7,
+                    background: '#e5e7eb', color: '#b0b0b0',
+                    fontSize: 11, fontWeight: 600,
+                    userSelect: 'none', display: 'inline-block',
+                  }}>
+                    {equip.short}
+                  </span>
+                )
                 return (
-                  {(() => {
-                    const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
-                    const na = checkGroup && isNA(checkGroup, checks.indexOf(check), colIdx)
-                    if (na) return (
-                      <span key={equip.id} style={{
-                        padding: '5px 9px', borderRadius: 7,
-                        background: '#e5e7eb', color: '#9ca3af',
-                        fontSize: 11, fontWeight: 600,
-                        userSelect: 'none',
-                      }}>
-                        {equip.short}
-                      </span>
-                    )
-                    return (
-                      <button
-                        key={equip.id}
-                        onClick={() => toggle(check.id, equip.id)}
-                        style={{
-                          padding: '5px 9px', borderRadius: 7,
-                          border: `2px solid ${ticked ? accent : '#d1d5db'}`,
-                          background: ticked ? accent : '#f9fafb',
-                          color: ticked ? '#fff' : '#6b7280',
-                          fontSize: 11, fontWeight: 700,
-                          cursor: 'pointer', fontFamily: 'inherit',
-                          transition: 'all 0.12s',
-                        }}
-                      >
-                        {ticked ? '✓ ' : ''}{equip.short}
-                      </button>
-                    )
-                  })()}
+                  <button
+                    key={equip.id}
+                    onClick={() => toggle(check.id, equip.id)}
+                    style={{
+                      padding: '5px 9px', borderRadius: 7,
+                      border: `2px solid ${ticked ? accent : '#d1d5db'}`,
+                      background: ticked ? accent : '#f9fafb',
+                      color: ticked ? '#fff' : '#6b7280',
+                      fontSize: 11, fontWeight: 700,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    {ticked ? '✓ ' : ''}{equip.short}
+                  </button>
                 )
               })}
             </div>
