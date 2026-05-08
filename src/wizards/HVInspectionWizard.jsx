@@ -50,6 +50,57 @@ const EQUIP_TYPES = [
   { id: 're',   label: 'Radio Equipment',            short: 'RE'   },
 ]
 
+
+// ── N/A maps — shaded cells from the original form ───────────────────────────
+// Key = row index, value = array of EQUIP_TYPES indices that are N/A for that row
+// Extracted by pixel analysis of the original PDF
+const P1_NA = {
+  0:  [7, 8, 12],
+  1:  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  2:  [12],
+  3:  [0, 1, 2, 3, 4, 5, 6, 11, 12],
+  4:  [1, 6, 8, 12],
+  5:  [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  6:  [1, 6],
+  7:  [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  8:  [0, 1, 3, 4, 5, 7, 9, 12],
+  10: [6, 12],
+  11: [1, 12],
+  12: [1, 11, 12],
+  13: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+}
+
+const P2_NA = {
+  // Operation (rows 0-3)
+  0:  [1, 2, 3, 7, 8, 9, 10, 11, 12],
+  1:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 12],
+  2:  [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
+  3:  [0, 1, 2, 3, 7, 8, 9, 10, 11, 12],
+  // Performance (rows 4-16)
+  4:  [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
+  5:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12],
+  6:  [2, 3],
+  7:  [1, 11, 12],
+  8:  [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
+  9:  [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
+  10: [0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12],
+  11: [0, 1, 2, 3, 4, 5, 11],
+  12: [0, 1, 2, 3, 10, 11, 12],
+  13: [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12],
+  14: [0, 1, 2, 4, 6, 8, 9, 10, 11, 12],
+  15: [0, 1, 2, 3, 4, 6, 7, 8, 9, 11, 12],
+  16: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+}
+
+// Build a lookup: isNA(checkGroup, rowIdx, colIdx)
+// checkGroup: 'visual' | 'operation' | 'performance' | 'qa' | 'doc'
+function isNA(checkGroup, rowIdx, colIdx) {
+  if (checkGroup === 'visual')      return (P1_NA[rowIdx] || []).includes(colIdx)
+  if (checkGroup === 'operation')   return (P2_NA[rowIdx] || []).includes(colIdx)
+  if (checkGroup === 'performance') return (P2_NA[rowIdx + 4] || []).includes(colIdx)
+  return false  // QA, Doc, Other have no N/A cells
+}
+
 // ── Check definitions ─────────────────────────────────────────────────────────
 const VISUAL_CHECKS = [
   { id: 'vc0',  label: 'Equipment "Fit For Service" Certificate' },
@@ -286,7 +337,7 @@ async function generateHvPdf(d, photos) {
 
 // ── Check Grid Component ──────────────────────────────────────────────────────
 // Renders a mobile-friendly grid for a list of checks × selected equipment types
-function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent }) {
+function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent, checkGroup = '' }) {
   if (selectedEquip.length === 0) {
     return (
       <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
@@ -309,14 +360,24 @@ function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent }) {
   }
 
   const toggleAll = (checkId) => {
-    const current = d[stateKey]?.[checkId] || {}
-    const allTicked = selectedEquip.every(e => current[e.id])
+    const checkIdx = checks.findIndex(c => c.id === checkId)
+    const current  = d[stateKey]?.[checkId] || {}
+    const applicable = activeEquip.filter(e => {
+      const ci = EQUIP_TYPES.findIndex(et => et.id === e.id)
+      return !checkGroup || !isNA(checkGroup, checkIdx, ci)
+    })
+    const allTicked = applicable.every(e => current[e.id])
     setD(prev => ({
       ...prev,
       [stateKey]: {
         ...prev[stateKey],
         [checkId]: Object.fromEntries(
-          EQUIP_TYPES.map(e => [e.id, !allTicked])
+          EQUIP_TYPES.map(e => {
+            const ci = EQUIP_TYPES.findIndex(et => et.id === e.id)
+            const na = checkGroup && isNA(checkGroup, checkIdx, ci)
+            if (na) return [e.id, false]
+            return [e.id, !allTicked]
+          })
         )
       }
     }))
@@ -365,21 +426,37 @@ function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent }) {
               {activeEquip.map(equip => {
                 const ticked = vals[equip.id]
                 return (
-                  <button
-                    key={equip.id}
-                    onClick={() => toggle(check.id, equip.id)}
-                    style={{
-                      padding: '5px 9px', borderRadius: 7,
-                      border: `2px solid ${ticked ? accent : '#d1d5db'}`,
-                      background: ticked ? accent : '#f9fafb',
-                      color: ticked ? '#fff' : '#6b7280',
-                      fontSize: 11, fontWeight: 700,
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      transition: 'all 0.12s',
-                    }}
-                  >
-                    {ticked ? '✓ ' : ''}{equip.short}
-                  </button>
+                  {(() => {
+                    const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
+                    const na = checkGroup && isNA(checkGroup, checks.indexOf(check), colIdx)
+                    if (na) return (
+                      <span key={equip.id} style={{
+                        padding: '5px 9px', borderRadius: 7,
+                        background: '#e5e7eb', color: '#9ca3af',
+                        fontSize: 11, fontWeight: 600,
+                        userSelect: 'none',
+                      }}>
+                        {equip.short}
+                      </span>
+                    )
+                    return (
+                      <button
+                        key={equip.id}
+                        onClick={() => toggle(check.id, equip.id)}
+                        style={{
+                          padding: '5px 9px', borderRadius: 7,
+                          border: `2px solid ${ticked ? accent : '#d1d5db'}`,
+                          background: ticked ? accent : '#f9fafb',
+                          color: ticked ? '#fff' : '#6b7280',
+                          fontSize: 11, fontWeight: 700,
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          transition: 'all 0.12s',
+                        }}
+                      >
+                        {ticked ? '✓ ' : ''}{equip.short}
+                      </button>
+                    )
+                  })()}
                 )
               })}
             </div>
@@ -517,6 +594,7 @@ export default function HVInspectionWizard({ onClose }) {
         d={d} setD={setD}
         selectedEquip={d.selectedEquip}
         accent={ACCENT}
+        checkGroup="visual"
       />
     </div>,
 
@@ -529,6 +607,7 @@ export default function HVInspectionWizard({ onClose }) {
         d={d} setD={setD}
         selectedEquip={d.selectedEquip}
         accent={ACCENT}
+        checkGroup="operation"
       />
       <SectionHead label="Performance Tests" accent={ACCENT} />
       <CheckGrid
@@ -537,6 +616,7 @@ export default function HVInspectionWizard({ onClose }) {
         d={d} setD={setD}
         selectedEquip={d.selectedEquip}
         accent={ACCENT}
+        checkGroup="performance"
       />
     </div>,
 
