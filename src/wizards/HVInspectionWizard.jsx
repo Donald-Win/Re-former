@@ -644,7 +644,6 @@ export default function HVInspectionWizard({ onClose }) {
   const missingFields = []
   if (!d.projectName && !d.npJobNumber) missingFields.push('Project / Job Number')
   if (d.selectedEquip.length === 0)     missingFields.push('Equipment Types')
-  if (!d.wtlName)                        missingFields.push('Work Team Leader Name')
 
   // ── Render current step ───────────────────────────────────────────────────
   const renderStep = () => {
@@ -719,38 +718,13 @@ export default function HVInspectionWizard({ onClose }) {
     // QA & Documentation
     if (step === QA_STEP) return <QaDocStep d={d} setD={setD} accent={ACCENT} />
 
-    // Signatures
+    // Signatures — WTL loaded silently from user settings (same as other wizards)
     if (step === SIG_STEP) return (
       <div>
-        {/* WTL details come from User Settings — shown as read-only confirmation */}
-        <SectionHead label="Work Team Leader" sub="Pre-filled from your settings" accent={ACCENT} />
-        <div style={{
-          background: ACCENT + '10', border: `1px solid ${ACCENT}30`,
-          borderRadius: 10, padding: '12px 14px', marginBottom: 14,
-        }}>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Name</div>
-          <div style={{ fontWeight: 600, color: '#111827', marginBottom: 8 }}>
-            {d.wtlName || <span style={{ color: '#ef4444', fontSize: 13 }}>⚠ Not set — go to My Details in settings</span>}
-          </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Competency Cert No.</div>
-          <div style={{ fontWeight: 600, color: '#111827', marginBottom: 8 }}>
-            {d.wtlCertNo || <span style={{ color: '#ef4444', fontSize: 13 }}>⚠ Not set — go to My Details in settings</span>}
-          </div>
-          {d.wtlSigned && (
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Signature</div>
-              <img src={d.wtlSigned} alt="signature" style={{ maxHeight: 40, borderRadius: 4, background: '#fff', padding: 4 }} />
-            </div>
-          )}
-          {!d.wtlSigned && (
-            <div style={{ fontSize: 13, color: '#ef4444' }}>⚠ No signature — go to My Details in settings</div>
-          )}
-        </div>
-
         <SectionHead label="Field Switcher" accent={ACCENT} />
-        <WF label="Name" v={d.fsName}    set={val => setD(p => ({...p, fsName: val}))}    accent={ACCENT} />
+        <WF label="Name"         v={d.fsName}    set={val => setD(p => ({...p, fsName: val}))}    accent={ACCENT} />
         <WF label="SIN / NAPA ID" v={d.fsSinNapa} set={val => setD(p => ({...p, fsSinNapa: val}))} accent={ACCENT} />
-        <SignaturePad value={d.fsSigned}  onChange={val => setD(p => ({...p, fsSigned: val}))}  accent={ACCENT} />
+        <SignaturePad value={d.fsSigned} onChange={val => setD(p => ({...p, fsSigned: val}))} accent={ACCENT} />
       </div>
     )
 
