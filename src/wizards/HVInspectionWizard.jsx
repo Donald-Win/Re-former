@@ -339,123 +339,99 @@ async function generateHvPdf(d, photos) {
   return new Uint8Array(bytes)
 }
 
-// ── Check Grid Component ──────────────────────────────────────────────────────
-// Renders a mobile-friendly grid for a list of checks × selected equipment types
-function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent, checkGroup = '' }) {
-  if (selectedEquip.length === 0) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-        No equipment types selected — go back to Step 2.
-      </div>
-    )
-  }
+// ── EquipCheckList ────────────────────────────────────────────────────────────
+// Shows checks for ONE equipment type as simple tick toggles.
+// Only renders rows that are applicable (not N/A) for this equipment type.
+function EquipCheckList({ checkSections, equip, d, setD, accent }) {
+  const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
 
-  const toggle = (checkId, equipId) => {
+  const toggle = (stateKey, checkId) => {
     setD(prev => ({
       ...prev,
       [stateKey]: {
         ...prev[stateKey],
         [checkId]: {
           ...prev[stateKey]?.[checkId],
-          [equipId]: !prev[stateKey]?.[checkId]?.[equipId],
+          [equip.id]: !prev[stateKey]?.[checkId]?.[equip.id],
         }
       }
     }))
   }
 
-  const toggleAll = (checkId) => {
-    const checkIdx = checks.findIndex(c => c.id === checkId)
-    const current  = d[stateKey]?.[checkId] || {}
-    const applicable = activeEquip.filter(e => {
-      const ci = EQUIP_TYPES.findIndex(et => et.id === e.id)
-      return !checkGroup || !isNA(checkGroup, checkIdx, ci)
+  const tickAll = (stateKey, checks, group) => {
+    const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
+    const allTicked  = applicable.every(c => d[stateKey]?.[c.id]?.[equip.id])
+    setD(prev => {
+      const updated = { ...prev[stateKey] }
+      applicable.forEach(c => {
+        updated[c.id] = { ...updated[c.id], [equip.id]: !allTicked }
+      })
+      return { ...prev, [stateKey]: updated }
     })
-    const allTicked = applicable.every(e => current[e.id])
-    setD(prev => ({
-      ...prev,
-      [stateKey]: {
-        ...prev[stateKey],
-        [checkId]: Object.fromEntries(
-          EQUIP_TYPES.map(e => {
-            const ci = EQUIP_TYPES.findIndex(et => et.id === e.id)
-            const na = checkGroup && isNA(checkGroup, checkIdx, ci)
-            if (na) return [e.id, false]
-            return [e.id, !allTicked]
-          })
-        )
-      }
-    }))
   }
-
-  const activeEquip = EQUIP_TYPES.filter(e => selectedEquip.includes(e.id))
 
   return (
     <div>
-      {checks.map((check) => {
-        const vals  = d[stateKey]?.[check.id] || {}
-        const count = activeEquip.filter(e => vals[e.id]).length
-        const all   = count === activeEquip.length
+      {checkSections.map(({ title, checks, stateKey, group }) => {
+        const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
+        if (applicable.length === 0) return null
+        const allTicked = applicable.every(c => d[stateKey]?.[c.id]?.[equip.id])
 
         return (
-          <div key={check.id} style={{
-            marginBottom: 10,
-            border: `1px solid ${count > 0 ? accent + '40' : '#e5e7eb'}`,
-            borderRadius: 10,
-            background: count > 0 ? accent + '08' : '#fff',
-            overflow: 'hidden',
-          }}>
-            {/* Check label row */}
+          <div key={stateKey} style={{ marginBottom: 18 }}>
             <div style={{
-              padding: '10px 12px 6px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', marginBottom: 8,
             }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', flex: 1 }}>
-                {check.label}
-              </span>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: accent,
+                textTransform: 'uppercase', letterSpacing: '0.07em',
+              }}>{title}</div>
               <button
-                onClick={() => toggleAll(check.id)}
+                onClick={() => tickAll(stateKey, checks, group)}
                 style={{
-                  padding: '4px 10px', borderRadius: 6, border: `1px solid ${accent}`,
-                  background: all ? accent : '#fff',
-                  color: all ? '#fff' : accent,
-                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                  fontFamily: 'inherit', flexShrink: 0, marginLeft: 8,
+                  padding: '3px 10px', borderRadius: 6,
+                  border: `1px solid ${accent}`,
+                  background: allTicked ? accent : '#fff',
+                  color: allTicked ? '#fff' : accent,
+                  fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                {all ? '✓ All' : 'All'}
+                {allTicked ? '✓ All' : 'Tick All'}
               </button>
             </div>
-            {/* Equipment type buttons */}
-            <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {activeEquip.map(equip => {
-                const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
-                const na     = checkGroup && isNA(checkGroup, checks.indexOf(check), colIdx)
-                const ticked = vals[equip.id]
-                if (na) return (
-                  <span key={equip.id} style={{
-                    padding: '5px 9px', borderRadius: 7,
-                    background: '#e5e7eb', color: '#b0b0b0',
-                    fontSize: 11, fontWeight: 600,
-                    userSelect: 'none', display: 'inline-block',
-                  }}>
-                    {equip.short}
-                  </span>
-                )
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {applicable.map(check => {
+                const ticked = !!d[stateKey]?.[check.id]?.[equip.id]
                 return (
                   <button
-                    key={equip.id}
-                    onClick={() => toggle(check.id, equip.id)}
+                    key={check.id}
+                    onClick={() => toggle(stateKey, check.id)}
                     style={{
-                      padding: '5px 9px', borderRadius: 7,
-                      border: `2px solid ${ticked ? accent : '#d1d5db'}`,
-                      background: ticked ? accent : '#f9fafb',
-                      color: ticked ? '#fff' : '#6b7280',
-                      fontSize: 11, fontWeight: 700,
+                      width: '100%', padding: '11px 14px',
+                      borderRadius: 10, textAlign: 'left',
+                      border: `2px solid ${ticked ? accent : '#e5e7eb'}`,
+                      background: ticked ? accent + '12' : '#fff',
                       cursor: 'pointer', fontFamily: 'inherit',
-                      transition: 'all 0.12s',
+                      display: 'flex', alignItems: 'center', gap: 12,
                     }}
                   >
-                    {ticked ? '✓ ' : ''}{equip.short}
+                    <span style={{
+                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                      background: ticked ? accent : '#f3f4f6',
+                      border: `2px solid ${ticked ? accent : '#d1d5db'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, color: ticked ? accent : 'transparent',
+                      fontWeight: 700,
+                    }}>✓</span>
+                    <span style={{
+                      fontSize: 13, fontWeight: ticked ? 600 : 400,
+                      color: ticked ? '#111827' : '#374151',
+                    }}>
+                      {check.label}
+                    </span>
                   </button>
                 )
               })}
@@ -468,6 +444,138 @@ function CheckGrid({ checks, stateKey, d, setD, selectedEquip, accent, checkGrou
 }
 
 // ── Wizard ────────────────────────────────────────────────────────────────────
+// Check sections definition - used per equipment type
+const CHECK_SECTIONS = [
+  { title: 'Visual Checks',      checks: VISUAL_CHECKS,      stateKey: 'visualChecks',      group: 'visual'      },
+  { title: 'Operation',          checks: OPERATION_CHECKS,   stateKey: 'operationChecks',   group: 'operation'   },
+  { title: 'Performance Tests',  checks: PERFORMANCE_CHECKS, stateKey: 'performanceChecks', group: 'performance' },
+]
+
+// QA checks rendered for all selected equipment types combined (not per-type)
+function QaDocStep({ d, setD, accent }) {
+  const toggle = (stateKey, checkId, equipId) => {
+    setD(prev => ({
+      ...prev,
+      [stateKey]: {
+        ...prev[stateKey],
+        [checkId]: { ...prev[stateKey]?.[checkId], [equipId]: !prev[stateKey]?.[checkId]?.[equipId] }
+      }
+    }))
+  }
+
+  const activeEquip = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
+
+  const renderSection = (title, checks, stateKey) => (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{title}</div>
+      {checks.map(check => {
+        const vals    = d[stateKey]?.[check.id] || {}
+        const ticked  = activeEquip.every(e => vals[e.id])
+        const partial = activeEquip.some(e => vals[e.id])
+        return (
+          <div key={check.id} style={{
+            marginBottom: 8, padding: '11px 14px', borderRadius: 10,
+            border: `2px solid ${ticked ? accent : partial ? accent + '60' : '#e5e7eb'}`,
+            background: ticked ? accent + '12' : '#fff',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: partial && !ticked ? 8 : 0 }}>
+              {check.label}
+            </div>
+            {activeEquip.length > 1 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                {activeEquip.map(equip => {
+                  const t = vals[equip.id]
+                  return (
+                    <button key={equip.id} onClick={() => toggle(stateKey, check.id, equip.id)} style={{
+                      padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                      border: `2px solid ${t ? accent : '#d1d5db'}`,
+                      background: t ? accent : '#f9fafb',
+                      color: t ? '#fff' : '#6b7280',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}>{t ? '✓ ' : ''}{equip.short}</button>
+                  )
+                })}
+              </div>
+            )}
+            {activeEquip.length === 1 && (
+              <button onClick={() => toggle(stateKey, check.id, activeEquip[0].id)}
+                style={{
+                  position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                  display: 'none',
+                }}
+              />
+            )}
+            {activeEquip.length === 1 && (() => {
+              const equip = activeEquip[0]
+              const t = vals[equip.id]
+              return null // single equip handled by outer div click
+            })()}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  // For single equip, make whole row clickable
+  const singleEquip = activeEquip.length === 1 ? activeEquip[0] : null
+
+  const renderSimple = (title, checks, stateKey) => (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {checks.map(check => {
+          const vals   = d[stateKey]?.[check.id] || {}
+          const ticked = singleEquip ? vals[singleEquip.id] : activeEquip.every(e => vals[e.id])
+          return (
+            <button
+              key={check.id}
+              onClick={() => {
+                if (singleEquip) {
+                  toggle(stateKey, check.id, singleEquip.id)
+                } else {
+                  const allTicked = activeEquip.every(e => vals[e.id])
+                  activeEquip.forEach(e => {
+                    if (vals[e.id] === allTicked) toggle(stateKey, check.id, e.id)
+                  })
+                }
+              }}
+              style={{
+                width: '100%', padding: '11px 14px', borderRadius: 10, textAlign: 'left',
+                border: `2px solid ${ticked ? accent : '#e5e7eb'}`,
+                background: ticked ? accent + '12' : '#fff',
+                cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: ticked ? accent : '#f3f4f6',
+                border: `2px solid ${ticked ? accent : '#d1d5db'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, color: ticked ? accent : 'transparent', fontWeight: 700,
+              }}>✓</span>
+              <span style={{ fontSize: 13, fontWeight: ticked ? 600 : 400, color: ticked ? '#111827' : '#374151' }}>
+                {check.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      {renderSimple('Quality Assurance',  QA_CHECKS,  'qaChecks')}
+      {renderSimple('Documentation',       DOC_CHECKS, 'docChecks')}
+      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Other (Optional)</div>
+      <WF label="Specify 1" v={d.other1} set={val => setD(p => ({...p, other1: val}))} accent={accent} />
+      <WF label="Specify 2" v={d.other2} set={val => setD(p => ({...p, other2: val}))} accent={accent} />
+      <WF label="Specify 3" v={d.other3} set={val => setD(p => ({...p, other3: val}))} accent={accent} />
+    </div>
+  )
+}
+
 export default function HVInspectionWizard({ onClose }) {
   const [d, setD]       = useState(initState)
   const [step, setStep] = useState(0)
@@ -487,26 +595,34 @@ export default function HVInspectionWizard({ onClose }) {
     setStep(draft.step || 0)
   }
 
-  const activeEquip = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
+  // ── Dynamic step list based on selected equipment ────────────────────────
+  // Steps: Job Details → Equipment Select → [one step per equip type] → QA/Doc → Signatures → Photos → Preview
+  const selectedEquipObjs = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
 
   const STEPS = [
     'Job Details',
     'Equipment Types',
-    'Visual Checks',
-    'Operation & Performance',
+    ...selectedEquipObjs.map(e => e.label),
     'QA & Documentation',
     'Signatures',
     'Photos',
     'Preview',
   ]
 
-  const isPreview = step === STEPS.length - 1
+  const EQUIP_STEP_START = 2
+  const EQUIP_STEP_END   = 2 + selectedEquipObjs.length  // exclusive
+  const QA_STEP          = EQUIP_STEP_END
+  const SIG_STEP         = QA_STEP + 1
+  const PHOTO_STEP       = SIG_STEP + 1
+  const PREVIEW_STEP     = PHOTO_STEP + 1
+
+  const isPreview     = step === PREVIEW_STEP
+  const isEquipStep   = step >= EQUIP_STEP_START && step < EQUIP_STEP_END
+  const currentEquip  = isEquipStep ? selectedEquipObjs[step - EQUIP_STEP_START] : null
 
   const handleNext = () => {
-    if (step === STEPS.length - 2) {
-      triggerGenerate(d, photos)
-    }
-    setStep(s => Math.min(s + 1, STEPS.length - 1))
+    if (step === PREVIEW_STEP - 1) triggerGenerate(d, photos)
+    setStep(s => Math.min(s + 1, PREVIEW_STEP))
   }
 
   const handleBack = () => {
@@ -526,144 +642,101 @@ export default function HVInspectionWizard({ onClose }) {
   if (d.selectedEquip.length === 0)     missingFields.push('Equipment Types')
   if (!d.wtlName)                        missingFields.push('Work Team Leader Name')
 
-  // ── Step content ──────────────────────────────────────────────────────────
-  const formSteps = [
+  // ── Render current step ───────────────────────────────────────────────────
+  const renderStep = () => {
+    if (isPreview) return null
 
     // Step 0 — Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={ACCENT}
-      formKey={FORM_KEY} formLabel={FORM_LABEL}
-      step={step} photos={photos} setPhotos={setPhotos}
-      onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
-    />,
+    if (step === 0) return (
+      <JobDetailsStep d={d} setD={setD} accent={ACCENT}
+        formKey={FORM_KEY} formLabel={FORM_LABEL}
+        step={step} photos={photos} setPhotos={setPhotos}
+        onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
+      />
+    )
 
-    // Step 1 — Equipment Types
-    <div key="1">
-      <SectionHead label="Which equipment is being commissioned?" accent={ACCENT} />
-      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, marginTop: 0 }}>
-        Select all equipment types that apply to this job. Only selected types will appear in the check steps.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {EQUIP_TYPES.map(e => {
-          const sel = d.selectedEquip.includes(e.id)
-          return (
-            <button
-              key={e.id}
-              onClick={() => setD(prev => ({
-                ...prev,
-                selectedEquip: sel
-                  ? prev.selectedEquip.filter(id => id !== e.id)
-                  : [...prev.selectedEquip, e.id]
-              }))}
-              style={{
-                width: '100%', padding: '12px 14px', borderRadius: 10, textAlign: 'left',
-                border: `2px solid ${sel ? ACCENT : '#e5e7eb'}`,
-                background: sel ? ACCENT + '12' : '#fff',
-                cursor: 'pointer', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', gap: 12,
-              }}
-            >
-              <span style={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                background: sel ? ACCENT : '#e5e7eb',
-                color: '#fff', fontSize: 13, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {sel ? '✓' : ''}
-              </span>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, color: sel ? ACCENT : '#111827' }}>{e.label}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{e.short}</div>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-      {d.selectedEquip.length > 0 && (
-        <div style={{ marginTop: 14, padding: '10px 14px', background: ACCENT + '12', borderRadius: 8, fontSize: 13, color: ACCENT, fontWeight: 600 }}>
-          {d.selectedEquip.length} type{d.selectedEquip.length !== 1 ? 's' : ''} selected
+    // Step 1 — Equipment Type selection
+    if (step === 1) return (
+      <div>
+        <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, marginTop: 0 }}>
+          Select all equipment types being commissioned. Each will get its own check step.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {EQUIP_TYPES.map(e => {
+            const sel = d.selectedEquip.includes(e.id)
+            return (
+              <button key={e.id}
+                onClick={() => setD(prev => ({
+                  ...prev,
+                  selectedEquip: sel
+                    ? prev.selectedEquip.filter(id => id !== e.id)
+                    : [...prev.selectedEquip, e.id]
+                }))}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10, textAlign: 'left',
+                  border: `2px solid ${sel ? ACCENT : '#e5e7eb'}`,
+                  background: sel ? ACCENT + '12' : '#fff',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                }}
+              >
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: sel ? ACCENT : '#e5e7eb',
+                  color: '#fff', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{sel ? '✓' : ''}</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: sel ? ACCENT : '#111827' }}>{e.label}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{e.short}</div>
+                </div>
+              </button>
+            )
+          })}
         </div>
-      )}
-    </div>,
+        {selectedEquipObjs.length > 0 && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: ACCENT + '12', borderRadius: 8, fontSize: 13, color: ACCENT, fontWeight: 600 }}>
+            {selectedEquipObjs.length} type{selectedEquipObjs.length !== 1 ? 's' : ''} selected — {selectedEquipObjs.length} check step{selectedEquipObjs.length !== 1 ? 's' : ''} will follow
+          </div>
+        )}
+      </div>
+    )
 
-    // Step 2 — Visual Checks
-    <div key="2">
-      <SectionHead label="Visual Checks" sub="Tap equipment type buttons to mark ✓ for each check" accent={ACCENT} />
-      <CheckGrid
-        checks={VISUAL_CHECKS}
-        stateKey="visualChecks"
+    // Equipment-specific check steps
+    if (isEquipStep && currentEquip) return (
+      <EquipCheckList
+        checkSections={CHECK_SECTIONS}
+        equip={currentEquip}
         d={d} setD={setD}
-        selectedEquip={d.selectedEquip}
-        accent={ACCENT}
-        checkGroup="visual"
-      />
-    </div>,
-
-    // Step 3 — Operation & Performance
-    <div key="3">
-      <SectionHead label="Operation" accent={ACCENT} />
-      <CheckGrid
-        checks={OPERATION_CHECKS}
-        stateKey="operationChecks"
-        d={d} setD={setD}
-        selectedEquip={d.selectedEquip}
-        accent={ACCENT}
-        checkGroup="operation"
-      />
-      <SectionHead label="Performance Tests" accent={ACCENT} />
-      <CheckGrid
-        checks={PERFORMANCE_CHECKS}
-        stateKey="performanceChecks"
-        d={d} setD={setD}
-        selectedEquip={d.selectedEquip}
-        accent={ACCENT}
-        checkGroup="performance"
-      />
-    </div>,
-
-    // Step 4 — QA & Documentation
-    <div key="4">
-      <SectionHead label="Quality Assurance" accent={ACCENT} />
-      <CheckGrid
-        checks={QA_CHECKS}
-        stateKey="qaChecks"
-        d={d} setD={setD}
-        selectedEquip={d.selectedEquip}
         accent={ACCENT}
       />
-      <SectionHead label="Documentation" accent={ACCENT} />
-      <CheckGrid
-        checks={DOC_CHECKS}
-        stateKey="docChecks"
-        d={d} setD={setD}
-        selectedEquip={d.selectedEquip}
-        accent={ACCENT}
-      />
-      <SectionHead label="Other (Optional)" accent={ACCENT} />
-      <WF label="Specify 1" v={d.other1} set={val => setD(p => ({...p, other1: val}))} accent={ACCENT} />
-      <WF label="Specify 2" v={d.other2} set={val => setD(p => ({...p, other2: val}))} accent={ACCENT} />
-      <WF label="Specify 3" v={d.other3} set={val => setD(p => ({...p, other3: val}))} accent={ACCENT} />
-    </div>,
+    )
 
-    // Step 5 — Signatures
-    <div key="5">
-      <SectionHead label="Work Team Leader" accent={ACCENT} />
-      <WF label="Name" v={d.wtlName}   set={val => setD(p => ({...p, wtlName: val}))}   accent={ACCENT} />
-      <WF label="Competency Cert No" v={d.wtlCertNo} set={val => setD(p => ({...p, wtlCertNo: val}))} accent={ACCENT} />
-      <WF label="Date" v={d.wtlDate} set={val => setD(p => ({...p, wtlDate: val}))} type="date" accent={ACCENT} />
-      <SignaturePad value={d.wtlSigned} onChange={val => setD(p => ({...p, wtlSigned: val}))} accent={ACCENT} />
+    // QA & Documentation
+    if (step === QA_STEP) return <QaDocStep d={d} setD={setD} accent={ACCENT} />
 
-      <SectionHead label="Field Switcher" accent={ACCENT} />
-      <WF label="Name" v={d.fsName}    set={val => setD(p => ({...p, fsName: val}))}    accent={ACCENT} />
-      <WF label="SIN / NAPA ID" v={d.fsSinNapa} set={val => setD(p => ({...p, fsSinNapa: val}))} accent={ACCENT} />
-      <SignaturePad value={d.fsSigned}  onChange={val => setD(p => ({...p, fsSigned: val}))}  accent={ACCENT} />
-    </div>,
+    // Signatures
+    if (step === SIG_STEP) return (
+      <div>
+        <SectionHead label="Work Team Leader" accent={ACCENT} />
+        <WF label="Name" v={d.wtlName}   set={val => setD(p => ({...p, wtlName: val}))}   accent={ACCENT} />
+        <WF label="Competency Cert No" v={d.wtlCertNo} set={val => setD(p => ({...p, wtlCertNo: val}))} accent={ACCENT} />
+        <WF label="Date" v={d.wtlDate} set={val => setD(p => ({...p, wtlDate: val}))} type="date" accent={ACCENT} />
+        <SignaturePad value={d.wtlSigned} onChange={val => setD(p => ({...p, wtlSigned: val}))} accent={ACCENT} />
+        <SectionHead label="Field Switcher" accent={ACCENT} />
+        <WF label="Name" v={d.fsName}    set={val => setD(p => ({...p, fsName: val}))}    accent={ACCENT} />
+        <WF label="SIN / NAPA ID" v={d.fsSinNapa} set={val => setD(p => ({...p, fsSinNapa: val}))} accent={ACCENT} />
+        <SignaturePad value={d.fsSigned}  onChange={val => setD(p => ({...p, fsSigned: val}))}  accent={ACCENT} />
+      </div>
+    )
 
-    // Step 6 — Photos
-    <PhotoAttachStep key="6" photos={photos} onChange={setPhotos} accent={ACCENT} />,
+    // Photos
+    if (step === PHOTO_STEP) return (
+      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ACCENT} />
+    )
 
-    // Step 7 — Preview
-    <div key="7" />,
-  ]
+    return null
+  }
 
   return (
     <WizardShell
@@ -672,7 +745,7 @@ export default function HVInspectionWizard({ onClose }) {
       headerIcon={<FileText size={22} color="#fff" />}
       steps={STEPS}
       step={step}
-      onStepClick={setStep}
+      onStepClick={i => i <= step && setStep(i)}
       onClose={onClose}
       onBack={handleBack}
       onNext={handleNext}
@@ -684,7 +757,7 @@ export default function HVInspectionWizard({ onClose }) {
       missingFields={isPreview && missingFields.length > 0 ? missingFields : null}
       previewContent={buildPreviewContent(handleShare, ACCENT)}
     >
-      {!isPreview && formSteps[step]}
+      {renderStep()}
 
       <DraftPicker
         open={draftPickerOpen}
