@@ -208,8 +208,11 @@ function initState() {
     performanceChecks: initChecks(PERFORMANCE_CHECKS),
     qaChecks:          initChecks(QA_CHECKS),
     docChecks:         initChecks(DOC_CHECKS),
-    // Signatures
-    wtlName: '', wtlSigned: '', wtlCertNo: '', wtlDate: '',
+    // Signatures — WTL fields pre-filled from user settings
+    wtlName:   prefs.namePrint || '',
+    wtlSigned: prefs.signed    || '',
+    wtlCertNo: prefs.certNo    || '',
+    // date uses dateWorkCompleted from job details step
     fsName:  '', fsSigned:  '', fsSinNapa: '',
     // Other specify fields
     other1: '', other2: '', other3: '',
@@ -228,7 +231,6 @@ async function generateHvPdf(d, photos) {
   const p2    = pages[1]
   const p3    = pages[2]
 
-  const BLUE = rgb(0/255, 20/255, 160/255)
   // Two-line checkmark matching all other wizards
   // x, y are pdf-lib bottom-origin coordinates (centre of cell)
   // Tick positioned relative to cell centre (x, y = bottom-origin pdf coords)
@@ -240,11 +242,13 @@ async function generateHvPdf(d, photos) {
     page.drawLine({ start: { x: bx+3, y: by - 9 }, end: { x: bx+9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
 
+  // Text color matches other wizards (deep navy blue)
+  const BLUE = rgb(0/255, 20/255, 160/255)
   const textAt = (page, text, x, y, size = 8) => {
     if (!text) return
     page.drawText(String(text), {
       x, y, size, font,
-      color: rgb(0, 0, 0),
+      color: BLUE,
       maxWidth: 160,
     })
   }
@@ -307,7 +311,7 @@ async function generateHvPdf(d, photos) {
   // ── Page 3 — Signatures ─────────────────────────────────────────────────
   textAt(p3, d.wtlName,   P3.wtlName.x,  P3.wtlName.y)
   textAt(p3, d.wtlCertNo, P3.certNo.x,   P3.certNo.y)
-  textAt(p3, d.wtlDate,   P3.date.x,     P3.date.y)
+  textAt(p3, d.dateWorkCompleted, P3.date.x, P3.date.y)
   textAt(p3, d.fsName,    P3.fsName.x,   P3.fsName.y)
   textAt(p3, d.fsSinNapa, P3.sinNapa.x,  P3.sinNapa.y)
 
@@ -718,11 +722,31 @@ export default function HVInspectionWizard({ onClose }) {
     // Signatures
     if (step === SIG_STEP) return (
       <div>
-        <SectionHead label="Work Team Leader" accent={ACCENT} />
-        <WF label="Name" v={d.wtlName}   set={val => setD(p => ({...p, wtlName: val}))}   accent={ACCENT} />
-        <WF label="Competency Cert No" v={d.wtlCertNo} set={val => setD(p => ({...p, wtlCertNo: val}))} accent={ACCENT} />
-        <WF label="Date" v={d.wtlDate} set={val => setD(p => ({...p, wtlDate: val}))} type="date" accent={ACCENT} />
-        <SignaturePad value={d.wtlSigned} onChange={val => setD(p => ({...p, wtlSigned: val}))} accent={ACCENT} />
+        {/* WTL details come from User Settings — shown as read-only confirmation */}
+        <SectionHead label="Work Team Leader" sub="Pre-filled from your settings" accent={ACCENT} />
+        <div style={{
+          background: ACCENT + '10', border: `1px solid ${ACCENT}30`,
+          borderRadius: 10, padding: '12px 14px', marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Name</div>
+          <div style={{ fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+            {d.wtlName || <span style={{ color: '#ef4444', fontSize: 13 }}>⚠ Not set — go to My Details in settings</span>}
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Competency Cert No.</div>
+          <div style={{ fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+            {d.wtlCertNo || <span style={{ color: '#ef4444', fontSize: 13 }}>⚠ Not set — go to My Details in settings</span>}
+          </div>
+          {d.wtlSigned && (
+            <div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Signature</div>
+              <img src={d.wtlSigned} alt="signature" style={{ maxHeight: 40, borderRadius: 4, background: '#fff', padding: 4 }} />
+            </div>
+          )}
+          {!d.wtlSigned && (
+            <div style={{ fontSize: 13, color: '#ef4444' }}>⚠ No signature — go to My Details in settings</div>
+          )}
+        </div>
+
         <SectionHead label="Field Switcher" accent={ACCENT} />
         <WF label="Name" v={d.fsName}    set={val => setD(p => ({...p, fsName: val}))}    accent={ACCENT} />
         <WF label="SIN / NAPA ID" v={d.fsSinNapa} set={val => setD(p => ({...p, fsSinNapa: val}))} accent={ACCENT} />

@@ -6,7 +6,7 @@
  * without the user being asked each time.
  */
 import { useState, useEffect } from 'react'
-import { CheckCircle2, User, Building2, PenLine, Trash2 } from 'lucide-react'
+import { CheckCircle2, User, Building2, PenLine, Trash2, FileText } from 'lucide-react'
 import { getUserPrefs, saveUserPref } from './userPrefs'
 import { SignaturePad } from './SignaturePad'
 import { APP_ACCENT } from './constants'
@@ -14,6 +14,7 @@ import { APP_ACCENT } from './constants'
 export function UserSettings({ onClose }) {
   const [contractor, setContractor] = useState('')
   const [namePrint,  setNamePrint]  = useState('')
+  const [certNo,     setCertNo]     = useState('')
   const [signed,     setSigned]     = useState('')
   const [saved,      setSaved]      = useState(false)
 
@@ -22,12 +23,14 @@ export function UserSettings({ onClose }) {
     const prefs = getUserPrefs()
     setContractor(prefs.contractor || '')
     setNamePrint(prefs.namePrint   || '')
+    setCertNo(prefs.certNo         || '')
     setSigned(prefs.signed         || '')
   }, [])
 
   const handleSave = () => {
     saveUserPref('contractor', contractor)
     saveUserPref('namePrint',  namePrint)
+    saveUserPref('certNo',     certNo)
     saveUserPref('signed',     signed)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -37,9 +40,11 @@ export function UserSettings({ onClose }) {
     if (!window.confirm('Clear all saved user details?')) return
     saveUserPref('contractor', '')
     saveUserPref('namePrint',  '')
+    saveUserPref('certNo',     '')
     saveUserPref('signed',     '')
     setContractor('')
     setNamePrint('')
+    setCertNo('')
     setSigned('')
   }
 
@@ -140,6 +145,23 @@ export function UserSettings({ onClose }) {
             value={namePrint}
             onChange={e => setNamePrint(e.target.value)}
             placeholder="e.g. Donald Win"
+            style={inp}
+            onFocus={e => e.target.style.borderColor = APP_ACCENT}
+            onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}
+          />
+        </div>
+
+        {/* Competency Cert No */}
+        <div style={section}>
+          <label style={lbl}>
+            <FileText size={14} />
+            Competency Cert No.
+          </label>
+          <input
+            type="text"
+            value={certNo}
+            onChange={e => setCertNo(e.target.value)}
+            placeholder="e.g. EW123456"
             style={inp}
             onFocus={e => e.target.style.borderColor = APP_ACCENT}
             onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}

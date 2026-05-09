@@ -5,6 +5,7 @@
  *   rf_pref_contractor        — contractor company name
  *   rf_pref_namePrint         — tech's printed name
  *   rf_pref_signed            — signature dataURL
+ *   rf_pref_certNo            — competency certificate number
  *   rf_pref_dateWorkCompleted — last-used date (YYYY-MM-DD), refreshed to today on each load
  */
 
@@ -12,6 +13,7 @@ const KEYS = {
   contractor:        'rf_pref_contractor',
   namePrint:         'rf_pref_namePrint',
   signed:            'rf_pref_signed',
+  certNo:            'rf_pref_certNo',
   dateWorkCompleted: 'rf_pref_dateWorkCompleted',
 }
 
@@ -25,7 +27,7 @@ function todayString() {
 }
 
 /**
- * Returns { contractor, namePrint, signed, dateWorkCompleted } from localStorage.
+ * Returns { contractor, namePrint, signed, certNo, dateWorkCompleted } from localStorage.
  * dateWorkCompleted always returns today — it's used to pre-fill the field,
  * and the tech can change it if the work was done on a different day.
  */
@@ -34,6 +36,7 @@ export function getUserPrefs() {
     contractor:        localStorage.getItem(KEYS.contractor)        || '',
     namePrint:         localStorage.getItem(KEYS.namePrint)         || '',
     signed:            localStorage.getItem(KEYS.signed)            || '',
+    certNo:            localStorage.getItem(KEYS.certNo)            || '',
     dateWorkCompleted: todayString(),
   }
 }
