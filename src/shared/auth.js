@@ -17,8 +17,8 @@ export const APP_ID = 'reformer'
 
 const DEVICE_ID_KEY  = 'dcw-device-id'
 const AUTH_CACHE_KEY = 're-former-auth-cache'
-const POLL_MS        = 1_800_000 // 30 minutes — ~48 req/day per user
-const CHECK_COOLDOWN = 120_000  // 2 minutes — minimum gap between visibility/online checks
+const POLL_MS        = 14_400_000 // 4 hours — ~6 req/day per user
+const CHECK_COOLDOWN = 3_600_000 // 1 hour — minimum gap between visibility/online checks
 
 let _lastCheckedAt = 0  // timestamp of most recent successful network check
 
