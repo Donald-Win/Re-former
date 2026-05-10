@@ -317,7 +317,6 @@ const AsBuiltFormSelector = () => {
     '360S014EV': { name: 'As-built Network Communications Equipment Record',                fileName: '360S014EV.pdf' },
     '360S014EW': { name: 'As-built Remote Terminal Unit Equipment Record',                  fileName: '360S014EW.pdf' },
     '360F019CA': { name: 'Drawing Approval Form',                                           fileName: '360F019CA.pdf' },
-    '122F007':  { name: 'Electricity Network Damage Report', fileName: '122F007_Electricity_Network_Damage_Report.pdf' },
     'MFG_CERT':  { name: 'Manufacturer Test Certificates',                                  fileName: null },
   }
 
