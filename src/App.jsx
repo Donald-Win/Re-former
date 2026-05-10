@@ -10,7 +10,6 @@ import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import ZoneSubWizard from './wizards/ZoneSubWizard'
 import HVInspectionWizard from './wizards/HVInspectionWizard'
-import NDRWizard from './wizards/NDRWizard'
 import { AuthGate } from './auth/AuthGate'
 import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
@@ -64,13 +63,6 @@ const WIZARD_CONFIG = {
     fileName:  '360S014ED.pdf',
     accent:    '#16a34a',
     Component: LvBoxWizard,
-  },
-  '122F007': {
-    label:     '122F007 – Electricity Network Damage Report',
-    pdfName:   'Network Damage Report',
-    fileName:  '122F007_Electricity_Network_Damage_Report.pdf',
-    accent:    '#dc2626',
-    Component: NDRWizard,
   },
   '220F028A': {
     label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
@@ -285,14 +277,7 @@ const AsBuiltFormSelector = () => {
     '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
     '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
     '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
-    '122F007': {
-    label:     '122F007 – Electricity Network Damage Report',
-    pdfName:   'Network Damage Report',
-    fileName:  '122F007_Electricity_Network_Damage_Report.pdf',
-    accent:    '#dc2626',
-    Component: NDRWizard,
-  },
-  '220F028A': {
+    '220F028A': {
     label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
     pdfName:   'HV Inspection Certificate',
     fileName:  '220F028A.pdf',
@@ -321,14 +306,7 @@ const AsBuiltFormSelector = () => {
   }
 
   const commissioningCerts = {
-    '122F007': {
-    label:     '122F007 – Electricity Network Damage Report',
-    pdfName:   'Network Damage Report',
-    fileName:  '122F007_Electricity_Network_Damage_Report.pdf',
-    accent:    '#dc2626',
-    Component: NDRWizard,
-  },
-  '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works',                    fileName: '220F028A.pdf' },
+    '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works',                    fileName: '220F028A.pdf' },
     '220F028B': { name: 'Distribution Transformer Commissioning Certificate',                           fileName: '220F028B.pdf' },
     '220F028C': { name: 'LV Service Boxes, Cabinets and Subterranean Vaults Commissioning Certificate', fileName: '220F028C.pdf' },
     '220F028D': { name: 'LV Link Boxes and Link Cabinets Test Certificate',                             fileName: '220F028D.pdf' },
