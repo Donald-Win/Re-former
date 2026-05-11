@@ -153,6 +153,13 @@ const DOC_CHECKS = [
   { id: 'dc1', label: 'Defects Recorded' },
 ]
 
+// Other rows — labels are editable by the user
+const OTHER_CHECKS = [
+  { id: 'ot0', label: 'Other (Specify 1)' },
+  { id: 'ot1', label: 'Other (Specify 2)' },
+  { id: 'ot2', label: 'Other (Specify 3)' },
+]
+
 // ── PDF coordinates ───────────────────────────────────────────────────────────
 // Page 1 - Visual Checks table
 // Column x centres (13 equipment types, left → right)
@@ -166,8 +173,11 @@ const P1_TITLE = { x: 218, y: 717 }
 const P2_COL_X = [249, 273, 297, 321, 345, 369, 393, 417, 441, 465, 489, 513, 537]
 const P2_ROW_Y = [593, 575, 557, 538, 520, 501, 483, 464, 446, 427, 409, 390, 372, 353, 335, 316, 293]
 // QA + Doc rows (estimated — calibrate with CoordOverlay if needed)
-const P2_QA_Y  = [269, 251]   // Construction Standards, Safety Standards
-const P2_DOC_Y = [230, 211]   // As Built Info Recorded, Defects Recorded
+const P2_QA_Y    = [267, 248]   // Construction Standards, Safety Standards
+const P2_DOC_Y   = [230, 211]   // As Built Info Recorded, Defects Recorded
+const P2_OTHER_Y = [200, 182, 163]  // Other (Specify) rows 1-3
+// x position for Other row label text (left of table)
+const P2_OTHER_LABEL_X = 60
 
 // Page 3 - Signatures
 const P3 = {
@@ -208,6 +218,9 @@ function initState() {
     performanceChecks: initChecks(PERFORMANCE_CHECKS),
     qaChecks:          initChecks(QA_CHECKS),
     docChecks:         initChecks(DOC_CHECKS),
+    otherChecks:       initChecks(OTHER_CHECKS),
+    // Other specify labels (editable row labels)
+    other1: '', other2: '', other3: '',
     // Signatures — WTL fields pre-filled from user settings
     wtlName:   prefs.namePrint || '',
     wtlSigned: prefs.signed    || '',
@@ -346,7 +359,7 @@ async function generateHvPdf(d, photos) {
 // ── EquipCheckList ────────────────────────────────────────────────────────────
 // Shows checks for ONE equipment type as simple tick toggles.
 // Only renders rows that are applicable (not N/A) for this equipment type.
-function EquipCheckList({ checkSections, equip, d, setD, accent }) {
+function EquipCheckList({ checkSections, equip, d, setD, accent, onOtherLabel }) {
   const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
 
   const toggle = (stateKey, checkId) => {
@@ -380,6 +393,7 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
         const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
         if (applicable.length === 0) return null
         const allTicked = applicable.every(c => d[stateKey]?.[c.id]?.[equip.id])
+        const isOther   = group === 'other'
 
         return (
           <div key={stateKey} style={{ marginBottom: 18 }}>
@@ -410,33 +424,57 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
               {applicable.map(check => {
                 const ticked = !!d[stateKey]?.[check.id]?.[equip.id]
                 return (
-                  <button
-                    key={check.id}
-                    onClick={() => toggle(stateKey, check.id)}
-                    style={{
-                      width: '100%', padding: '11px 14px',
-                      borderRadius: 10, textAlign: 'left',
-                      border: `2px solid ${ticked ? accent : '#e5e7eb'}`,
-                      background: ticked ? accent + '12' : '#fff',
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      display: 'flex', alignItems: 'center', gap: 12,
-                    }}
-                  >
-                    <span style={{
-                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                      background: ticked ? accent : '#f3f4f6',
-                      border: `2px solid ${ticked ? accent : '#d1d5db'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 12, color: ticked ? accent : 'transparent',
-                      fontWeight: 700,
-                    }}>✓</span>
-                    <span style={{
-                      fontSize: 13, fontWeight: ticked ? 600 : 400,
-                      color: ticked ? '#111827' : '#374151',
-                    }}>
-                      {check.label}
-                    </span>
-                  </button>
+                  <div key={check.id} style={{ marginBottom: 4 }}>
+                    {isOther && (
+                      <input
+                        type="text"
+                        placeholder="Specify what this check covers…"
+                        value={
+                          check.id === 'ot0' ? (d.other1 || '') :
+                          check.id === 'ot1' ? (d.other2 || '') : (d.other3 || '')
+                        }
+                        onChange={e => {
+                          const key = check.id === 'ot0' ? 'other1' : check.id === 'ot1' ? 'other2' : 'other3'
+                          setD(p => ({...p, [key]: e.target.value}))
+                        }}
+                        style={{
+                          width: '100%', padding: '7px 10px', borderRadius: 8, marginBottom: 4,
+                          border: '1.5px solid #d1d5db', fontSize: 12,
+                          fontFamily: 'inherit', boxSizing: 'border-box',
+                          background: '#fafafa',
+                        }}
+                      />
+                    )}
+                    <button
+                      onClick={() => toggle(stateKey, check.id)}
+                      style={{
+                        width: '100%', padding: '11px 14px',
+                        borderRadius: 10, textAlign: 'left',
+                        border: `2px solid ${ticked ? accent : '#e5e7eb'}`,
+                        background: ticked ? accent + '12' : '#fff',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        display: 'flex', alignItems: 'center', gap: 12,
+                      }}
+                    >
+                      <span style={{
+                        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                        background: ticked ? accent : '#f3f4f6',
+                        border: `2px solid ${ticked ? accent : '#d1d5db'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, color: ticked ? accent : 'transparent',
+                        fontWeight: 700,
+                      }}>✓</span>
+                      <span style={{
+                        fontSize: 13, fontWeight: ticked ? 600 : 400,
+                        color: ticked ? '#111827' : '#374151',
+                      }}>
+                        {isOther
+                          ? (check.id === 'ot0' ? (d.other1 || 'Specify 1') :
+                             check.id === 'ot1' ? (d.other2 || 'Specify 2') : (d.other3 || 'Specify 3'))
+                          : check.label}
+                      </span>
+                    </button>
+                  </div>
                 )
               })}
             </div>
@@ -453,132 +491,12 @@ const CHECK_SECTIONS = [
   { title: 'Visual Checks',      checks: VISUAL_CHECKS,      stateKey: 'visualChecks',      group: 'visual'      },
   { title: 'Operation',          checks: OPERATION_CHECKS,   stateKey: 'operationChecks',   group: 'operation'   },
   { title: 'Performance Tests',  checks: PERFORMANCE_CHECKS, stateKey: 'performanceChecks', group: 'performance' },
+  { title: 'QA',                 checks: QA_CHECKS,          stateKey: 'qaChecks',          group: 'qa'          },
+  { title: 'Documentation',      checks: DOC_CHECKS,         stateKey: 'docChecks',         group: 'doc'         },
+  { title: 'Other',              checks: OTHER_CHECKS,       stateKey: 'otherChecks',       group: 'other'       },
 ]
 
 // QA checks rendered for all selected equipment types combined (not per-type)
-function QaDocStep({ d, setD, accent }) {
-  const toggle = (stateKey, checkId, equipId) => {
-    setD(prev => ({
-      ...prev,
-      [stateKey]: {
-        ...prev[stateKey],
-        [checkId]: { ...prev[stateKey]?.[checkId], [equipId]: !prev[stateKey]?.[checkId]?.[equipId] }
-      }
-    }))
-  }
-
-  const activeEquip = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
-
-  const renderSection = (title, checks, stateKey) => (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{title}</div>
-      {checks.map(check => {
-        const vals    = d[stateKey]?.[check.id] || {}
-        const ticked  = activeEquip.every(e => vals[e.id])
-        const partial = activeEquip.some(e => vals[e.id])
-        return (
-          <div key={check.id} style={{
-            marginBottom: 8, padding: '11px 14px', borderRadius: 10,
-            border: `2px solid ${ticked ? accent : partial ? accent + '60' : '#e5e7eb'}`,
-            background: ticked ? accent + '12' : '#fff',
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: partial && !ticked ? 8 : 0 }}>
-              {check.label}
-            </div>
-            {activeEquip.length > 1 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
-                {activeEquip.map(equip => {
-                  const t = vals[equip.id]
-                  return (
-                    <button key={equip.id} onClick={() => toggle(stateKey, check.id, equip.id)} style={{
-                      padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-                      border: `2px solid ${t ? accent : '#d1d5db'}`,
-                      background: t ? accent : '#f9fafb',
-                      color: t ? '#fff' : '#6b7280',
-                      cursor: 'pointer', fontFamily: 'inherit',
-                    }}>{t ? '✓ ' : ''}{equip.short}</button>
-                  )
-                })}
-              </div>
-            )}
-            {activeEquip.length === 1 && (
-              <button onClick={() => toggle(stateKey, check.id, activeEquip[0].id)}
-                style={{
-                  position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                  display: 'none',
-                }}
-              />
-            )}
-            {activeEquip.length === 1 && (() => {
-              const equip = activeEquip[0]
-              const t = vals[equip.id]
-              return null // single equip handled by outer div click
-            })()}
-          </div>
-        )
-      })}
-    </div>
-  )
-
-  // For single equip, make whole row clickable
-  const singleEquip = activeEquip.length === 1 ? activeEquip[0] : null
-
-  const renderSimple = (title, checks, stateKey) => (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {checks.map(check => {
-          const vals   = d[stateKey]?.[check.id] || {}
-          const ticked = singleEquip ? vals[singleEquip.id] : activeEquip.every(e => vals[e.id])
-          return (
-            <button
-              key={check.id}
-              onClick={() => {
-                if (singleEquip) {
-                  toggle(stateKey, check.id, singleEquip.id)
-                } else {
-                  const allTicked = activeEquip.every(e => vals[e.id])
-                  activeEquip.forEach(e => {
-                    if (vals[e.id] === allTicked) toggle(stateKey, check.id, e.id)
-                  })
-                }
-              }}
-              style={{
-                width: '100%', padding: '11px 14px', borderRadius: 10, textAlign: 'left',
-                border: `2px solid ${ticked ? accent : '#e5e7eb'}`,
-                background: ticked ? accent + '12' : '#fff',
-                cursor: 'pointer', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', gap: 12,
-              }}
-            >
-              <span style={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                background: ticked ? accent : '#f3f4f6',
-                border: `2px solid ${ticked ? accent : '#d1d5db'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, color: ticked ? accent : 'transparent', fontWeight: 700,
-              }}>✓</span>
-              <span style={{ fontSize: 13, fontWeight: ticked ? 600 : 400, color: ticked ? '#111827' : '#374151' }}>
-                {check.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-
-  return (
-    <div>
-      {renderSimple('Quality Assurance',  QA_CHECKS,  'qaChecks')}
-      {renderSimple('Documentation',       DOC_CHECKS, 'docChecks')}
-      <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Other (Optional)</div>
-      <WF label="Specify 1" v={d.other1} set={val => setD(p => ({...p, other1: val}))} accent={accent} />
-      <WF label="Specify 2" v={d.other2} set={val => setD(p => ({...p, other2: val}))} accent={accent} />
-      <WF label="Specify 3" v={d.other3} set={val => setD(p => ({...p, other3: val}))} accent={accent} />
-    </div>
-  )
-}
 
 export default function HVInspectionWizard({ onClose }) {
   const [d, setD]       = useState(initState)
@@ -607,7 +525,6 @@ export default function HVInspectionWizard({ onClose }) {
     'Job Details',
     'Equipment Types',
     ...selectedEquipObjs.map(e => e.label),
-    'QA & Documentation',
     'Signatures',
     'Photos',
     'Preview',
@@ -615,8 +532,7 @@ export default function HVInspectionWizard({ onClose }) {
 
   const EQUIP_STEP_START = 2
   const EQUIP_STEP_END   = 2 + selectedEquipObjs.length  // exclusive
-  const QA_STEP          = EQUIP_STEP_END
-  const SIG_STEP         = QA_STEP + 1
+  const SIG_STEP         = EQUIP_STEP_END
   const PHOTO_STEP       = SIG_STEP + 1
   const PREVIEW_STEP     = PHOTO_STEP + 1
 
@@ -714,9 +630,6 @@ export default function HVInspectionWizard({ onClose }) {
         accent={ACCENT}
       />
     )
-
-    // QA & Documentation
-    if (step === QA_STEP) return <QaDocStep d={d} setD={setD} accent={ACCENT} />
 
     // Signatures — WTL loaded silently from user settings (same as other wizards)
     if (step === SIG_STEP) return (
