@@ -175,19 +175,20 @@ const P2_ROW_Y = [593, 575, 557, 538, 520, 501, 483, 464, 446, 427, 409, 390, 37
 // QA + Doc rows (estimated — calibrate with CoordOverlay if needed)
 const P2_QA_Y    = [267, 248]   // Construction Standards, Safety Standards
 const P2_DOC_Y   = [230, 211]   // As Built Info Recorded, Defects Recorded
-const P2_OTHER_Y = [200, 182, 163]  // Other (Specify) rows 1-3
-// x position for Other row label text (left of table)
-const P2_OTHER_LABEL_X = 60
+// Other (Specify) rows — column x centres match P2 layout exactly
+const P2_OTHER_COL_X = [249, 273, 297, 321, 345, 369, 393, 417, 440, 464, 488, 513, 537]
+const P2_OTHER_Y     = [195, 177, 158]   // row pdfY centres (3 rows)
+const P2_OTHER_LABEL_X = 100             // x for label text in row
 
 // Page 3 - Signatures
 const P3 = {
-  wtlName:   { x: 218, y: 724 },
-  wtlSigned: { x: 430, y: 710 },  // signature image
-  certNo:    { x: 218, y: 699 },
-  date:      { x: 420, y: 699 },
-  fsName:    { x: 218, y: 648 },
-  fsSigned:  { x: 430, y: 634 },  // signature image
-  sinNapa:   { x: 108, y: 620 },
+  wtlName:   { x: 193, y: 717 },  // text 3pt above underline at pdfY=714
+  wtlSigned: { x: 383, y: 696 },  // sig image (h=18) bottom sits on underline
+  certNo:    { x: 193, y: 691 },  // underline at pdfY=688
+  date:      { x: 383, y: 691 },  // same row as certNo
+  fsName:    { x: 173, y: 665 },  // underline at pdfY=662
+  fsSigned:  { x: 383, y: 644 },  // sig image bottom on underline at 662
+  sinNapa:   { x: 173, y: 640 },  // underline at pdfY=637
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -219,8 +220,6 @@ function initState() {
     qaChecks:          initChecks(QA_CHECKS),
     docChecks:         initChecks(DOC_CHECKS),
     otherChecks:       initChecks(OTHER_CHECKS),
-    // Other specify labels (editable row labels)
-    other1: '', other2: '', other3: '',
     // Signatures — WTL fields pre-filled from user settings
     wtlName:   prefs.namePrint || '',
     wtlSigned: prefs.signed    || '',
@@ -320,6 +319,19 @@ async function generateHvPdf(d, photos) {
       }
     })
   })
+
+  // ── Page 2 — Other (Specify) rows ────────────────────────────────────────
+  OTHER_CHECKS.forEach((check, rowIdx) => {
+    const equipCols = d.otherChecks?.[check.id] || {}
+    const labelKey  = rowIdx === 0 ? 'other1' : rowIdx === 1 ? 'other2' : 'other3'
+    const labelText = d[labelKey]
+    const rowY      = P2_OTHER_Y[rowIdx]
+    if (labelText) textAt(p2, labelText, P2_OTHER_LABEL_X, rowY, 7)
+    EQUIP_TYPES.forEach((equip, colIdx) => {
+      if (equipCols[equip.id]) tick(p2, P2_OTHER_COL_X[colIdx], rowY)
+    })
+  })
+
 
   // ── Page 3 — Signatures ─────────────────────────────────────────────────
   textAt(p3, d.wtlName,   P3.wtlName.x,  P3.wtlName.y)
