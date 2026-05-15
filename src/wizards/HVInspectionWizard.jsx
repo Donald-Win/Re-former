@@ -387,24 +387,37 @@ function EquipCheckList({ checkSections, equip, d, setD, accent, onOtherLabel })
     }))
   }
 
-  const tickAll = (stateKey, checks, group) => {
-    const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
-    const allTicked  = applicable.every(c => d[stateKey]?.[c.id]?.[equip.id])
+  // Tick all applicable checks across ALL non-Other sections at once
+  const tickAllSections = () => {
+    const nonOther = checkSections.filter(s => s.group !== 'other')
+    const allTicked = nonOther.every(({ checks, stateKey, group }) =>
+      checks.filter((_, ri) => !isNA(group, ri, colIdx))
+            .every(c => d[stateKey]?.[c.id]?.[equip.id])
+    )
     setD(prev => {
-      const updated = { ...prev[stateKey] }
-      applicable.forEach(c => {
-        updated[c.id] = { ...updated[c.id], [equip.id]: !allTicked }
+      const next = { ...prev }
+      nonOther.forEach(({ checks, stateKey, group }) => {
+        const updated = { ...next[stateKey] }
+        checks.filter((_, ri) => !isNA(group, ri, colIdx)).forEach(c => {
+          updated[c.id] = { ...updated[c.id], [equip.id]: !allTicked }
+        })
+        next[stateKey] = updated
       })
-      return { ...prev, [stateKey]: updated }
+      return next
     })
   }
+
+  const nonOtherSections = checkSections.filter(s => s.group !== 'other')
+  const allNonOtherTicked = nonOtherSections.every(({ checks, stateKey, group }) =>
+    checks.filter((_, ri) => !isNA(group, ri, colIdx))
+          .every(c => d[stateKey]?.[c.id]?.[equip.id])
+  )
 
   return (
     <div>
       {checkSections.map(({ title, checks, stateKey, group }) => {
         const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
         if (applicable.length === 0) return null
-        const allTicked = applicable.every(c => d[stateKey]?.[c.id]?.[equip.id])
         const isOther   = group === 'other'
 
         return (
@@ -417,19 +430,6 @@ function EquipCheckList({ checkSections, equip, d, setD, accent, onOtherLabel })
                 fontSize: 11, fontWeight: 700, color: accent,
                 textTransform: 'uppercase', letterSpacing: '0.07em',
               }}>{title}</div>
-              <button
-                onClick={() => tickAll(stateKey, checks, group)}
-                style={{
-                  padding: '3px 10px', borderRadius: 6,
-                  border: `1px solid ${accent}`,
-                  background: allTicked ? accent : '#fff',
-                  color: allTicked ? '#fff' : accent,
-                  fontSize: 11, fontWeight: 700,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                {allTicked ? '✓ All' : 'Tick All'}
-              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -493,6 +493,21 @@ function EquipCheckList({ checkSections, equip, d, setD, accent, onOtherLabel })
           </div>
         )
       })}
+
+      {/* Single Tick All button at bottom — excludes Other sections */}
+      <button
+        onClick={tickAllSections}
+        style={{
+          width: '100%', padding: '13px', marginTop: 4,
+          borderRadius: 12, border: `2px solid ${accent}`,
+          background: allNonOtherTicked ? accent : '#fff',
+          color: allNonOtherTicked ? '#fff' : accent,
+          fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+          cursor: 'pointer', transition: 'all 0.15s',
+        }}
+      >
+        {allNonOtherTicked ? '✓ All Checks Ticked' : 'Tick All Checks'}
+      </button>
     </div>
   )
 }
