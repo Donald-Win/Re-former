@@ -165,30 +165,30 @@ const OTHER_CHECKS = [
 // Column x centres (13 equipment types, left → right)
 const P1_COL_X = [231, 256, 281, 307, 332, 357, 383, 408, 433, 458, 484, 509, 535]
 // Row y centres (15 visual check rows, top → bottom in pdf-lib bottom-origin coords)
-const P1_ROW_Y = [430, 406, 383, 355, 333, 310, 288, 271, 254, 237, 219, 202, 185, 168, 151]
+const P1_ROW_Y = [430, 406, 383, 355, 333, 309, 288, 271, 254, 237, 219, 202, 187, 168, 148]
 // Project Title field
-const P1_TITLE = { x: 218, y: 717 }
+const P1_TITLE = { x: 135, y: 725 }
 
 // Page 2 - Operation (rows 0-3) + Performance Tests (rows 4-16)
 const P2_COL_X = [249, 273, 297, 321, 345, 369, 393, 417, 441, 465, 489, 513, 537]
-const P2_ROW_Y = [593, 575, 557, 538, 520, 501, 483, 464, 446, 427, 409, 390, 372, 353, 335, 316, 293]
+const P2_ROW_Y = [593, 575, 558, 538, 520, 501, 483, 464, 446, 427, 409, 390, 372, 353, 335, 316, 293]
 // QA + Doc rows (estimated — calibrate with CoordOverlay if needed)
-const P2_QA_Y    = [267, 248]   // Construction Standards, Safety Standards
-const P2_DOC_Y   = [230, 211]   // As Built Info Recorded, Defects Recorded
+const P2_QA_Y    = [269, 250]   // Construction Standards, Safety Standards
+const P2_DOC_Y   = [232, 213]   // As Built Info Recorded, Defects Recorded
 // Other (Specify) rows — column x centres match P2 layout exactly
 const P2_OTHER_COL_X = [249, 273, 297, 321, 345, 369, 393, 417, 440, 464, 488, 513, 537]
-const P2_OTHER_Y     = [195, 177, 158]   // row pdfY centres (3 rows)
-const P2_OTHER_LABEL_X = 100             // x for label text in row
+const P2_OTHER_Y     = [194, 176, 157]   // row pdfY centres (3 rows)
+const P2_OTHER_LABEL_X = 135             // x for label text in row
 
 // Page 3 - Signatures
 const P3 = {
   wtlName:   { x: 193, y: 717 },  // text 3pt above underline at pdfY=714
-  wtlSigned: { x: 383, y: 696 },  // sig image (h=18) bottom sits on underline
+  wtlSigned: { x: 383, y: 732 },  // sig image (h=18) bottom sits on underline
   certNo:    { x: 193, y: 691 },  // underline at pdfY=688
   date:      { x: 383, y: 691 },  // same row as certNo
-  fsName:    { x: 173, y: 665 },  // underline at pdfY=662
-  fsSigned:  { x: 383, y: 644 },  // sig image bottom on underline at 662
-  sinNapa:   { x: 173, y: 640 },  // underline at pdfY=637
+  fsName:    { x: 173, y: 640 },  // underline at pdfY=662
+  fsSigned:  { x: 383, y: 656 },  // sig image bottom on underline at 662
+  sinNapa:   { x: 140, y: 603 },  // underline at pdfY=637
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -206,6 +206,7 @@ function initState() {
   return {
     // Job details
     projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '',
+    siteId: '',           // appended to Project Title on PDF
     streetRoad: '', cityTown: '', district: '',
     dateWorkCompleted: prefs.dateWorkCompleted || '',
     contractor: prefs.contractor || '',
@@ -249,26 +250,26 @@ async function generateHvPdf(d, photos) {
   // Matches PoleWizard/TransformerWizard tick exactly - centre of cell adjusted
   const tick = (page, x, y) => {
     const bx = x - 5  // left-align within cell
-    const by = y + 2  // slight vertical offset to centre in cell
+    const by = y + 6  // slight vertical offset to centre in cell
     page.drawLine({ start: { x: bx,   y: by - 6 }, end: { x: bx+3, y: by - 9 }, thickness: 1.5, color: BLUE, opacity: 1 })
     page.drawLine({ start: { x: bx+3, y: by - 9 }, end: { x: bx+9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
 
   // Text color matches other wizards (deep navy blue)
   const BLUE = rgb(0/255, 20/255, 160/255)
-  const textAt = (page, text, x, y, size = 8) => {
+  const textAt = (page, text, x, y, size = 10) => {
     if (!text) return
     page.drawText(String(text), {
       x, y, size, font,
       color: BLUE,
-      maxWidth: 160,
+      maxWidth: 400,
     })
   }
 
   // ── Page 1 — Project Title ──────────────────────────────────────────────
-  const title = [d.npJobNumber, d.projectName, d.streetRoad, d.cityTown]
+  const title = [d.npJobNumber, d.projectName, d.streetRoad, d.cityTown, d.siteId]
     .filter(Boolean).join(' — ')
-  textAt(p1, title, P1_TITLE.x, P1_TITLE.y, 8)
+  textAt(p1, title, P1_TITLE.x, P1_TITLE.y, 10)
 
   // ── Page 1 — Visual Checks ──────────────────────────────────────────────
   VISUAL_CHECKS.forEach((check, rowIdx) => {
@@ -326,7 +327,7 @@ async function generateHvPdf(d, photos) {
     const labelKey  = rowIdx === 0 ? 'other1' : rowIdx === 1 ? 'other2' : 'other3'
     const labelText = d[labelKey]
     const rowY      = P2_OTHER_Y[rowIdx]
-    if (labelText) textAt(p2, labelText, P2_OTHER_LABEL_X, rowY, 7)
+    if (labelText) textAt(p2, labelText, P2_OTHER_LABEL_X, rowY, 9)
     EQUIP_TYPES.forEach((equip, colIdx) => {
       if (equipCols[equip.id]) tick(p2, P2_OTHER_COL_X[colIdx], rowY)
     })
@@ -598,7 +599,10 @@ export default function HVInspectionWizard({ onClose }) {
         formKey={FORM_KEY} formLabel={FORM_LABEL}
         step={step} photos={photos} setPhotos={setPhotos}
         onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
-      />
+      >
+        <WF label="Site ID" v={d.siteId} set={val => setD(p => ({...p, siteId: val}))}
+          ph="e.g. SUB-123 or Zone Sub name" accent={ACCENT} />
+      </JobDetailsStep>
     )
 
     // Step 1 — Equipment Type selection
