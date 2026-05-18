@@ -1,81 +1,140 @@
 /**
  * JobDetailsStep — shared Step 0 for all wizards.
  *
+ * Project details managed via ProjectPicker.
+ * Drafts managed via DraftPicker at the wizard level (not here).
+ * The Drafts button here calls onOpenDrafts() which opens DraftPicker in list mode.
+ *
  * Props:
- *   d              object   — wizard form state
- *   setD           fn       — wizard setD
- *   accent         string   — colour
- *   DraftBanner    component — from useDraft
- *   onPickerOpen   fn       — opens JobHistoryPicker
- *   showNamePrint  bool     — false for LvBoxWizard which has no namePrint field
- *   children       node     — extra fields appended after signature (e.g. LvConnection ICP fields)
+ *   d            object  — wizard form state
+ *   setD         fn      — wizard setD
+ *   accent       string  — colour
+ *   onOpenDrafts fn      — opens DraftPicker in list mode (from wizard)
+ *   topChildren  node    — extra fields before project (e.g. ZoneSub substation)
+ *   children     node    — extra fields after date
  */
-import { useEffect } from 'react'
+import { useState } from 'react'
+import { FolderOpen, BookMarked } from 'lucide-react'
 import { WF } from './WizardInputs'
-import { SignaturePad } from './SignaturePad'
 import { GpsLocationButton } from './GpsLocationButton'
-import { saveUserPref } from './userPrefs'
+import { ProjectPicker } from './ProjectPicker'
 import { APP_ACCENT } from './constants'
 
 export function JobDetailsStep({
   d,
   setD,
   accent = APP_ACCENT,
-  DraftBanner,
-  onPickerOpen,
-  showNamePrint = true,
+  onOpenDrafts,
+  topChildren,
   children,
 }) {
-  const set = (k, v) => setD(p => ({ ...p, [k]: v }))
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false)
 
-  // Persist user prefs whenever values change
-  useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  useEffect(() => { saveUserPref('namePrint',  d.namePrint)  }, [d.namePrint])
-  useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
+  const set = (k, v) => {
+    if (v !== undefined) {
+      setD(p => ({ ...p, [k]: v }))
+    } else {
+      return (val) => setD(p => ({ ...p, [k]: val }))
+    }
+  }
+
+  const handleProjectSelect = ({ projectName, npJobNumber, pcoWONo, ciwrNo }) => {
+    setD(p => ({ ...p, projectName, npJobNumber, pcoWONo, ciwrNo }))
+  }
+
+  const hasProject = d.projectName || d.npJobNumber || d.pcoWONo || d.ciwrNo
+  const projectSummary = [d.npJobNumber, d.projectName].filter(Boolean).join(' — ')
 
   return (
     <div>
-      {DraftBanner && <DraftBanner />}
+      {topChildren}
 
-      <button
-        onClick={onPickerOpen}
-        style={{
-          width: '100%', padding: '10px 0', marginBottom: 16,
-          borderRadius: 8, border: `2px dashed ${accent}`,
-          background: accent + '18', color: accent,
-          fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-        }}
-      >
-        📋 Load Previous Job
-      </button>
+      {/* Project section */}
+      <div style={{ marginBottom: 12 }}>
+        {hasProject ? (
+          <div style={{
+            background: accent + '12',
+            border: `2px solid ${accent}40`,
+            borderRadius: 12, padding: '12px 14px', marginBottom: 8,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+              Project loaded
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>
+              {projectSummary || 'Unnamed project'}
+            </div>
+            {(d.pcoWONo || d.ciwrNo) && (
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                {[d.pcoWONo && `W/O ${d.pcoWONo}`, d.ciwrNo && `CIWR ${d.ciwrNo}`].filter(Boolean).join(' · ')}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{
+            background: '#fef3c7', border: '1.5px dashed #f59e0b',
+            borderRadius: 12, padding: '10px 14px', marginBottom: 8,
+            fontSize: 13, color: '#92400e',
+          }}>
+            ⚠️ No project loaded
+          </div>
+        )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={accent} />
-        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber', v)} accent={accent} />
+        {/* Project and Drafts buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button
+            onClick={() => setProjectPickerOpen(true)}
+            style={{
+              padding: '11px 0', borderRadius: 10,
+              border: `2px solid ${accent}`,
+              background: accent + '10', color: accent,
+              fontWeight: 700, fontSize: 13,
+              cursor: 'pointer', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 6,
+            }}
+          >
+            <FolderOpen size={16} />
+            {hasProject ? 'Change' : 'Project'}
+          </button>
+
+          <button
+            onClick={onOpenDrafts}
+            style={{
+              padding: '11px 0', borderRadius: 10,
+              border: '2px solid #6b7280',
+              background: '#f9fafb', color: '#374151',
+              fontWeight: 700, fontSize: 13,
+              cursor: 'pointer', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 6,
+            }}
+          >
+            <BookMarked size={16} />
+            Load Draft
+          </button>
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="PCo W/O No." v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={accent} />
-        <WF label="CIWR No."    v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={accent} />
-      </div>
+
+      <div style={{ height: 1, background: '#eee', margin: '4px 0 14px' }} />
 
       <GpsLocationButton accent={accent} onLocation={loc => setD(p => ({ ...p, ...loc }))} />
 
-      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={accent} />
+      <WF label="No./Street/Road" v={d.streetRoad} set={set('streetRoad')} ph="123 Example Road" accent={accent} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={accent} />
-        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={accent} />
+        <WF label="City / Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" accent={accent} />
+        <WF label="District"    v={d.district} set={set('district')} ph="Waikato"  accent={accent} />
       </div>
 
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-
-      <WF label="Contractor"          v={d.contractor}        set={v => set('contractor',        v)} accent={accent} />
-      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} type="date" accent={accent} />
-      {showNamePrint && (
-        <WF label="Name (Print)" v={d.namePrint} set={v => set('namePrint', v)} accent={accent} />
-      )}
-      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={accent} />
+      <WF label="Date Work Completed" v={d.dateWorkCompleted} set={set('dateWorkCompleted')} type="date" accent={accent} />
 
       {children}
+
+      <ProjectPicker
+        open={projectPickerOpen}
+        onClose={() => setProjectPickerOpen(false)}
+        onSelect={handleProjectSelect}
+        accent={accent}
+      />
     </div>
   )
 }

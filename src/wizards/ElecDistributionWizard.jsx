@@ -4,17 +4,16 @@ import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
-import { SignaturePad } from '../shared/SignaturePad'
-import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs, saveUserPref } from '../shared/userPrefs'
-import { GpsLocationButton } from '../shared/GpsLocationButton'
+import { getUserPrefs } from '../shared/userPrefs'
+import { JobDetailsStep } from '../shared/JobDetailsStep'
+import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
-import { saveToHistory } from '../shared/jobHistory'
-import { JobHistoryPicker } from '../shared/JobHistoryPicker'
+import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
+import { DraftPicker } from '../shared/DraftPicker'
 
 const EB_SHOW_OVERLAY = false
 
@@ -140,8 +139,9 @@ async function generateEbPdf(d, photos = []) {
 
   if (d.signed) {
     try {
+      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
       const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = await pdfDoc.embedPng(sigBytes)
+      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
       p1.drawImage(sigImg, { x: 448, y: PAGE_H - 131, width: 110, height: 20, opacity: 1 })
     } catch (_) {}
   }
@@ -206,32 +206,20 @@ export default function ElecDistributionWizard({ onClose }) {
     comments: '',
   })
 
-  const [pdfBytes,      setPdfBytes]      = useState(null)
-  const [pdfBlobUrl,    setPdfBlobUrl]    = useState(null)
-  const [pdfGenerating, setPdfGenerating] = useState(false)
-  const [pdfError,      setPdfError]      = useState(null)
-  const [isPreview,     setIsPreview]     = useState(false)
-  const [pickerOpen,    setPickerOpen]    = useState(false)
+  const isPreview = step === EB_STEPS.length - 1
   const [overlayTab,    setOverlayTab]    = useState('form')
   const [overlayBytes,  setOverlayBytes]  = useState(null)
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
+  const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos,        setPhotos]        = useState([])
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEbPdf)
 
-  const prevStepRef = useRef(step)
-  const set = (k, v) => setD(prev => ({ ...prev, [k]: v }))
-  useEffect(() => { saveUserPref('contractor', d.contractor) }, [d.contractor])
-  useEffect(() => { saveUserPref('namePrint', d.namePrint) }, [d.namePrint])
-  useEffect(() => { if (d.signed) saveUserPref('signed', d.signed) }, [d.signed])
-  useEffect(() => { saveUserPref('dateWorkCompleted', d.dateWorkCompleted) }, [d.dateWorkCompleted])
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.cableRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, cableRows: rows }
   })
 
-  useEffect(() => {
-    if (prevStepRef.current === 0 && step === 1) saveToHistory(d)
-    prevStepRef.current = step
-  }, [step])
 
   useEffect(() => {
     if (EB_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -242,21 +230,6 @@ export default function ElecDistributionWizard({ onClose }) {
     }
   }, [overlayTab, overlayBytes])
 
-  const triggerGenerate = async (photosArg) => {
-    const photoList = photosArg !== undefined ? photosArg : photos
-    setIsPreview(true); setPdfGenerating(true); setPdfError(null); setPdfBytes(null)
-    try {
-      const bytes = await generateEbPdf(d, photoList)
-      setPdfBytes(bytes)
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      setPdfBlobUrl(URL.createObjectURL(blob))
-    } catch (e) {
-      setPdfError('PDF generation failed: ' + e.message)
-    } finally {
-      setPdfGenerating(false)
-    }
-  }
-
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
     const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.streetRoad), 'Elec Distribution Record'].filter(Boolean)
@@ -264,9 +237,7 @@ export default function ElecDistributionWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-  const handleSaveAndClose = () => onClose()
 
-  const loadJobHistory = fields => setD(prev => ({ ...prev, ...fields }))
 
   const missingFields = [
     !d.pcoWONo          && 'PCo W/O No.',
@@ -276,33 +247,19 @@ export default function ElecDistributionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  const { DraftBanner, clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, setD, setStep)
+  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EB')
+    const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
+
+  const handleDraftLoad = (draft) => {
+    const { photos: draftPhotos, ...formData } = draft.data || {}
+    setD(prev => ({ ...prev, ...formData }))
+    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
+    setStep(draft.step || 0)
+  }
 
   const formSteps = [
 
-    <div key="s0">
-      <DraftBanner />
-      <button onClick={() => setPickerOpen(true)} style={{ width: '100%', padding: '10px 0', marginBottom: 16, borderRadius: 8, border: `2px dashed ${EB_ORANGE}`, background: EB_BG, color: EB_ORANGE, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>📋 Load Previous Job</button>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="Project Name"  v={d.projectName} set={v => set('projectName', v)} accent={EB_ORANGE} />
-        <WF label="NP Job Number" v={d.npJobNumber}  set={v => set('npJobNumber',  v)} accent={EB_ORANGE} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="PCo W/O No." v={d.pcoWONo} set={v => set('pcoWONo', v)} accent={EB_ORANGE} />
-        <WF label="CIWR No."    v={d.ciwrNo}  set={v => set('ciwrNo',  v)} accent={EB_ORANGE} />
-      </div>
-      <GpsLocationButton accent={EB_ORANGE} onLocation={loc => setD(p => ({...p, ...loc}))} />
-      <WF label="No./Street/Road" v={d.streetRoad} set={v => set('streetRoad', v)} ph="123 Example Road" accent={EB_ORANGE} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-        <WF label="City / Town" v={d.cityTown} set={v => set('cityTown', v)} ph="Hamilton" accent={EB_ORANGE} />
-        <WF label="District"    v={d.district} set={v => set('district', v)} ph="Waikato"  accent={EB_ORANGE} />
-      </div>
-      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
-      <WF label="Contractor"               v={d.contractor}            set={v => set('contractor',            v)} accent={EB_ORANGE} />
-      <WF label="Date Work Completed" type="date" v={d.dateWorkCompleted} set={v => set('dateWorkCompleted', v)} accent={EB_ORANGE} />
-      <WF label="Name (Print)"             v={d.namePrint}             set={v => set('namePrint',             v)} accent={EB_ORANGE} />
-      <SignaturePad value={d.signed} onChange={v => set('signed', v)} accent={EB_ORANGE} />
-    </div>,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
 
     <div key="s1">
       <SectionHead label="Distribution Connection Details" accent={EB_ORANGE} />
@@ -398,23 +355,7 @@ export default function ElecDistributionWizard({ onClose }) {
     <div key="s5" />,
   ]
 
-  const previewContent = (
-    <>
-      {pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Generating PDF…</div>
-        </div>
-      )}
-      {pdfError && !pdfGenerating && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12 }}>{pdfError}</div>
-          <button onClick={triggerGenerate} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: EB_ORANGE, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
-        </div>
-      )}
-      {!pdfGenerating && !pdfError && pdfBytes && <PdfCanvasPreview pdfBytes={pdfBytes} />}
-    </>
-  )
+  const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), EB_ORANGE)
 
   return (
     <>
@@ -440,11 +381,11 @@ export default function ElecDistributionWizard({ onClose }) {
           headerIcon={<Zap size={20} color="#fff" />}
           steps={EB_STEPS}
           step={step}
-          onStepClick={i => { setStep(i); if (i === EB_STEPS.length - 1) triggerGenerate(photos) }}
+          onStepClick={i => { setStep(i); if (i === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(photos) }}
-          onSaveAndClose={handleSaveAndClose}
+          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={EB_ORANGE}
           bg={EB_BG}
           mid={EB_MID}
@@ -452,7 +393,7 @@ export default function ElecDistributionWizard({ onClose }) {
           devPaddingTop={EB_SHOW_OVERLAY ? 44 : 0}
           isPreview={isPreview}
           onShare={handleShare}
-          onClosePreview={() => { setIsPreview(false); setStep(s => s - 1); setPdfBytes(null); setPdfBlobUrl(null) }}
+          onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
           missingFields={missingFields}
           previewContent={previewContent}
         >
@@ -460,7 +401,18 @@ export default function ElecDistributionWizard({ onClose }) {
         </WizardShell>
       )}
 
-      <JobHistoryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={loadJobHistory} accent={EB_ORANGE} />
+      <DraftPicker
+        open={draftPickerOpen}
+        onClose={() => setDraftPickerOpen(false)}
+        formKey="360S014EB"
+        formLabel="Elec Distribution Record"
+        d={d}
+        step={step}
+        photos={photos}
+        onLoad={handleDraftLoad}
+        accent={EB_ORANGE}
+        initialMode={draftPickerMode}
+      />
     </>
   )
 }

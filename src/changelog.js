@@ -13,6 +13,27 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.12.0',
+    changes: [
+      {
+        heading: 'User Settings',
+        detail: 'Your name, contractor, competency cert number, and signature are now saved once in a dedicated settings page (gear icon ⚙️ in the header). Every form wizard picks these up automatically — no more filling them in each time.',
+      },
+      {
+        heading: 'Project & Draft system',
+        detail: 'Create and save named projects (job number, W/O, project name) and load them into any form in one tap. Save named drafts mid-fill and reload them later — useful for pre-filling a batch of forms before heading to site.',
+      },
+      {
+        heading: 'HV Inspection Certificate — 220F028A',
+        detail: 'New wizard for the Pre-Commissioning HV Inspection Certificate. Select the equipment types being commissioned and each gets its own check step showing only the applicable rows. Tick All button covers Visual, Operation, Performance, QA, and Documentation in one tap.',
+      },
+      {
+        heading: 'Improved form navigation',
+        detail: 'The 💾 Save Draft button now appears in the nav bar on every step of every wizard — no need to go back to step 1 to save. The Load Draft button on step 1 opens straight to your saved drafts list.',
+      },
+    ],
+  },
+  {
     version: '2.11.0',
     changes: [
       {
