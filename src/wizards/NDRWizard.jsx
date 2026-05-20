@@ -728,7 +728,7 @@ export default function NDRWizard({ onClose }) {
       onShare={handleShare}
       onClosePreview={() => { clearPdf(); setStep(s => s - 1) }}
       missingFields={isPreview && missingFields.length > 0 ? missingFields : null}
-      previewContent={buildPreviewContent(handleShare, ACCENT)}
+      previewContent={buildPreviewContent(() => triggerGenerate(d, allPhotos), ACCENT)}
     >
       {renderStep()}
 
@@ -745,3 +745,4 @@ export default function NDRWizard({ onClose }) {
     </WizardShell>
   )
 }
+

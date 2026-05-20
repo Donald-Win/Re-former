@@ -248,15 +248,15 @@ async function generateHvPdf(d, photos) {
   // x, y are pdf-lib bottom-origin coordinates (centre of cell)
   // Tick positioned relative to cell centre (x, y = bottom-origin pdf coords)
   // Matches PoleWizard/TransformerWizard tick exactly - centre of cell adjusted
+  // Text color matches other wizards (deep navy blue)
+  const BLUE = rgb(0/255, 20/255, 160/255)
+
   const tick = (page, x, y) => {
     const bx = x - 5  // left-align within cell
     const by = y + 6  // slight vertical offset to centre in cell
     page.drawLine({ start: { x: bx,   y: by - 6 }, end: { x: bx+3, y: by - 9 }, thickness: 1.5, color: BLUE, opacity: 1 })
     page.drawLine({ start: { x: bx+3, y: by - 9 }, end: { x: bx+9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
   }
-
-  // Text color matches other wizards (deep navy blue)
-  const BLUE = rgb(0/255, 20/255, 160/255)
   const textAt = (page, text, x, y, size = 10) => {
     if (!text) return
     page.drawText(String(text), {
@@ -697,7 +697,7 @@ export default function HVInspectionWizard({ onClose }) {
       onShare={handleShare}
       onClosePreview={() => { clearPdf(); setStep(s => s - 1) }}
       missingFields={isPreview && missingFields.length > 0 ? missingFields : null}
-      previewContent={buildPreviewContent(handleShare, ACCENT)}
+      previewContent={buildPreviewContent(() => triggerGenerate(d, photos), ACCENT)}
     >
       {renderStep()}
 
@@ -714,3 +714,4 @@ export default function HVInspectionWizard({ onClose }) {
     </WizardShell>
   )
 }
+

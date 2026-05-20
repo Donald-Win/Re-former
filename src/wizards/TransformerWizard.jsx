@@ -328,10 +328,6 @@ function TransformerWizardApp({ onClose }) {
   }
 
 
-  const F  = (props) => <WF  {...props} accent={G} />
-  const CB = (props) => <WCB {...props} accent={G} />
-  const SH = (props) => <SectionHead {...props} accent={G} />
-
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EG')
     const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
 
@@ -349,147 +345,147 @@ function TransformerWizardApp({ onClose }) {
     // 1 – Site Details
     <div key="1">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="Transformer Site ID" v={d.transformerSiteId} set={set('transformerSiteId')} />
-        <F label="Pole ID"             v={d.poleId}            set={set('poleId')} />
-        <F label="Zone Substation"     v={d.zoneSubstation}    set={set('zoneSubstation')} />
-        <F label="Feeder ID"           v={d.feederId}          set={set('feederId')} />
+        <WF accent={G} label="Transformer Site ID" v={d.transformerSiteId} set={set('transformerSiteId')} />
+        <WF accent={G} label="Pole ID"             v={d.poleId}            set={set('poleId')} />
+        <WF accent={G} label="Zone Substation"     v={d.zoneSubstation}    set={set('zoneSubstation')} />
+        <WF accent={G} label="Feeder ID"           v={d.feederId}          set={set('feederId')} />
       </div>
       <div style={{ height: 1, background: '#eee', margin: '12px 0' }} />
-      <CB label="Installation Type"
+      <WCB accent={G} label="Installation Type"
         options={['New', 'Refurbished', 'Emergency / Stock', 'Removal Only']}
         value={d.installationType} onChange={tog('installationType')} />
-      <CB label="Ownership"
+      <WCB accent={G} label="Ownership"
         options={['Powerco', 'Customer', 'Other']}
         value={d.ownership} onChange={tog('ownership')} />
       {d.ownership === 'Other' && (
-        <F label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />
+        <WF accent={G} label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />
       )}
     </div>,
 
     // 2 – Issued: Voltage & Connection
     <div key="2">
-      <SH label="Voltage" />
+      <SectionHead accent={G} label="Voltage" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.issued.voltageHV} set={setI('voltageHV')} ph="e.g. 11kV" />
-        <F label="LV" v={d.issued.voltageLV} set={setI('voltageLV')} ph="e.g. 400V" />
+        <WF accent={G} label="HV" v={d.issued.voltageHV} set={setI('voltageHV')} ph="e.g. 11kV" />
+        <WF accent={G} label="LV" v={d.issued.voltageLV} set={setI('voltageLV')} ph="e.g. 400V" />
       </div>
-      <SH label="HV Connection Type" />
-      <CB options={CONN_HV} value={d.issued.connectionTypeHV} onChange={togI('connectionTypeHV')} />
-      <SH label="LV Connection Type" />
-      <CB options={CONN_LV} value={d.issued.connectionTypeLV} onChange={togI('connectionTypeLV')} />
+      <SectionHead accent={G} label="HV Connection Type" />
+      <WCB accent={G} options={CONN_HV} value={d.issued.connectionTypeHV} onChange={togI('connectionTypeHV')} />
+      <SectionHead accent={G} label="LV Connection Type" />
+      <WCB accent={G} options={CONN_LV} value={d.issued.connectionTypeLV} onChange={togI('connectionTypeLV')} />
     </div>,
 
     // 3 – Issued: Capacity & Phases
     <div key="3">
-      <SH label="Capacity (kVA)" />
-      <F ph="kVA" v={d.issued.capacityKVA} set={setI('capacityKVA')} />
-      <SH label="Phases" />
-      <CB options={PHASES} value={d.issued.phases} onChange={togI('phases')} />
-      <SH label="Serial Number" />
-      <F v={d.issued.serialNumber} set={setI('serialNumber')} />
+      <SectionHead accent={G} label="Capacity (kVA)" />
+      <WF accent={G} ph="kVA" v={d.issued.capacityKVA} set={setI('capacityKVA')} />
+      <SectionHead accent={G} label="Phases" />
+      <WCB accent={G} options={PHASES} value={d.issued.phases} onChange={togI('phases')} />
+      <SectionHead accent={G} label="Serial Number" />
+      <WF accent={G} v={d.issued.serialNumber} set={setI('serialNumber')} />
     </div>,
 
     // 4 – Issued: Enclosure & Type
     <div key="4">
-      <SH label="Enclosure Type" />
-      <CB options={ENC_OPTIONS} value={d.issued.enclosureType} onChange={togI('enclosureType')} />
-      <SH label="Enclosure Model" />
-      <F v={d.issued.enclosureModel} set={setI('enclosureModel')} />
-      <SH label="Transformer Type" />
-      <CB options={TX_TYPE} value={d.issued.transformerType} onChange={togI('transformerType')} />
+      <SectionHead accent={G} label="Enclosure Type" />
+      <WCB accent={G} options={ENC_OPTIONS} value={d.issued.enclosureType} onChange={togI('enclosureType')} />
+      <SectionHead accent={G} label="Enclosure Model" />
+      <WF accent={G} v={d.issued.enclosureModel} set={setI('enclosureModel')} />
+      <SectionHead accent={G} label="Transformer Type" />
+      <WCB accent={G} options={TX_TYPE} value={d.issued.transformerType} onChange={togI('transformerType')} />
     </div>,
 
     // 5 – Issued: Make, Model & Volt Test
     <div key="5">
-      <SH label="Make" />
-      <F v={d.issued.make} set={setI('make')} />
-      <SH label="Model" />
-      <F v={d.issued.model} set={setI('model')} />
-      <SH label="Volt Test" />
-      <F v={d.issued.voltTest} set={setI('voltTest')} ph="e.g. PASS" />
+      <SectionHead accent={G} label="Make" />
+      <WF accent={G} v={d.issued.make} set={setI('make')} />
+      <SectionHead accent={G} label="Model" />
+      <WF accent={G} v={d.issued.model} set={setI('model')} />
+      <SectionHead accent={G} label="Volt Test" />
+      <WF accent={G} v={d.issued.voltTest} set={setI('voltTest')} ph="e.g. PASS" />
     </div>,
 
     // 6 – Issued: Technical
     <div key="6">
-      <SH label="Tap Setting %" />
-      <CB options={['-10', '-7.5', '-5', '-2.5', '0', '+2.5', '+5']}
+      <SectionHead accent={G} label="Tap Setting %" />
+      <WCB accent={G} options={['-10', '-7.5', '-5', '-2.5', '0', '+2.5', '+5']}
         value={d.issued.tapSetting} onChange={togI('tapSetting')} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
-          <SH label="MDI Fitted" />
-          <CB options={['YES', 'NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
+          <SectionHead accent={G} label="MDI Fitted" />
+          <WCB accent={G} options={['YES', 'NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
         </div>
-        <F label="CT Ratio" v={d.issued.ctRatio} set={setI('ctRatio')} />
+        <WF accent={G} label="CT Ratio" v={d.issued.ctRatio} set={setI('ctRatio')} />
       </div>
-      <SH label="Earth Test" />
+      <SectionHead accent={G} label="Earth Test" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-        <F label="Test 1"    v={d.issued.earthTest1} set={setI('earthTest1')} />
-        <F label="Test 2"    v={d.issued.earthTest2} set={setI('earthTest2')} />
-        <F label="Total MEN" v={d.issued.totalMEN}   set={setI('totalMEN')} />
+        <WF accent={G} label="Test 1"    v={d.issued.earthTest1} set={setI('earthTest1')} />
+        <WF accent={G} label="Test 2"    v={d.issued.earthTest2} set={setI('earthTest2')} />
+        <WF accent={G} label="Total MEN" v={d.issued.totalMEN}   set={setI('totalMEN')} />
       </div>
-      <SH label="Fuse Size" />
+      <SectionHead accent={G} label="Fuse Size" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.issued.fuseSizeHV} set={setI('fuseSizeHV')} />
-        <F label="LV" v={d.issued.fuseSizeLV} set={setI('fuseSizeLV')} />
+        <WF accent={G} label="HV" v={d.issued.fuseSizeHV} set={setI('fuseSizeHV')} />
+        <WF accent={G} label="LV" v={d.issued.fuseSizeLV} set={setI('fuseSizeLV')} />
       </div>
-      <SH label="LV Disconnector" />
+      <SectionHead accent={G} label="LV Disconnector" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="Make"  v={d.issued.lvDisconnectorMake}  set={setI('lvDisconnectorMake')} />
-        <F label="Model" v={d.issued.lvDisconnectorModel} set={setI('lvDisconnectorModel')} />
+        <WF accent={G} label="Make"  v={d.issued.lvDisconnectorMake}  set={setI('lvDisconnectorMake')} />
+        <WF accent={G} label="Model" v={d.issued.lvDisconnectorModel} set={setI('lvDisconnectorModel')} />
       </div>
     </div>,
 
     // 7 – Removed: Voltage & Connection
     <div key="7">
-      <SH label="Voltage" />
+      <SectionHead accent={G} label="Voltage" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.removed.voltageHV} set={setR('voltageHV')} ph="e.g. 11kV" />
-        <F label="LV" v={d.removed.voltageLV} set={setR('voltageLV')} ph="e.g. 400V" />
+        <WF accent={G} label="HV" v={d.removed.voltageHV} set={setR('voltageHV')} ph="e.g. 11kV" />
+        <WF accent={G} label="LV" v={d.removed.voltageLV} set={setR('voltageLV')} ph="e.g. 400V" />
       </div>
-      <SH label="HV Connection Type" />
-      <CB options={CONN_HV} value={d.removed.connectionTypeHV} onChange={togR('connectionTypeHV')} />
-      <SH label="LV Connection Type" />
-      <CB options={CONN_LV} value={d.removed.connectionTypeLV} onChange={togR('connectionTypeLV')} />
+      <SectionHead accent={G} label="HV Connection Type" />
+      <WCB accent={G} options={CONN_HV} value={d.removed.connectionTypeHV} onChange={togR('connectionTypeHV')} />
+      <SectionHead accent={G} label="LV Connection Type" />
+      <WCB accent={G} options={CONN_LV} value={d.removed.connectionTypeLV} onChange={togR('connectionTypeLV')} />
     </div>,
 
     // 8 – Removed: Capacity & Phases
     <div key="8">
-      <SH label="Capacity (kVA)" />
-      <F ph="kVA" v={d.removed.capacityKVA} set={setR('capacityKVA')} />
-      <SH label="Phases" />
-      <CB options={PHASES} value={d.removed.phases} onChange={togR('phases')} />
-      <SH label="Serial Number" />
-      <F v={d.removed.serialNumber} set={setR('serialNumber')} />
+      <SectionHead accent={G} label="Capacity (kVA)" />
+      <WF accent={G} ph="kVA" v={d.removed.capacityKVA} set={setR('capacityKVA')} />
+      <SectionHead accent={G} label="Phases" />
+      <WCB accent={G} options={PHASES} value={d.removed.phases} onChange={togR('phases')} />
+      <SectionHead accent={G} label="Serial Number" />
+      <WF accent={G} v={d.removed.serialNumber} set={setR('serialNumber')} />
     </div>,
 
     // 9 – Removed: Enclosure & Type
     <div key="9">
-      <SH label="Enclosure Type" />
-      <CB options={ENC_OPTIONS} value={d.removed.enclosureType} onChange={togR('enclosureType')} />
-      <SH label="Enclosure Model" />
-      <F v={d.removed.enclosureModel} set={setR('enclosureModel')} />
-      <SH label="Transformer Type" />
-      <CB options={TX_TYPE} value={d.removed.transformerType} onChange={togR('transformerType')} />
+      <SectionHead accent={G} label="Enclosure Type" />
+      <WCB accent={G} options={ENC_OPTIONS} value={d.removed.enclosureType} onChange={togR('enclosureType')} />
+      <SectionHead accent={G} label="Enclosure Model" />
+      <WF accent={G} v={d.removed.enclosureModel} set={setR('enclosureModel')} />
+      <SectionHead accent={G} label="Transformer Type" />
+      <WCB accent={G} options={TX_TYPE} value={d.removed.transformerType} onChange={togR('transformerType')} />
     </div>,
 
     // 10 – Removed: Make & Model
     <div key="10">
-      <SH label="Make" />
-      <F v={d.removed.make} set={setR('make')} />
-      <SH label="Model" />
-      <F v={d.removed.model} set={setR('model')} />
+      <SectionHead accent={G} label="Make" />
+      <WF accent={G} v={d.removed.make} set={setR('make')} />
+      <SectionHead accent={G} label="Model" />
+      <WF accent={G} v={d.removed.model} set={setR('model')} />
     </div>,
 
     // 11 – Removal Details
     <div key="11">
-      <SH label="Reason for Removal" />
-      <CB multi
+      <SectionHead accent={G} label="Reason for Removal" />
+      <WCB accent={G} multi
         options={['Relocation', 'Vegetation', 'Site Dismantled', 'Reconstruction',
                   'Vehicle Accident', 'End of Life', 'Capacity Change', 'Faulty',
                   'Adverse Weather', 'Vandalism']}
         value={d.removed.reasonForRemoval} onChange={togRA('reasonForRemoval')} />
-      <SH label="Removed to Store" />
-      <F ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
+      <SectionHead accent={G} label="Removed to Store" />
+      <WF accent={G} ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
     </div>,
 
     // 12 – Comments
@@ -589,3 +585,4 @@ function TransformerWizardApp({ onClose }) {
 }
 
 export default TransformerWizardApp
+

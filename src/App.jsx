@@ -277,13 +277,6 @@ const AsBuiltFormSelector = () => {
     '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
     '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
     '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
-    '220F028A': {
-    label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
-    pdfName:   'HV Inspection Certificate',
-    fileName:  '220F028A.pdf',
-    accent:    '#4f46e5',
-    Component: HVInspectionWizard,
-  },
   '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
     '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
     '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
@@ -1029,3 +1022,4 @@ function App() {
 }
 
 export default App
+
