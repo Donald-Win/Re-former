@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { APP_ACCENT } from '../shared/constants'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { Box } from 'lucide-react'
@@ -330,3 +330,4 @@ export default function LvBoxWizard({ onClose }) {
     </>
   )
 }
+

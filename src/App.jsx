@@ -16,11 +16,9 @@ import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.12.0'
+const APP_VERSION = '2.12.1'
 
 // ── Wizard config ─────────────────────────────────────────────────────────────
-// Each entry maps a form ID to its wizard component, display name, PDF file,
-// and accent colour. To add a new wizard: add one entry here.
 const WIZARD_CONFIG = {
   '360S014EC': {
     label:     '360S014EC – As-built Pole Record',
@@ -81,7 +79,6 @@ const WIZARD_CONFIG = {
 }
 
 // ── WizardChoiceModal ─────────────────────────────────────────────────────────
-// Single shared modal — replaces 7 near-identical JSX blocks.
 function WizardChoiceModal({ formId, onFillOut, onViewPdf, onClose }) {
   const cfg = WIZARD_CONFIG[formId]
   if (!cfg) return null
@@ -166,19 +163,13 @@ const AsBuiltFormSelector = () => {
   const [pdfBytes, setPdfBytes]             = useState(null)
   const [pdfBlobUrl, setPdfBlobUrl]         = useState(null)
 
-  // Replaces 14 individual choice/wizard open state vars
-  // null = nothing open
-  // { formId, mode: 'choice' } = choice modal open
-  // { formId, mode: 'wizard' } = wizard open
   const [activeWizard, setActiveWizard] = useState(null)
   const [showSettings, setShowSettings]   = useState(false)
 
-  // Nudge user to configure settings if not yet done
   const [settingsReady, setSettingsReady] = useState(() => {
     const prefs = getUserPrefs()
     return !!(prefs.contractor && prefs.namePrint && prefs.signed)
   })
-  // Re-check when settings closes
   const handleSettingsClose = () => {
     setShowSettings(false)
     const prefs = getUserPrefs()
@@ -277,14 +268,7 @@ const AsBuiltFormSelector = () => {
     '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
     '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
     '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
-    '220F028A': {
-    label:     '220F028A – Pre-Commissioning HV Inspection Certificate',
-    pdfName:   'HV Inspection Certificate',
-    fileName:  '220F028A.pdf',
-    accent:    '#4f46e5',
-    Component: HVInspectionWizard,
-  },
-  '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
+    '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
     '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
     '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
     '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record',   fileName: '360S014EI.pdf' },
@@ -394,12 +378,10 @@ const AsBuiltFormSelector = () => {
 
   // ── PDF viewer ────────────────────────────────────────────────────────────
   const handleFormClick = (url, name, formId) => {
-    // If this form has a wizard, show the choice modal
     if (formId && WIZARD_CONFIG[formId]) {
       setActiveWizard({ formId, mode: 'choice' })
       return
     }
-    // Otherwise open the blank PDF directly
     const rawName = name || url.split('/').pop()
     const displayName = rawName.endsWith('.pdf') ? rawName : rawName + '.pdf'
     setCurrentPdfUrl(url)
@@ -872,7 +854,7 @@ const AsBuiltFormSelector = () => {
         </div>
       )}
 
-      {/* ── Wizard choice modal — single component, data-driven ───────────── */}
+      {/* ── Wizard choice modal ───────────────────────────────────────────── */}
       {activeWizard?.mode === 'choice' && (
         <WizardChoiceModal
           formId={activeWizard.formId}
@@ -891,7 +873,7 @@ const AsBuiltFormSelector = () => {
         <ActiveWizardComponent onClose={() => setActiveWizard(null)} />
       )}
 
-      {/* ── User Settings ────────────────────────────────────────────── */}
+      {/* ── User Settings ─────────────────────────────────────────────────── */}
       {showSettings && <UserSettings onClose={handleSettingsClose} />}
 
       {/* ── Changelog Modal ───────────────────────────────────────────────── */}

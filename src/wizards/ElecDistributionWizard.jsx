@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { APP_ACCENT } from '../shared/constants'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
@@ -416,3 +416,4 @@ export default function ElecDistributionWizard({ onClose }) {
     </>
   )
 }
+

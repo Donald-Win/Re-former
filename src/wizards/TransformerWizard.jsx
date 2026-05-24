@@ -1,32 +1,31 @@
 // 360S014EG — AS-Built Transformer Record
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
-import { FileText, X, Share2 } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
+import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-import { CoordOverlay } from '../shared/CoordOverlay'
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
-const W_GREEN  = '#15803d'
-const W_GREEN_BG  = '#f0fdf4'
-const W_GREEN_MID = '#dcfce7'
+const W_GREEN        = '#15803d'
+const W_GREEN_BG     = '#f0fdf4'
+const W_GREEN_MID    = '#dcfce7'
 const W_GREEN_BORDER = '#86efac'
-const W_RED    = '#dc2626'
-const W_RED_BG    = '#fef2f2'
-const W_RED_MID   = '#fee2e2'
-const W_RED_BORDER = '#fca5a5'
+const W_RED          = '#dc2626'
+const W_RED_BG       = '#fef2f2'
+const W_RED_MID      = '#fee2e2'
+const W_RED_BORDER   = '#fca5a5'
 
 const STEP_SCHEME = [
   'neutral','neutral',
@@ -40,8 +39,6 @@ function schemeColors(scheme) {
   if (scheme === 'removed') return { bg: W_RED_BG,    mid: W_RED_MID,    border: W_RED_BORDER,    accent: W_RED,    label: 'Removed' }
   return { bg: '#f4f4f8', mid: '#eee', border: '#ddd', accent: W_PURPLE, label: '' }
 }
-
-const TX_SHOW_OVERLAY = false
 
 const T_STEPS = [
   'Job Details',
@@ -102,13 +99,13 @@ async function generatePdf(d, photos = []) {
   t(p1, 115, 123, d.pcoWONo)
   t(p1, 250, 123, d.ciwrNo)
   if (d.signed && d.signed.startsWith("data:image")) {
-    const sigMime = d.signed.split(",")[0].includes("jpeg") ? "jpeg" : "png";
-    const sigBytes = Uint8Array.from(atob(d.signed.split(",")[1]), c => c.charCodeAt(0));
-    const sigImg = sigMime === "jpeg" ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes);
-    const sigDimsTx = sigImg.scale(1);
-    const sigMaxHTx = 20;
-    const sigWTx = (sigMaxHTx / sigDimsTx.height) * sigDimsTx.width;
-    p1.drawImage(sigImg, { x: 438, y: PAGE_H - 136, width: sigWTx, height: sigMaxHTx, opacity: 1 });
+    const sigMime = d.signed.split(",")[0].includes("jpeg") ? "jpeg" : "png"
+    const sigBytes = Uint8Array.from(atob(d.signed.split(",")[1]), c => c.charCodeAt(0))
+    const sigImg = sigMime === "jpeg" ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
+    const sigDimsTx = sigImg.scale(1)
+    const sigMaxHTx = 20
+    const sigWTx = (sigMaxHTx / sigDimsTx.height) * sigDimsTx.width
+    p1.drawImage(sigImg, { x: 438, y: PAGE_H - 136, width: sigWTx, height: sigMaxHTx, opacity: 1 })
   }
   t(p1, 160, 140, d.npJobNumber)
   t(p1, 440, 141, d.namePrint)
@@ -249,12 +246,10 @@ async function generatePdf(d, photos = []) {
 }
 
 function TransformerWizardApp({ onClose }) {
-  const [tab, setTab] = useState('wizard')
   const [step, setStep] = useState(0)
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos, setPhotos] = useState([])
-  const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generatePdf)
 
   const ENC_OPTIONS = ['Pole Mount', 'Plastic', 'Fibreglass', 'Building', 'Fenced', 'Metal Cover', 'Customer Premise']
@@ -300,21 +295,11 @@ function TransformerWizardApp({ onClose }) {
   const scheme = schemeColors(STEP_SCHEME[step])
   const G = scheme.accent
 
-  useEffect(() => {
-    if (TX_SHOW_OVERLAY) {
-      fetch(import.meta.env.BASE_URL + 'forms/360S014EG.pdf').then(r => r.arrayBuffer())
-        .then(buf => setCalibrationPdfBytes(new Uint8Array(buf)))
-        .catch(err => console.warn('Could not load calibration PDF:', err))
-    }
-  }, [])
-
-
-
-  const tog   = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
-  const setI  = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: v } }))
-  const togI  = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: p.issued[k]  === v ? '' : v } }))
-  const setR  = k => v => setD(p => ({ ...p, removed: { ...p.removed, [k]: v } }))
-  const togR  = k => v => setD(p => ({ ...p, removed: { ...p.removed, [k]: p.removed[k] === v ? '' : v } }))
+  const tog  = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
+  const setI = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: v } }))
+  const togI = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: p.issued[k]  === v ? '' : v } }))
+  const setR = k => v => setD(p => ({ ...p, removed: { ...p.removed, [k]: v } }))
+  const togR = k => v => setD(p => ({ ...p, removed: { ...p.removed, [k]: p.removed[k] === v ? '' : v } }))
   const togRA = k => v => setD(p => {
     const a = p.removed[k] || []
     return { ...p, removed: { ...p.removed, [k]: a.includes(v) ? a.filter(x => x !== v) : [...a, v] } }
@@ -327,13 +312,8 @@ function TransformerWizardApp({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-
-  const F  = (props) => <WF  {...props} accent={G} />
-  const CB = (props) => <WCB {...props} accent={G} />
-  const SH = (props) => <SectionHead {...props} accent={G} />
-
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EG')
-    const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
+  const { set } = useWizardSetup(d, setD, step, '360S014EG')
+  const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
 
   const handleDraftLoad = (draft) => {
     const { photos: draftPhotos, ...formData } = draft.data || {}
@@ -342,178 +322,224 @@ function TransformerWizardApp({ onClose }) {
     setStep(draft.step || 0)
   }
 
-  const formSteps = [
-    // 0 – Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={G} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
+  // ── Only render the current step's JSX ───────────────────────────────────
+  // This prevents the keyboard from being dismissed on iOS — building all 15
+  // step trees on every keystroke caused enough layout work that iOS would
+  // collapse the keyboard mid-typing.
+  const renderCurrentStep = () => {
+    if (isPreview) return null
 
-    // 1 – Site Details
-    <div key="1">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="Transformer Site ID" v={d.transformerSiteId} set={set('transformerSiteId')} />
-        <F label="Pole ID"             v={d.poleId}            set={set('poleId')} />
-        <F label="Zone Substation"     v={d.zoneSubstation}    set={set('zoneSubstation')} />
-        <F label="Feeder ID"           v={d.feederId}          set={set('feederId')} />
-      </div>
-      <div style={{ height: 1, background: '#eee', margin: '12px 0' }} />
-      <CB label="Installation Type"
-        options={['New', 'Refurbished', 'Emergency / Stock', 'Removal Only']}
-        value={d.installationType} onChange={tog('installationType')} />
-      <CB label="Ownership"
-        options={['Powerco', 'Customer', 'Other']}
-        value={d.ownership} onChange={tog('ownership')} />
-      {d.ownership === 'Other' && (
-        <F label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />
-      )}
-    </div>,
+    switch (step) {
+      // 0 — Job Details
+      case 0:
+        return (
+          <JobDetailsStep
+            d={d} setD={setD} accent={G}
+            onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
+          />
+        )
 
-    // 2 – Issued: Voltage & Connection
-    <div key="2">
-      <SH label="Voltage" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.issued.voltageHV} set={setI('voltageHV')} ph="e.g. 11kV" />
-        <F label="LV" v={d.issued.voltageLV} set={setI('voltageLV')} ph="e.g. 400V" />
-      </div>
-      <SH label="HV Connection Type" />
-      <CB options={CONN_HV} value={d.issued.connectionTypeHV} onChange={togI('connectionTypeHV')} />
-      <SH label="LV Connection Type" />
-      <CB options={CONN_LV} value={d.issued.connectionTypeLV} onChange={togI('connectionTypeLV')} />
-    </div>,
+      // 1 — Site Details
+      case 1:
+        return (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="Transformer Site ID" v={d.transformerSiteId} set={set('transformerSiteId')} />
+              <WF accent={G} label="Pole ID"             v={d.poleId}            set={set('poleId')} />
+              <WF accent={G} label="Zone Substation"     v={d.zoneSubstation}    set={set('zoneSubstation')} />
+              <WF accent={G} label="Feeder ID"           v={d.feederId}          set={set('feederId')} />
+            </div>
+            <div style={{ height: 1, background: '#eee', margin: '12px 0' }} />
+            <WCB accent={G} label="Installation Type"
+              options={['New', 'Refurbished', 'Emergency / Stock', 'Removal Only']}
+              value={d.installationType} onChange={tog('installationType')} />
+            <WCB accent={G} label="Ownership"
+              options={['Powerco', 'Customer', 'Other']}
+              value={d.ownership} onChange={tog('ownership')} />
+            {d.ownership === 'Other' && (
+              <WF accent={G} label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />
+            )}
+          </div>
+        )
 
-    // 3 – Issued: Capacity & Phases
-    <div key="3">
-      <SH label="Capacity (kVA)" />
-      <F ph="kVA" v={d.issued.capacityKVA} set={setI('capacityKVA')} />
-      <SH label="Phases" />
-      <CB options={PHASES} value={d.issued.phases} onChange={togI('phases')} />
-      <SH label="Serial Number" />
-      <F v={d.issued.serialNumber} set={setI('serialNumber')} />
-    </div>,
+      // 2 — Issued: Voltage & Connection
+      case 2:
+        return (
+          <div>
+            <SectionHead accent={G} label="Voltage" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="HV" v={d.issued.voltageHV} set={setI('voltageHV')} ph="e.g. 11kV" />
+              <WF accent={G} label="LV" v={d.issued.voltageLV} set={setI('voltageLV')} ph="e.g. 400V" />
+            </div>
+            <SectionHead accent={G} label="HV Connection Type" />
+            <WCB accent={G} options={CONN_HV} value={d.issued.connectionTypeHV} onChange={togI('connectionTypeHV')} />
+            <SectionHead accent={G} label="LV Connection Type" />
+            <WCB accent={G} options={CONN_LV} value={d.issued.connectionTypeLV} onChange={togI('connectionTypeLV')} />
+          </div>
+        )
 
-    // 4 – Issued: Enclosure & Type
-    <div key="4">
-      <SH label="Enclosure Type" />
-      <CB options={ENC_OPTIONS} value={d.issued.enclosureType} onChange={togI('enclosureType')} />
-      <SH label="Enclosure Model" />
-      <F v={d.issued.enclosureModel} set={setI('enclosureModel')} />
-      <SH label="Transformer Type" />
-      <CB options={TX_TYPE} value={d.issued.transformerType} onChange={togI('transformerType')} />
-    </div>,
+      // 3 — Issued: Capacity & Phases
+      case 3:
+        return (
+          <div>
+            <SectionHead accent={G} label="Capacity (kVA)" />
+            <WF accent={G} ph="kVA" v={d.issued.capacityKVA} set={setI('capacityKVA')} />
+            <SectionHead accent={G} label="Phases" />
+            <WCB accent={G} options={PHASES} value={d.issued.phases} onChange={togI('phases')} />
+            <SectionHead accent={G} label="Serial Number" />
+            <WF accent={G} v={d.issued.serialNumber} set={setI('serialNumber')} />
+          </div>
+        )
 
-    // 5 – Issued: Make, Model & Volt Test
-    <div key="5">
-      <SH label="Make" />
-      <F v={d.issued.make} set={setI('make')} />
-      <SH label="Model" />
-      <F v={d.issued.model} set={setI('model')} />
-      <SH label="Volt Test" />
-      <F v={d.issued.voltTest} set={setI('voltTest')} ph="e.g. PASS" />
-    </div>,
+      // 4 — Issued: Enclosure & Type
+      case 4:
+        return (
+          <div>
+            <SectionHead accent={G} label="Enclosure Type" />
+            <WCB accent={G} options={ENC_OPTIONS} value={d.issued.enclosureType} onChange={togI('enclosureType')} />
+            <SectionHead accent={G} label="Enclosure Model" />
+            <WF accent={G} v={d.issued.enclosureModel} set={setI('enclosureModel')} />
+            <SectionHead accent={G} label="Transformer Type" />
+            <WCB accent={G} options={TX_TYPE} value={d.issued.transformerType} onChange={togI('transformerType')} />
+          </div>
+        )
 
-    // 6 – Issued: Technical
-    <div key="6">
-      <SH label="Tap Setting %" />
-      <CB options={['-10', '-7.5', '-5', '-2.5', '0', '+2.5', '+5']}
-        value={d.issued.tapSetting} onChange={togI('tapSetting')} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div>
-          <SH label="MDI Fitted" />
-          <CB options={['YES', 'NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
-        </div>
-        <F label="CT Ratio" v={d.issued.ctRatio} set={setI('ctRatio')} />
-      </div>
-      <SH label="Earth Test" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-        <F label="Test 1"    v={d.issued.earthTest1} set={setI('earthTest1')} />
-        <F label="Test 2"    v={d.issued.earthTest2} set={setI('earthTest2')} />
-        <F label="Total MEN" v={d.issued.totalMEN}   set={setI('totalMEN')} />
-      </div>
-      <SH label="Fuse Size" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.issued.fuseSizeHV} set={setI('fuseSizeHV')} />
-        <F label="LV" v={d.issued.fuseSizeLV} set={setI('fuseSizeLV')} />
-      </div>
-      <SH label="LV Disconnector" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="Make"  v={d.issued.lvDisconnectorMake}  set={setI('lvDisconnectorMake')} />
-        <F label="Model" v={d.issued.lvDisconnectorModel} set={setI('lvDisconnectorModel')} />
-      </div>
-    </div>,
+      // 5 — Issued: Make, Model & Volt Test
+      case 5:
+        return (
+          <div>
+            <SectionHead accent={G} label="Make" />
+            <WF accent={G} v={d.issued.make} set={setI('make')} />
+            <SectionHead accent={G} label="Model" />
+            <WF accent={G} v={d.issued.model} set={setI('model')} />
+            <SectionHead accent={G} label="Volt Test" />
+            <WF accent={G} v={d.issued.voltTest} set={setI('voltTest')} ph="e.g. PASS" />
+          </div>
+        )
 
-    // 7 – Removed: Voltage & Connection
-    <div key="7">
-      <SH label="Voltage" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <F label="HV" v={d.removed.voltageHV} set={setR('voltageHV')} ph="e.g. 11kV" />
-        <F label="LV" v={d.removed.voltageLV} set={setR('voltageLV')} ph="e.g. 400V" />
-      </div>
-      <SH label="HV Connection Type" />
-      <CB options={CONN_HV} value={d.removed.connectionTypeHV} onChange={togR('connectionTypeHV')} />
-      <SH label="LV Connection Type" />
-      <CB options={CONN_LV} value={d.removed.connectionTypeLV} onChange={togR('connectionTypeLV')} />
-    </div>,
+      // 6 — Issued: Technical
+      case 6:
+        return (
+          <div>
+            <SectionHead accent={G} label="Tap Setting %" />
+            <WCB accent={G} options={['-10', '-7.5', '-5', '-2.5', '0', '+2.5', '+5']}
+              value={d.issued.tapSetting} onChange={togI('tapSetting')} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <SectionHead accent={G} label="MDI Fitted" />
+                <WCB accent={G} options={['YES', 'NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
+              </div>
+              <WF accent={G} label="CT Ratio" v={d.issued.ctRatio} set={setI('ctRatio')} />
+            </div>
+            <SectionHead accent={G} label="Earth Test" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="Test 1"    v={d.issued.earthTest1} set={setI('earthTest1')} />
+              <WF accent={G} label="Test 2"    v={d.issued.earthTest2} set={setI('earthTest2')} />
+              <WF accent={G} label="Total MEN" v={d.issued.totalMEN}   set={setI('totalMEN')} />
+            </div>
+            <SectionHead accent={G} label="Fuse Size" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="HV" v={d.issued.fuseSizeHV} set={setI('fuseSizeHV')} />
+              <WF accent={G} label="LV" v={d.issued.fuseSizeLV} set={setI('fuseSizeLV')} />
+            </div>
+            <SectionHead accent={G} label="LV Disconnector" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="Make"  v={d.issued.lvDisconnectorMake}  set={setI('lvDisconnectorMake')} />
+              <WF accent={G} label="Model" v={d.issued.lvDisconnectorModel} set={setI('lvDisconnectorModel')} />
+            </div>
+          </div>
+        )
 
-    // 8 – Removed: Capacity & Phases
-    <div key="8">
-      <SH label="Capacity (kVA)" />
-      <F ph="kVA" v={d.removed.capacityKVA} set={setR('capacityKVA')} />
-      <SH label="Phases" />
-      <CB options={PHASES} value={d.removed.phases} onChange={togR('phases')} />
-      <SH label="Serial Number" />
-      <F v={d.removed.serialNumber} set={setR('serialNumber')} />
-    </div>,
+      // 7 — Removed: Voltage & Connection
+      case 7:
+        return (
+          <div>
+            <SectionHead accent={G} label="Voltage" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <WF accent={G} label="HV" v={d.removed.voltageHV} set={setR('voltageHV')} ph="e.g. 11kV" />
+              <WF accent={G} label="LV" v={d.removed.voltageLV} set={setR('voltageLV')} ph="e.g. 400V" />
+            </div>
+            <SectionHead accent={G} label="HV Connection Type" />
+            <WCB accent={G} options={CONN_HV} value={d.removed.connectionTypeHV} onChange={togR('connectionTypeHV')} />
+            <SectionHead accent={G} label="LV Connection Type" />
+            <WCB accent={G} options={CONN_LV} value={d.removed.connectionTypeLV} onChange={togR('connectionTypeLV')} />
+          </div>
+        )
 
-    // 9 – Removed: Enclosure & Type
-    <div key="9">
-      <SH label="Enclosure Type" />
-      <CB options={ENC_OPTIONS} value={d.removed.enclosureType} onChange={togR('enclosureType')} />
-      <SH label="Enclosure Model" />
-      <F v={d.removed.enclosureModel} set={setR('enclosureModel')} />
-      <SH label="Transformer Type" />
-      <CB options={TX_TYPE} value={d.removed.transformerType} onChange={togR('transformerType')} />
-    </div>,
+      // 8 — Removed: Capacity & Phases
+      case 8:
+        return (
+          <div>
+            <SectionHead accent={G} label="Capacity (kVA)" />
+            <WF accent={G} ph="kVA" v={d.removed.capacityKVA} set={setR('capacityKVA')} />
+            <SectionHead accent={G} label="Phases" />
+            <WCB accent={G} options={PHASES} value={d.removed.phases} onChange={togR('phases')} />
+            <SectionHead accent={G} label="Serial Number" />
+            <WF accent={G} v={d.removed.serialNumber} set={setR('serialNumber')} />
+          </div>
+        )
 
-    // 10 – Removed: Make & Model
-    <div key="10">
-      <SH label="Make" />
-      <F v={d.removed.make} set={setR('make')} />
-      <SH label="Model" />
-      <F v={d.removed.model} set={setR('model')} />
-    </div>,
+      // 9 — Removed: Enclosure & Type
+      case 9:
+        return (
+          <div>
+            <SectionHead accent={G} label="Enclosure Type" />
+            <WCB accent={G} options={ENC_OPTIONS} value={d.removed.enclosureType} onChange={togR('enclosureType')} />
+            <SectionHead accent={G} label="Enclosure Model" />
+            <WF accent={G} v={d.removed.enclosureModel} set={setR('enclosureModel')} />
+            <SectionHead accent={G} label="Transformer Type" />
+            <WCB accent={G} options={TX_TYPE} value={d.removed.transformerType} onChange={togR('transformerType')} />
+          </div>
+        )
 
-    // 11 – Removal Details
-    <div key="11">
-      <SH label="Reason for Removal" />
-      <CB multi
-        options={['Relocation', 'Vegetation', 'Site Dismantled', 'Reconstruction',
-                  'Vehicle Accident', 'End of Life', 'Capacity Change', 'Faulty',
-                  'Adverse Weather', 'Vandalism']}
-        value={d.removed.reasonForRemoval} onChange={togRA('reasonForRemoval')} />
-      <SH label="Removed to Store" />
-      <F ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
-    </div>,
+      // 10 — Removed: Make & Model
+      case 10:
+        return (
+          <div>
+            <SectionHead accent={G} label="Make" />
+            <WF accent={G} v={d.removed.make} set={setR('make')} />
+            <SectionHead accent={G} label="Model" />
+            <WF accent={G} v={d.removed.model} set={setR('model')} />
+          </div>
+        )
 
-    // 12 – Comments
-    <div key="12">
-      <WTA label="Comments" v={d.comments} set={set('comments')} rows={6}
-        ph="Add any additional comments here..." accent={G} />
-      <div style={{ background: '#f0ebff', border: `1px solid ${W_PURPLE}`, borderRadius: 10, padding: '12px 14px', marginTop: 6 }}>
-        <p style={{ margin: 0, fontSize: 13, color: W_PURPLE, fontWeight: 600 }}>
-          ✓ All sections complete — add photos on the next step, then preview your PDF.
-        </p>
-      </div>
-    </div>,
+      // 11 — Removal Details
+      case 11:
+        return (
+          <div>
+            <SectionHead accent={G} label="Reason for Removal" />
+            <WCB accent={G} multi
+              options={['Relocation', 'Vegetation', 'Site Dismantled', 'Reconstruction',
+                        'Vehicle Accident', 'End of Life', 'Capacity Change', 'Faulty',
+                        'Adverse Weather', 'Vandalism']}
+              value={d.removed.reasonForRemoval} onChange={togRA('reasonForRemoval')} />
+            <SectionHead accent={G} label="Removed to Store" />
+            <WF accent={G} ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
+          </div>
+        )
 
-    // 13 – Photos
-    <div key="13">
-      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
-    </div>,
+      // 12 — Comments
+      case 12:
+        return (
+          <div>
+            <WTA label="Comments" v={d.comments} set={set('comments')} rows={6}
+              ph="Add any additional comments here..." accent={G} />
+            <div style={{ background: '#f0ebff', border: `1px solid ${W_PURPLE}`, borderRadius: 10, padding: '12px 14px', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 13, color: W_PURPLE, fontWeight: 600 }}>
+                ✓ All sections complete — add photos on the next step, then preview your PDF.
+              </p>
+            </div>
+          </div>
+        )
 
-    // 14 – Preview & Print
-    <div key="14" />,
-  ]
+      // 13 — Photos
+      case 13:
+        return <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
 
-  const progressPct = (step + 1) / T_STEPS.length * 100
-  const progressColor = STEP_SCHEME[step] === 'issued' ? W_GREEN : STEP_SCHEME[step] === 'removed' ? W_RED : W_YELLOW
+      default:
+        return null
+    }
+  }
 
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
@@ -526,52 +552,37 @@ function TransformerWizardApp({ onClose }) {
 
   return (
     <>
-      {TX_SHOW_OVERLAY && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300, display: 'flex', background: '#1e1b4b', padding: '6px 12px', gap: 8 }}>
-          {['wizard', 'calibrate'].map(t2 => (
-            <button key={t2} onClick={() => setTab(t2)} style={{ padding: '6px 16px', borderRadius: 8, border: 'none', background: tab === t2 ? W_YELLOW : 'rgba(255,255,255,0.1)', color: tab === t2 ? '#1e1b4b' : '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{t2}</button>
-          ))}
-          <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 12, alignSelf: 'center' }}>DEV BUILD</span>
-        </div>
-      )}
+      <WizardShell
+        title="AS-Built Transformer Record"
+        formNumber="360S014EG"
+        headerIcon={<FileText size={22} color="#fff" style={{ flexShrink: 0 }} />}
+        headerBadge={scheme.label || null}
+        steps={T_STEPS}
+        step={step}
+        onStepClick={setStep}
+        onClose={onClose}
+        onBack={() => setStep(s => s - 1)}
+        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onNext={() => {
+          const next = step + 1
+          setStep(next)
+          if (next === T_STEPS.length - 1) triggerGenerate(d, photos)
+        }}
+        accent={scheme.accent}
+        bg={scheme.bg}
+        mid={scheme.mid}
+        border={scheme.border}
+        progressColor={STEP_SCHEME[step] === 'issued' ? W_GREEN : STEP_SCHEME[step] === 'removed' ? W_RED : W_YELLOW}
+        getDotColor={i => { const s = STEP_SCHEME[i]; return s === 'issued' ? W_GREEN : s === 'removed' ? W_RED : W_PURPLE }}
+        isPreview={isPreview}
+        onShare={handleShare}
+        onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
+        missingFields={missingFields}
+        previewContent={previewContent}
+      >
+        {renderCurrentStep()}
+      </WizardShell>
 
-      {TX_SHOW_OVERLAY && tab === 'calibrate' && (
-        <div style={{ paddingTop: 44, overflowX: 'auto', background: '#111' }}>
-          {calibrationPdfBytes
-            ? <CoordOverlay pdfBytes={calibrationPdfBytes} />
-            : <div style={{ padding: 32, color: '#ef4444', fontSize: 14 }}>⚠ Could not load forms/360S014EG.pdf</div>}
-        </div>
-      )}
-
-      {tab === 'wizard' && (
-        <WizardShell
-          title="AS-Built Transformer Record"
-          formNumber="360S014EG"
-          headerIcon={<FileText size={22} color="#fff" style={{ flexShrink: 0 }} />}
-          headerBadge={scheme.label || null}
-          steps={T_STEPS}
-          step={step}
-          onStepClick={setStep}
-          onClose={onClose}
-          onBack={() => setStep(s => s - 1)}
-          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
-        onNext={() => { const next = step + 1; setStep(next); if (next === T_STEPS.length - 1) triggerGenerate(d, photos) }}
-          accent={scheme.accent}
-          bg={scheme.bg}
-          mid={scheme.mid}
-          border={scheme.border}
-          progressColor={progressColor}
-          getDotColor={i => { const s = STEP_SCHEME[i]; return s === 'issued' ? W_GREEN : s === 'removed' ? W_RED : W_PURPLE }}
-          devPaddingTop={TX_SHOW_OVERLAY ? 44 : 0}
-          isPreview={isPreview}
-          onShare={handleShare}
-          onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
-          missingFields={missingFields}
-          previewContent={previewContent}
-        >
-          {formSteps[step]}
-        </WizardShell>
-      )}
       <DraftPicker
         open={draftPickerOpen}
         onClose={() => setDraftPickerOpen(false)}
