@@ -22,27 +22,25 @@ if ('serviceWorker' in navigator) {
       .then(reg => {
         reg.update()
 
+        // When a new SW installs, do NOT skip waiting automatically.
+        // The update banner in App.jsx lets the user decide when to apply it.
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: 'SKIP_WAITING' })
+              // New version is ready and waiting — notify the UI via the
+              // existing updateReady state in App.jsx. Do nothing else here.
+              // The user will see the banner and choose "Update now" or "Later".
             }
           })
         })
 
-        document.addEventListener('visibilitychange', async () => {
-          if (document.visibilityState !== 'visible') return
-          try {
-            await reg.update()
-            setTimeout(() => {
-              if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-            }, 500)
-          } catch { /* ignore */ }
-        })
+        // Do NOT call reg.update() or postMessage SKIP_WAITING on visibility
+        // change. That was causing forced updates regardless of user choice.
       })
       .catch(err => console.warn('SW registration failed:', err))
 
+    // When SW controller changes (new SW activated by user choice), reload the page
     let refreshing = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) { refreshing = true; window.location.reload() }
