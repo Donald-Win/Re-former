@@ -9,20 +9,21 @@
 //   - Pinch/zoom on mobile works naturally (canvas scales with CSS)
 //   - pdfY is always correct: pageHeight - (clickY / renderScale)
 //
+// pdfjs-dist is now imported from npm (not loaded from CDN) so the service
+// worker can cache it and the calibration tool works fully offline.
+//
 // Usage: <CoordOverlay pdfBytes={bytes} page={1} />
 // Set SHOW_OVERLAY = true in the wizard to reveal the calibrate tab.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url'
 import { APP_ACCENT, APP_YELLOW } from './constants'
 
-const PDFJS_VERSION = '3.11.174'
-
-const loadScript = src => new Promise((res, rej) => {
-  if (document.querySelector(`script[src="${src}"]`)) { res(); return }
-  const s = document.createElement('script')
-  s.src = src; s.onload = res; s.onerror = rej
-  document.head.appendChild(s)
-})
+// Configure the worker once at module load time.
+// The ?url import tells Vite to emit the worker as a hashed asset in dist/assets/
+// so the service worker caches it automatically on first visit.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 export function CoordOverlay({ pdfBytes, page = 1 }) {
   const containerRef = useRef(null)
@@ -46,15 +47,10 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
     renderingRef.current = true
 
     try {
-      await loadScript(`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`)
       if (cancelledRef.current) return
 
-      const lib = window['pdfjs-dist/build/pdf']
-      lib.GlobalWorkerOptions.workerSrc =
-        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`
-
-      const pdf = await lib.getDocument({ data: pdfBytes.slice() }).promise
-      if (cancelledRef.current) return
+      const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise
+      if (cancelledRef.current) { pdf.destroy(); return }
 
       const pg   = await pdf.getPage(page)
       const nat  = pg.getViewport({ scale: 1.0 })
@@ -75,6 +71,7 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
 
       await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
       renderingRef.current = false
+      pdf.destroy()
     } catch (err) {
       if (!cancelledRef.current) console.error('CoordOverlay render failed:', err)
       renderingRef.current = false

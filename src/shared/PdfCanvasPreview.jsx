@@ -2,35 +2,23 @@
  * PdfCanvasPreview
  *
  * Renders every page of a PDF (supplied as Uint8Array) onto stacked <canvas>
- * elements using pdf.js loaded from CDN.
+ * elements using pdfjs-dist, bundled locally via npm so the service worker
+ * can cache it for offline use.
  *
- * Fixes vs previous version:
- *   - No page cap — all pages rendered regardless of count
- *   - Container cleared before every new render; no canvas accumulation
- *   - In-flight renders cancelled when pdfBytes changes or component unmounts
- *   - Single pdf.js load — cached on window.pdfjsLib after first use
+ * Key change vs the previous version:
+ *   - pdfjs-dist is now imported from npm (not loaded dynamically from CDN).
+ *   - Vite emits the worker as a hashed asset; the service worker caches it
+ *     on first visit, so PDF preview works fully offline thereafter.
+ *   - All rendering logic is unchanged.
  */
 import { useEffect, useRef, useState } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url'
 
-const PDFJS_VERSION = '3.11.174'
-const PDFJS_CDN     = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`
-
-/** Load pdf.js once; subsequent calls return immediately. */
-function ensurePdfJs() {
-  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib)
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = `${PDFJS_CDN}/pdf.min.js`
-    script.onload = () => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `${PDFJS_CDN}/pdf.worker.min.js`
-      resolve(window.pdfjsLib)
-    }
-    script.onerror = () => reject(new Error('Failed to load pdf.js'))
-    document.head.appendChild(script)
-  })
-}
+// Configure the worker once at module load time.
+// The ?url import tells Vite to copy the worker file to dist/assets/ and
+// return its hashed URL — the service worker will cache it automatically.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 export function PdfCanvasPreview({ pdfBytes }) {
   const containerRef  = useRef(null)
@@ -49,9 +37,6 @@ export function PdfCanvasPreview({ pdfBytes }) {
 
     ;(async () => {
       try {
-        const pdfjsLib = await ensurePdfJs()
-        if (cancelled) return
-
         // Pass a copy so pdf.js can't accidentally transfer/mutate our bytes
         const task = pdfjsLib.getDocument({ data: pdfBytes.slice() })
         pdfDoc = await task.promise
