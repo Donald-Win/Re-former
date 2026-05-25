@@ -5,19 +5,15 @@
  * elements using pdfjs-dist, bundled locally via npm so the service worker
  * can cache it for offline use.
  *
- * Key change vs the previous version:
- *   - pdfjs-dist is now imported from npm (not loaded dynamically from CDN).
- *   - Vite emits the worker as a hashed asset; the service worker caches it
- *     on first visit, so PDF preview works fully offline thereafter.
- *   - All rendering logic is unchanged.
+ * pdfjs-dist v5+ uses .mjs worker — imported via Vite's ?url modifier so the
+ * file is emitted to dist/assets/ and cached by the service worker.
  */
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 // Configure the worker once at module load time.
-// The ?url import tells Vite to copy the worker file to dist/assets/ and
-// return its hashed URL — the service worker will cache it automatically.
+// Vite resolves ?url to a hashed asset path the service worker will cache.
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 export function PdfCanvasPreview({ pdfBytes }) {
@@ -98,7 +94,6 @@ export function PdfCanvasPreview({ pdfBytes }) {
         try { pdfDoc.destroy() } catch (_) {}
         pdfDoc = null
       }
-      // Wipe any partially-rendered canvases so the next render starts clean
       container.innerHTML = ''
     }
   }, [pdfBytes])

@@ -1,41 +1,31 @@
 // CoordOverlay — accurate click-to-coordinate calibration tool.
 //
-// Improvements over original:
-//   - Renders PDF scaled to fit screen width (no overflow/clipping)
-//   - Coordinate math uses the actual render scale — no fudge factors
-//   - Crosshair marker shows exactly where you clicked on the canvas
-//   - Click history panel shows all clicks with labels and copy buttons
-//   - One-click copy of the coordinate pair as a code snippet
-//   - Pinch/zoom on mobile works naturally (canvas scales with CSS)
-//   - pdfY is always correct: pageHeight - (clickY / renderScale)
-//
-// pdfjs-dist is now imported from npm (not loaded from CDN) so the service
-// worker can cache it and the calibration tool works fully offline.
+// pdfjs-dist v5+ uses .mjs worker — imported via Vite's ?url modifier so the
+// file is emitted to dist/assets/ and cached by the service worker.
 //
 // Usage: <CoordOverlay pdfBytes={bytes} page={1} />
 // Set SHOW_OVERLAY = true in the wizard to reveal the calibrate tab.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { APP_ACCENT, APP_YELLOW } from './constants'
 
 // Configure the worker once at module load time.
-// The ?url import tells Vite to emit the worker as a hashed asset in dist/assets/
-// so the service worker caches it automatically on first visit.
+// Vite resolves ?url to a hashed asset path the service worker will cache.
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 export function CoordOverlay({ pdfBytes, page = 1 }) {
   const containerRef = useRef(null)
   const canvasRef    = useRef(null)
-  const scaleRef     = useRef(1)   // actual render scale — used for coordinate math
+  const scaleRef     = useRef(1)
   const renderingRef = useRef(false)
   const cancelledRef = useRef(false)
 
-  const [clicks, setClicks]         = useState([])
-  const [lastClick, setLastClick]   = useState(null)
-  const [copied, setCopied]         = useState(null)   // id of recently copied item
-  const [label, setLabel]           = useState('')      // label input for next click
+  const [clicks, setClicks]       = useState([])
+  const [lastClick, setLastClick] = useState(null)
+  const [copied, setCopied]       = useState(null)
+  const [label, setLabel]         = useState('')
 
   const render = useCallback(async () => {
     const canvas    = canvasRef.current
@@ -47,15 +37,12 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
     renderingRef.current = true
 
     try {
-      if (cancelledRef.current) return
-
       const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise
       if (cancelledRef.current) { pdf.destroy(); return }
 
-      const pg   = await pdf.getPage(page)
-      const nat  = pg.getViewport({ scale: 1.0 })
+      const pg  = await pdf.getPage(page)
+      const nat = pg.getViewport({ scale: 1.0 })
 
-      // Scale to fit the container width with a small margin
       const containerW = container.clientWidth || window.innerWidth
       const fitScale   = Math.min((containerW - 8) / nat.width, 2.0)
       scaleRef.current = fitScale
@@ -63,9 +50,6 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
       const vp = pg.getViewport({ scale: fitScale })
       canvas.width  = Math.round(vp.width)
       canvas.height = Math.round(vp.height)
-
-      // CSS size matches physical pixels — no DPR scaling here
-      // (we want click coords in the same space as canvas pixels)
       canvas.style.width  = canvas.width  + 'px'
       canvas.style.height = canvas.height + 'px'
 
@@ -87,31 +71,17 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const rect = canvas.getBoundingClientRect()
+    const rect  = canvas.getBoundingClientRect()
     const scale = scaleRef.current
-
-    // CSS pixels relative to canvas top-left
-    const cssX = e.clientX - rect.left
-    const cssY = e.clientY - rect.top
-
-    // PDF point coordinates (pdf-lib origin is bottom-left)
-    // Divide by scale to convert from rendered pixels → PDF points
-    const pdfX = Math.round(cssX / scale)
-    const pdfY = Math.round((canvas.height / scale) - (cssY / scale))
-
-    // Canvas pixel position for the dot marker
-    const dotX = Math.round(cssX)
-    const dotY = Math.round(cssY)
+    const cssX  = e.clientX - rect.left
+    const cssY  = e.clientY - rect.top
+    const pdfX  = Math.round(cssX / scale)
+    const pdfY  = Math.round((canvas.height / scale) - (cssY / scale))
+    const dotX  = Math.round(cssX)
+    const dotY  = Math.round(cssY)
 
     const id = Date.now()
-    const entry = {
-      id,
-      label: label.trim() || `Click ${clicks.length + 1}`,
-      pdfX,
-      pdfY,
-      dotX,
-      dotY,
-    }
+    const entry = { id, label: label.trim() || `Click ${clicks.length + 1}`, pdfX, pdfY, dotX, dotY }
 
     console.log(`COORD → x:${pdfX}  pdfY:${pdfY}  (label: ${entry.label})`)
     setLastClick(entry)
@@ -135,7 +105,6 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-
       {/* Header bar */}
       <div style={{
         background: '#1e1b4b', color: '#fff',
@@ -164,7 +133,7 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
         </button>
       </div>
 
-      {/* Last-click readout — sticky at top so visible while scrolling */}
+      {/* Last-click readout */}
       {lastClick && (
         <div style={{
           position: 'sticky', top: 0, zIndex: 50,
@@ -203,38 +172,21 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
             onClick={handleClick}
             style={{ display: 'block', cursor: 'crosshair' }}
           />
-
-          {/* Click dot markers on canvas */}
           {clicks.map((c, i) => (
             <React.Fragment key={c.id}>
-              {/* Dot */}
               <div style={{
-                position: 'absolute',
-                left: c.dotX,
-                top:  c.dotY,
-                width: 10, height: 10,
-                borderRadius: '50%',
-                background: '#ef4444',
-                border: '2px solid #fff',
+                position: 'absolute', left: c.dotX, top: c.dotY,
+                width: 10, height: 10, borderRadius: '50%',
+                background: '#ef4444', border: '2px solid #fff',
                 transform: 'translate(-50%, -50%)',
-                pointerEvents: 'none',
-                zIndex: 10,
+                pointerEvents: 'none', zIndex: 10,
                 boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
               }} />
-              {/* Number label next to dot */}
               <div style={{
-                position: 'absolute',
-                left: c.dotX + 7,
-                top:  c.dotY - 9,
-                fontSize: 9,
-                fontWeight: 700,
-                color: '#fff',
-                background: '#ef4444',
-                borderRadius: 4,
-                padding: '1px 4px',
-                pointerEvents: 'none',
-                zIndex: 11,
-                whiteSpace: 'nowrap',
+                position: 'absolute', left: c.dotX + 7, top: c.dotY - 9,
+                fontSize: 9, fontWeight: 700, color: '#fff',
+                background: '#ef4444', borderRadius: 4, padding: '1px 4px',
+                pointerEvents: 'none', zIndex: 11, whiteSpace: 'nowrap',
               }}>
                 {i + 1}
               </div>
@@ -261,7 +213,6 @@ export function CoordOverlay({ pdfBytes, page = 1 }) {
               {copied === 'all' ? '✓ Copied all' : '📋 Copy all'}
             </button>
           </div>
-
           {clicks.map((c, i) => (
             <div key={c.id} style={{
               display: 'flex', alignItems: 'center', gap: 8,
