@@ -16,8 +16,9 @@
  *   photos     array      — current photos
  *   onLoad     fn(draft)  — called with draft to restore
  *   accent     string
+ *   initialMode string   — 'menu' | 'save' | 'list'
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Save, FolderOpen, Trash2, X, ChevronRight, Check } from 'lucide-react'
 import { listDrafts, saveDraft, deleteDraft, draftLabel, draftSub, draftAge } from './draftStore'
 import { APP_ACCENT } from './constants'
@@ -35,35 +36,55 @@ export function DraftPicker({
   accent = APP_ACCENT,
   initialMode = 'menu',
 }) {
-  const [mode, setMode]         = useState('menu')
-  const [drafts, setDrafts]     = useState([])
-  const [name, setName]         = useState('')
-  const [saved, setSaved]       = useState(false)
+  const [mode, setMode]             = useState('menu')
+  const [drafts, setDrafts]         = useState([])
+  const [draftsLoading, setDraftsLoading] = useState(false)
+  const [name, setName]             = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+
+  // Load drafts from IndexedDB
+  const refreshDrafts = useCallback(async () => {
+    setDraftsLoading(true)
+    try {
+      const all = await listDrafts(formKey)
+      setDrafts(all)
+    } catch (err) {
+      console.error('[DraftPicker] Failed to load drafts:', err)
+      setDrafts([])
+    } finally {
+      setDraftsLoading(false)
+    }
+  }, [formKey])
 
   useEffect(() => {
     if (open) {
       setMode(initialMode)
       setSaved(false)
       setConfirmDelete(null)
-      setDrafts(listDrafts(formKey))
+      refreshDrafts()
 
       // Pre-fill name from job details if available
       const suggested = [d?.npJobNumber, d?.projectName, d?.streetRoad]
         .filter(Boolean).join(' — ')
       setName(suggested || '')
     }
-  }, [open, formKey])
+  }, [open, formKey, initialMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
 
-  const refreshDrafts = () => setDrafts(listDrafts(formKey))
-
-  const handleSave = () => {
-    saveDraft({ formKey, name, step, data: d, photos })
-    refreshDrafts()
-    setSaved(true)
-    setTimeout(() => { setSaved(false); onClose() }, 900)
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await saveDraft({ formKey, name, step, data: d, photos })
+      await refreshDrafts()
+      setSaved(true)
+      setTimeout(() => { setSaved(false); onClose() }, 900)
+    } catch (err) {
+      console.error('[DraftPicker] Save failed:', err)
+      setSaving(false)
+    }
   }
 
   const handleLoad = (draft) => {
@@ -71,9 +92,13 @@ export function DraftPicker({
     onClose()
   }
 
-  const handleDelete = (id) => {
-    deleteDraft(id)
-    refreshDrafts()
+  const handleDelete = async (id) => {
+    try {
+      await deleteDraft(id)
+      await refreshDrafts()
+    } catch (err) {
+      console.error('[DraftPicker] Delete failed:', err)
+    }
     setConfirmDelete(null)
   }
 
@@ -143,9 +168,11 @@ export function DraftPicker({
             <div>
               <div style={{ fontWeight: 700, fontSize: 15, color: '#374151' }}>Load Saved Draft</div>
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                {drafts.length === 0
-                  ? 'No saved drafts yet'
-                  : `${drafts.length} saved draft${drafts.length !== 1 ? 's' : ''}`}
+                {draftsLoading
+                  ? 'Loading…'
+                  : drafts.length === 0
+                    ? 'No saved drafts yet'
+                    : `${drafts.length} saved draft${drafts.length !== 1 ? 's' : ''}`}
               </div>
             </div>
           </button>
@@ -189,17 +216,17 @@ export function DraftPicker({
 
           <button
             onClick={handleSave}
-            disabled={!name.trim()}
+            disabled={!name.trim() || saving}
             style={{
               width: '100%', padding: '15px', borderRadius: 14, border: 'none',
               background: saved ? '#16a34a' : name.trim() ? accent : '#d1d5db',
               color: '#fff', fontFamily: 'inherit', fontSize: 16,
-              fontWeight: 700, cursor: name.trim() ? 'pointer' : 'default',
+              fontWeight: 700, cursor: name.trim() && !saving ? 'pointer' : 'default',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               transition: 'background 0.2s',
             }}
           >
-            {saved ? <><Check size={20} /> Saved!</> : 'Save Draft'}
+            {saved ? <><Check size={20} /> Saved!</> : saving ? 'Saving…' : 'Save Draft'}
           </button>
         </div>
       </div>
@@ -213,7 +240,11 @@ export function DraftPicker({
       <div style={sheetContainer}>
         {renderHeader('Saved Drafts', () => setMode('menu'))}
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 18px 32px' }}>
-          {drafts.length === 0 ? (
+          {draftsLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+              <div style={{ fontSize: 14 }}>Loading drafts…</div>
+            </div>
+          ) : drafts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
               <FolderOpen size={40} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
               <div style={{ fontSize: 14 }}>No saved drafts yet.</div>

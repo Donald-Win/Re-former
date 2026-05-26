@@ -1,60 +1,93 @@
 /**
  * draftStore — named draft storage for wizard forms.
  *
- * Unlike the old single-draft system, this stores multiple named drafts
- * per form type so the user can pre-fill several jobs in advance.
+ * Storage backend: IndexedDB via idb-keyval.
+ * IndexedDB handles hundreds of MB comfortably, so photo base64 strings
+ * are stored without risk of QuotaExceededError.
  *
- * Each draft has:
- *   id         — unique key
+ * All public functions are async (return Promises).
+ *
+ * Each draft object:
+ *   id         — unique key  (e.g. "draft_1234567890_abc1")
  *   formKey    — e.g. '360S014EC'
- *   name       — user-supplied label (e.g. "Pyes Pa Pole - pre fill")
+ *   name       — user-supplied label
  *   step       — wizard step when saved
  *   savedAt    — ISO timestamp
- *   data       — form field values (signed excluded — too large)
- *   photos     — up to MAX_PHOTOS base64 data URLs
+ *   data       — form field values  (signed/signature excluded — stored in userPrefs)
+ *   photos     — array of { dataUrl, name } — stored in full in IndexedDB
  */
 
-const STORAGE_KEY  = 're-former-drafts-v2'
-const MAX_DRAFTS   = 50   // across all form types
-const MAX_PHOTOS   = 5
+import { createStore, get, set, del, keys } from 'idb-keyval'
 
-function load() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  } catch { return [] }
-}
+// Dedicated IndexedDB store so we don't collide with other idb-keyval usage
+const draftIdb = createStore('re-former-drafts', 'drafts')
 
-function persist(drafts) {
+const MAX_DRAFTS = 50
+const MAX_PHOTOS = 5
+
+// ── One-time migration from old localStorage drafts ───────────────────────────
+// Runs once on first import; silently moves any legacy data then removes it.
+let _migrated = false
+async function migrateFromLocalStorage() {
+  if (_migrated) return
+  _migrated = true
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts))
-    return true
-  } catch {
-    // Storage full — try without photos
-    try {
-      const slim = drafts.map(d => ({ ...d, photos: [] }))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(slim))
-      return true
-    } catch { return false }
+    const OLD_KEY = 're-former-drafts-v2'
+    const raw = localStorage.getItem(OLD_KEY)
+    if (!raw) return
+    const old = JSON.parse(raw)
+    if (!Array.isArray(old) || old.length === 0) { localStorage.removeItem(OLD_KEY); return }
+
+    // Write each legacy draft into IndexedDB (skip ones already there)
+    const existingKeys = await keys(draftIdb)
+    for (const draft of old) {
+      if (!draft.id) continue
+      if (existingKeys.includes(draft.id)) continue
+      await set(draft.id, draft, draftIdb)
+    }
+    localStorage.removeItem(OLD_KEY)
+    console.log(`[draftStore] Migrated ${old.length} legacy draft(s) to IndexedDB`)
+  } catch (err) {
+    console.warn('[draftStore] Migration failed (non-critical):', err)
   }
 }
+
+// Kick off migration immediately when the module loads
+migrateFromLocalStorage()
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeId() {
   return 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
 }
 
-/** Returns all drafts for a given formKey, newest first. */
-export function listDrafts(formKey) {
-  return load().filter(d => d.formKey === formKey)
-}
-
-/** Saves a new named draft. Returns the saved draft object. */
-export function saveDraft({ formKey, name, step, data, photos = [] }) {
-  const drafts = load()
-
-  // Exclude signature — too large
-  const cleanData = Object.fromEntries(
+function stripSignature(data) {
+  // Signature is large (50–200 KB as base64) and is already persisted in
+  // userPrefs, so we never store it in drafts.
+  return Object.fromEntries(
     Object.entries(data || {}).filter(([k]) => k !== 'signed')
   )
+}
+
+// ── Public API — all async ────────────────────────────────────────────────────
+
+/**
+ * Returns all drafts for a given formKey, newest first.
+ */
+export async function listDrafts(formKey) {
+  await migrateFromLocalStorage()
+  const allKeys = await keys(draftIdb)
+  const drafts = await Promise.all(allKeys.map(k => get(k, draftIdb)))
+  return drafts
+    .filter(d => d && d.formKey === formKey)
+    .sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt))
+}
+
+/**
+ * Saves a new named draft. Returns the saved draft object.
+ */
+export async function saveDraft({ formKey, name, step, data, photos = [] }) {
+  await migrateFromLocalStorage()
 
   const entry = {
     id:      makeId(),
@@ -62,51 +95,61 @@ export function saveDraft({ formKey, name, step, data, photos = [] }) {
     name:    name?.trim() || 'Unnamed draft',
     step:    step || 0,
     savedAt: new Date().toISOString(),
-    data:    cleanData,
+    data:    stripSignature(data),
     photos:  (photos || []).slice(0, MAX_PHOTOS),
   }
 
-  drafts.unshift(entry)
-  persist(drafts.slice(0, MAX_DRAFTS))
+  await set(entry.id, entry, draftIdb)
+
+  // Enforce MAX_DRAFTS limit across ALL form types (oldest removed first)
+  const allKeys = await keys(draftIdb)
+  if (allKeys.length > MAX_DRAFTS) {
+    const all = await Promise.all(allKeys.map(k => get(k, draftIdb)))
+    const sorted = all
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.savedAt) - new Date(b.savedAt))
+    const toDelete = sorted.slice(0, all.length - MAX_DRAFTS)
+    await Promise.all(toDelete.map(d => del(d.id, draftIdb)))
+  }
+
   return entry
 }
 
-/** Updates an existing draft in place (same id). */
-export function updateDraft(id, { name, step, data, photos }) {
-  const drafts = load()
-  const idx = drafts.findIndex(d => d.id === id)
-  if (idx < 0) return null
+/**
+ * Updates an existing draft in place (same id).
+ */
+export async function updateDraft(id, { name, step, data, photos }) {
+  const existing = await get(id, draftIdb)
+  if (!existing) return null
 
-  const cleanData = Object.fromEntries(
-    Object.entries(data || {}).filter(([k]) => k !== 'signed')
-  )
-
-  drafts[idx] = {
-    ...drafts[idx],
-    name:    name?.trim() || drafts[idx].name,
-    step:    step ?? drafts[idx].step,
+  const updated = {
+    ...existing,
+    name:    name?.trim() || existing.name,
+    step:    step ?? existing.step,
     savedAt: new Date().toISOString(),
-    data:    cleanData,
+    data:    stripSignature(data),
     photos:  (photos || []).slice(0, MAX_PHOTOS),
   }
 
-  persist(drafts)
-  return drafts[idx]
+  await set(id, updated, draftIdb)
+  return updated
 }
 
-/** Deletes a draft by id. */
-export function deleteDraft(id) {
-  persist(load().filter(d => d.id !== id))
+/**
+ * Deletes a draft by id.
+ */
+export async function deleteDraft(id) {
+  await del(id, draftIdb)
 }
 
-/** Returns a display label for a draft. */
+// ── Display helpers (sync — operate on already-fetched draft objects) ─────────
+
 export function draftLabel(draft) {
-  return draft.name || 'Unnamed draft'
+  return draft?.name || 'Unnamed draft'
 }
 
-/** Returns a subtitle line showing key job details. */
 export function draftSub(draft) {
-  const d = draft.data || {}
+  const d = draft?.data || {}
   return [
     d.npJobNumber && `NP ${d.npJobNumber}`,
     d.projectName,
@@ -114,7 +157,6 @@ export function draftSub(draft) {
   ].filter(Boolean).join(' — ') || ''
 }
 
-/** Human-readable age string. */
 export function draftAge(draft) {
   if (!draft?.savedAt) return ''
   const mins = Math.round((Date.now() - new Date(draft.savedAt)) / 60000)
