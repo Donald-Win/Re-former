@@ -1,6 +1,7 @@
 [build]
   command = "cp manifest.netlify.json manifest.json && cp index.netlify.html index.html && npm run build -- --config vite.config.netlify.js"
   publish = "dist"
+  ignore = "[ \"$BRANCH\" = \"dev\" ]"
 
 [[redirects]]
   from = "/*"

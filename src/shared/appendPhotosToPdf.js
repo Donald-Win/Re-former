@@ -11,6 +11,12 @@
  *   - Portrait image  (h >= w) → portrait A4 page  (595 × 842 pt)
  *   - Landscape image (w  > h) → landscape A4 page (842 × 595 pt)
  *
+ * Photos are processed SEQUENTIALLY (not with Promise.all) so that the
+ * synchronous, CPU-heavy canvas operations (drawImage + toDataURL) don't
+ * all run at the same time and freeze the main thread on lower-end devices.
+ * A short setTimeout(0) yield is inserted between each image to give the
+ * browser a chance to paint / handle events before the next one starts.
+ *
  * @param {PDFDocument} pdfDoc  – pdf-lib PDFDocument to mutate in place
  * @param {Array}       photos  – array of { dataUrl: string, name?: string }
  */
@@ -18,15 +24,22 @@
 const MAX_PHOTO_PX = 1600  // longest edge cap — reduces file size significantly
 const JPEG_QUALITY = 0.75  // was 0.92
 
+/** Yields to the browser's event loop for one frame before continuing. */
+function yieldToMain() {
+  return new Promise(resolve => setTimeout(resolve, 0))
+}
+
 export async function appendPhotosToPdf(pdfDoc, photos) {
   if (!photos || photos.length === 0) return
 
-  // Step 1: Process all photos in parallel (load + canvas normalise)
-  const processed = await Promise.all(photos.map(async (photo) => {
-    const { dataUrl } = photo
-    if (!dataUrl || !dataUrl.startsWith('data:image')) return null
+  for (const photo of photos) {
+    // Yield before each image so the UI stays responsive between heavy ops
+    await yieldToMain()
 
-    // Load through <img> to get EXIF-corrected display dimensions
+    const { dataUrl } = photo
+    if (!dataUrl || !dataUrl.startsWith('data:image')) continue
+
+    // ── Step 1: Load image to get EXIF-corrected display dimensions ────────
     let imgEl
     try {
       imgEl = await new Promise((resolve, reject) => {
@@ -37,14 +50,14 @@ export async function appendPhotosToPdf(pdfDoc, photos) {
       })
     } catch {
       console.warn('appendPhotosToPdf: could not load image', photo.name)
-      return null
+      continue
     }
 
     const natW = imgEl.naturalWidth
     const natH = imgEl.naturalHeight
-    if (!natW || !natH) return null
+    if (!natW || !natH) continue
 
-    // Normalise EXIF via canvas, scaling down if oversized
+    // ── Step 2: Scale down if oversized ────────────────────────────────────
     let canvasW = natW
     let canvasH = natH
     if (natW > MAX_PHOTO_PX || natH > MAX_PHOTO_PX) {
@@ -53,6 +66,7 @@ export async function appendPhotosToPdf(pdfDoc, photos) {
       canvasH = Math.round(natH * scale)
     }
 
+    // ── Step 3: Normalise EXIF via canvas (synchronous — the heavy bit) ────
     let normBytes
     try {
       const canvas = document.createElement('canvas')
@@ -65,17 +79,10 @@ export async function appendPhotosToPdf(pdfDoc, photos) {
       normBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
     } catch (err) {
       console.warn('appendPhotosToPdf: canvas normalisation failed', photo.name, err)
-      return null
+      continue
     }
 
-    return { normBytes, natW, natH, canvasW, canvasH }
-  }))
-
-  // Step 2: Embed and draw pages sequentially (pdf-lib is not thread-safe)
-  for (const result of processed) {
-    if (!result) continue
-    const { normBytes, natW, natH, canvasW, canvasH } = result
-
+    // ── Step 4: Embed into the PDF and draw a page ─────────────────────────
     // Choose A4 page orientation from EXIF-corrected dimensions
     const isLandscape = natW > natH
     const pageW = isLandscape ? 842 : 595
