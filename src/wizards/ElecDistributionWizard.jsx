@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { APP_ACCENT } from '../shared/constants'
-import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
@@ -14,6 +12,7 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { generateEbPdf } from './generators/ElecDistributionPdfGenerator'
 
 const EB_SHOW_OVERLAY = false
 
@@ -77,117 +76,6 @@ function CableRow({ row, idx, setRow, onRemove, canRemove }) {
   )
 }
 
-function wrapText(text, font, size, maxPts) {
-  const words = String(text).split(' ')
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? current + ' ' + word : word
-    if (font.widthOfTextAtSize(candidate, size) <= maxPts) {
-      current = candidate
-    } else {
-      if (current) lines.push(current)
-      if (font.widthOfTextAtSize(word, size) > maxPts) {
-        let part = ''
-        for (const char of word) {
-          const next = part + char
-          if (font.widthOfTextAtSize(next, size) <= maxPts) { part = next } else { if (part) lines.push(part); part = char }
-        }
-        current = part
-      } else { current = word }
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-async function generateEbPdf(d, photos = []) {
-  const bytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014EB.pdf').then(r => r.arrayBuffer())
-  const srcDoc = await PDFDocument.load(bytes)
-  const pdfDoc = await PDFDocument.create()
-  const [copiedPage] = await pdfDoc.copyPages(srcDoc, [0])
-  pdfDoc.addPage(copiedPage)
-  const p1     = pdfDoc.getPages()[0]
-  const font   = await pdfDoc.embedFont('Helvetica')
-  const PAGE_H = 842
-  const BLUE   = rgb(0/255, 20/255, 160/255)
-
-  const t = (x, cssY, str, size = 8.5) => {
-    if (!str) return
-    p1.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
-  }
-  const ck = (x, cssY, show) => {
-    if (!show) return
-    const by = PAGE_H - cssY - 2
-    p1.drawLine({ start: { x, y: by - 6 }, end: { x: x + 3, y: by - 9 }, thickness: 1.5, color: BLUE })
-    p1.drawLine({ start: { x: x + 3, y: by - 9 }, end: { x: x + 9, y: by - 1 }, thickness: 1.5, color: BLUE })
-  }
-  const tWrap = (x, cssY, str, maxPts, lineH = 11, maxLines = 2, size = 8.5) => {
-    if (!str) return
-    wrapText(str, font, size, maxPts).slice(0, maxLines).forEach((line, i) => t(x, cssY + i * lineH, line, size))
-  }
-
-  t(120,  86, d.streetRoad)
-  t(450,  86, d.contractor)
-  t(120, 103, d.cityTown)
-  t(255, 103, d.district)
-  t(450, 103, d.dateWorkCompleted)
-  t(120, 120, d.pcoWONo)
-  t(255, 120, d.ciwrNo)
-  t(160, 137, d.npJobNumber)
-  t(450, 137, d.namePrint)
-
-  if (d.signed) {
-    try {
-      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
-      const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-      p1.drawImage(sigImg, { x: 448, y: PAGE_H - 131, width: 110, height: 20, opacity: 1 })
-    } catch (_) {}
-  }
-
-  ck(134, 181, d.distributionMain === 'Overhead')
-  ck(212, 181, d.distributionMain === 'Underground')
-  if (d.distributionMain === 'Underground') t(500, 182, d.undergroundCableDepth)
-
-  const ROW_Y = [233, 246, 259]
-  const COL_X = { voltage: 55, phase: 125, cableSize: 175, material: 250, insulation: 350, numberOfCables: 420, numberOfCores: 485, circuitLength: 538 }
-  d.cableRows.slice(0, 3).forEach((row, i) => {
-    const y = ROW_Y[i]
-    t(COL_X.voltage, y, row.voltage); t(COL_X.phase, y, row.phase); t(COL_X.cableSize, y, row.cableSize)
-    t(COL_X.material, y, row.material); t(COL_X.insulation, y, row.insulation)
-    t(COL_X.numberOfCables, y, row.numberOfCables); t(COL_X.numberOfCores, y, row.numberOfCores); t(COL_X.circuitLength, y, row.circuitLength)
-  })
-
-  ck(113, 270, d.ownership === 'Powerco')
-  ck(213, 270, d.ownership === 'Customer')
-  ck(321, 270, d.ownership === 'Other')
-  if (d.ownership === 'Other') t(400, 272, d.ownershipOther)
-
-  ck(135, 318, d.cableDuctUsed === 'Yes')
-  ck(199, 318, d.cableDuctUsed === 'No')
-  ck(270, 318, d.cableDuctUsed === 'Yes' && d.cableDuctType === 'New')
-  ck(327, 318, d.cableDuctUsed === 'Yes' && d.cableDuctType === 'Existing')
-  ck(441, 318, d.capped === 'Yes')
-  ck(505, 318, d.capped === 'No')
-  t(130, 338, d.numberOfDucts)
-  t(270, 338, d.ductSize)
-  ck(441, 337, d.drawWire === 'Yes')
-  ck(505, 337, d.drawWire === 'No')
-  ck(158, 356, d.otherServicesInTrench.includes('Gas'))
-  ck(215, 356, d.otherServicesInTrench.includes('Telecom'))
-  ck(315, 356, d.otherServicesInTrench.includes('Water'))
-  if (d.otherServicesInTrench.includes('Other')) t(430, 357, d.otherServicesOther)
-  ck(158, 381, d.gpsRequired === 'Yes')
-  ck(215, 381, d.gpsRequired === 'No')
-  if (d.gpsRequired === 'Yes') t(425, 383, d.gpsFiles)
-
-  tWrap(195, 701, d.comments, 370, 14, 4)
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-  return await pdfDoc.save()
-}
-
 export default function ElecDistributionWizard({ onClose }) {
   const [step, setStep] = useState(0)
 
@@ -207,19 +95,19 @@ export default function ElecDistributionWizard({ onClose }) {
   })
 
   const isPreview = step === EB_STEPS.length - 1
-  const [overlayTab,    setOverlayTab]    = useState('form')
-  const [overlayBytes,  setOverlayBytes]  = useState(null)
+  const [overlayTab,      setOverlayTab]      = useState('form')
+  const [overlayBytes,    setOverlayBytes]    = useState(null)
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos,        setPhotos]        = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEbPdf)
+  const [photos,          setPhotos]          = useState([])
 
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(generateEbPdf)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.cableRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, cableRows: rows }
   })
-
 
   useEffect(() => {
     if (EB_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -237,8 +125,6 @@ export default function ElecDistributionWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-
-
   const missingFields = [
     !d.pcoWONo          && 'PCo W/O No.',
     !d.streetRoad       && 'No./Street/Road',
@@ -248,7 +134,7 @@ export default function ElecDistributionWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EB')
-    const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
+  const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
 
   const handleDraftLoad = (draft) => {
     const { photos: draftPhotos, ...formData } = draft.data || {}
@@ -259,8 +145,10 @@ export default function ElecDistributionWizard({ onClose }) {
 
   const formSteps = [
 
+    // 0 — Job Details
     <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
 
+    // 1 — Distribution Main
     <div key="s1">
       <SectionHead label="Distribution Connection Details" accent={EB_ORANGE} />
       <WCB label="Distribution Main" options={['Overhead', 'Underground']} value={d.distributionMain} onChange={v => set('distributionMain', v)} accent={EB_ORANGE} />
@@ -292,6 +180,7 @@ export default function ElecDistributionWizard({ onClose }) {
       </div>
     </div>,
 
+    // 2 — Underground Details
     <div key="s2">
       {d.distributionMain !== 'Underground' ? (
         <div style={{ background: EB_BG, border: `1px solid ${EB_BORDER}`, borderRadius: 10, padding: '20px 18px', textAlign: 'center', color: '#9a3412', fontSize: 14, lineHeight: 1.6 }}>
@@ -312,8 +201,8 @@ export default function ElecDistributionWizard({ onClose }) {
                 <WF label="Size (mm)"    type="number" v={d.ductSize}      set={v => set('ductSize',      v)} accent={EB_ORANGE} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginTop: 10 }}>
-                <WCB label="Capped"    options={['Yes', 'No']} value={d.capped}    onChange={v => set('capped',    v)} accent={EB_ORANGE} />
-                <WCB label="Draw Wire" options={['Yes', 'No']} value={d.drawWire}  onChange={v => set('drawWire',  v)} accent={EB_ORANGE} />
+                <WCB label="Capped"    options={['Yes', 'No']} value={d.capped}   onChange={v => set('capped',   v)} accent={EB_ORANGE} />
+                <WCB label="Draw Wire" options={['Yes', 'No']} value={d.drawWire} onChange={v => set('drawWire', v)} accent={EB_ORANGE} />
               </div>
             </div>
           )}
@@ -339,6 +228,7 @@ export default function ElecDistributionWizard({ onClose }) {
       )}
     </div>,
 
+    // 3 — Comments & Plan
     <div key="s3">
       <SectionHead label="Dimensioned Plan" accent={EB_ORANGE} />
       <div style={{ background: EB_BG, border: `1px solid ${EB_BORDER}`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#9a3412', lineHeight: 1.5 }}>
@@ -348,10 +238,12 @@ export default function ElecDistributionWizard({ onClose }) {
       <WTA label="Comments (e.g. boundary unknown etc.)" v={d.comments} set={v => set('comments', v)} accent={EB_ORANGE} rows={4} />
     </div>,
 
+    // 4 — Photos
     <div key="s4">
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={EB_ORANGE} />
     </div>,
 
+    // 5 — Preview (empty — WizardShell renders the PDF overlay)
     <div key="s5" />,
   ]
 
@@ -385,7 +277,7 @@ export default function ElecDistributionWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
-        onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={EB_ORANGE}
           bg={EB_BG}
           mid={EB_MID}
@@ -416,4 +308,3 @@ export default function ElecDistributionWizard({ onClose }) {
     </>
   )
 }
-
