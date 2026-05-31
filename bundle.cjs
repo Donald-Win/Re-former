@@ -4,14 +4,23 @@ const os = require('os');
 
 // --- CONFIGURATION ---
 const outputFile = path.join(os.homedir(), 'project-codebase.txt');
-const ignoreDirs = ['node_modules', '.git', '.github', 'dist', 'build', '.next', '.idea', '.vscode']; 
-const ignoreExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.pdf', '.zip', '.mp4', '.mov'];
+const ignoreDirs = ['node_modules', '.git', '.github', 'dist', 'build', '.next', '.idea', '.vscode', 'public/icons']; 
+const ignoreFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bundle.cjs', '.DS_Store'];
+const ignoreExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.pdf', '.zip', '.mp4', '.mov', '.bak', '.log'];
 // ---------------------
 
+// Support targeted bundling: "node bundle.cjs src/shared"
+const scanRoot = process.argv[2] || '.'; 
 let fileStructureLog = [];
 let textFilesQueue = [];
+let skippedFilesCount = 0;
 
 function scanAndQueueFiles(dir) {
+    if (!fs.existsSync(dir)) {
+        console.error(`Error: Path "${dir}" does not exist.`);
+        process.exit(1);
+    }
+    
     const files = fs.readdirSync(dir);
 
     files.forEach(file => {
@@ -26,50 +35,53 @@ function scanAndQueueFiles(dir) {
         } else {
             const ext = path.extname(file).toLowerCase();
             
-            if (filePath !== outputFile && file !== 'bundle.js') {
-                if (ignoreExtensions.includes(ext)) {
-                    // Log the location of the skipped file for Claude's map
-                    fileStructureLog.push(`[Skipped Binary File] ${relativePath}`);
+            if (filePath !== outputFile) {
+                if (ignoreExtensions.includes(ext) || ignoreFiles.includes(file)) {
+                    skippedFilesCount++;
                 } else {
-                    // Log the text file and queue it for full content bundling
-                    fileStructureLog.push(`[Included Text File]   ${relativePath}`);
-                    textFilesQueue.push({ filePath, relativePath, ext });
+                    fileStructureLog.push(`[Included] ${relativePath}`);
+                    textFilesQueue.push({ filePath, relativePath });
                 }
             }
         }
     });
 }
 
-// Clear old file if it exists
 if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
 
-console.log('Scanning project directories...');
-scanAndQueueFiles('.');
+console.log(`Scanning target: ${scanRoot}...`);
+scanAndQueueFiles(scanRoot);
 
-// 1. Write the Directory Structure Map first so it sits at the top of the file
+// 1. Write the Directory Structure Map
 fs.writeFileSync(outputFile, `=== PROJECT DIRECTORY MAP ===\n`);
-fs.appendFileSync(outputFile, `The following is a complete map of all files found in the project directory.\n`);
-fs.appendFileSync(outputFile, `Note: Non-text binary files (like PDFs or images) are mapped but their raw content was stripped to save context space.\n\n`);
+fs.appendFileSync(outputFile, `Target Target: ${scanRoot}\n`);
+fs.appendFileSync(outputFile, `Total parsed files: ${fileStructureLog.length}\n`);
+fs.appendFileSync(outputFile, `Ignored binaries/locks: ${skippedFilesCount}\n\n`);
 fs.appendFileSync(outputFile, fileStructureLog.join('\n') + `\n\n=========================================\n\n`);
 
-console.log(`Mapped ${fileStructureLog.length} total files. Bundling text content...`);
+console.log(`Mapped ${fileStructureLog.length} files. Optimizing and bundling text content...`);
 
-// 2. Append the actual contents of the text files below the map
-textFilesQueue.forEach(({ filePath, relativePath, ext }) => {
+// 2. Append the contents using highly recognizable XML tags
+let totalChars = 0;
+textFilesQueue.forEach(({ filePath, relativePath }) => {
     try {
-        const content = fs.readFileSync(filePath, 'utf8');
+        let content = fs.readFileSync(filePath, 'utf8');
         
-        let lang = 'text';
-        if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) lang = 'javascript';
-        else if (['.json', '.rc'].includes(ext)) lang = 'json';
-        else if (['.html', '.htm'].includes(ext)) lang = 'html';
-        else if (['.css', '.scss'].includes(ext)) lang = 'css';
-        else if (['.md'].includes(ext)) lang = 'markdown';
+        // Token Optimization: Remove blocks of 3+ consecutive empty lines down to single breaks
+        content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
+        
+        totalChars += content.length;
 
-        fs.appendFileSync(outputFile, `\n--- START FILE: ${relativePath} ---\n\`\`\`${lang}\n${content}\n\`\`\`\n--- END FILE: ${relativePath} ---\n`);
+        fs.appendFileSync(outputFile, `<file path="${relativePath}">\n${content}\n</file>\n\n`);
     } catch (err) {
-        // Fallback catch for any rogue binaries
+        console.error(`Failed to read ${relativePath}`);
     }
 });
 
-console.log(`\nSuccess! Codebase bundled with an accurate directory map:\n--> ${outputFile}\n`);
+// Calculate a rough estimate of tokens (approx 4 characters per token for standard code)
+const estTokens = Math.round(totalChars / 4);
+
+console.log(`\nSuccess! Codebase file created.`);
+console.log(`--> ${outputFile}`);
+console.log(`--> Size: ~${(totalChars / 1024).toFixed(1)} KB`);
+console.log(`--> Estimated context used: ~${estTokens.toLocaleString()} tokens.\n`);
