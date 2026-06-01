@@ -1,11 +1,9 @@
 // 360S014EF — AS-Built Zone Substation Equipment Record
-import { useState, useRef, useEffect } from 'react'
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { useState } from 'react'
 import { Building2 } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
@@ -14,8 +12,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { APP_ACCENT } from '../shared/constants'
-
-const EF_SHOW_OVERLAY = false
+import { generateEfPdf } from './generators/ZoneSubPdfGenerator'
 
 const ACCENT    = APP_ACCENT
 const EF_BG     = '#eef2ff'
@@ -30,110 +27,6 @@ const EF_STEPS = [
   'Photos',
   'Preview & Print',
 ]
-
-async function generateEfPdf(d, photos = []) {
-  const PAGE_H = 842
-  const BLUE   = rgb(0/255, 20/255, 160/255)
-  const FONT_SIZE = 8
-
-  const existingPdfBytes = await fetch(
-    import.meta.env.BASE_URL + 'forms/360S014EF.pdf'
-  ).then(r => r.arrayBuffer())
-
-  const pdfDoc = await PDFDocument.load(existingPdfBytes)
-  const font   = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const pages  = pdfDoc.getPages()
-  const p1     = pages[0]
-  const p2     = pages[1]
-
-  const t = (page, x, y, val, size = FONT_SIZE) => {
-    const str = String(val || '')
-    if (!str) return
-    page.drawText(str, { x, y: PAGE_H - y, size, font, color: BLUE })
-  }
-
-  const tWrap = (page, x, y, val, maxWidth, size = FONT_SIZE, maxLines = 5) => {
-    if (!val) return
-    const words = String(val).split(' ')
-    const lines = []
-    let current = ''
-    for (const word of words) {
-      const test = current ? current + ' ' + word : word
-      const w = font.widthOfTextAtSize(test, size)
-      if (w > maxWidth && current) { lines.push(current); current = word }
-      else current = test
-    }
-    if (current) lines.push(current)
-    lines.slice(0, maxLines).forEach((line, i) => {
-      t(page, x, y + i * 12, line, size)
-    })
-  }
-
-  t(p1,  50,  95, d.substation)
-  t(p1,  50, 113, d.streetRoad)
-  t(p1, 310, 113, d.contractor)
-  t(p1,  50, 128, d.cityTown)
-  t(p1, 200, 128, d.district)
-  t(p1, 310, 128, d.dateWorkCompleted)
-  t(p1,  50, 143, d.pcoWONo)
-  t(p1, 185, 143, d.ciwrNo)
-  t(p1,  90, 158, d.contractorJobCostCode)
-  t(p1, 310, 158, d.namePrint)
-
-  if (d.signed && d.signed.startsWith('data:image')) {
-    try {
-      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
-      const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-      const { width: sw, height: sh } = sigImg.scale(1)
-      const maxW = 120, maxH = 22
-      const scale = Math.min(maxW / sw, maxH / sh)
-      p1.drawImage(sigImg, {
-        x: 310, y: PAGE_H - 152,
-        width: sw * scale, height: sh * scale,
-      })
-    } catch (_) {}
-  }
-
-  if (d.maintenanceApplies) {
-    t(p1,  90, 218, d.maintenanceEquipmentId)
-    t(p1, 235, 218, d.maintenanceParentEquipmentId)
-    t(p1, 415, 218, d.maintenanceEquipmentDescription)
-    tWrap(p1, 50, 257, d.maintenanceDescription, 495, FONT_SIZE, 5)
-  }
-
-  if (d.replacementApplies) {
-    t(p1,  90, 348, d.newEquipmentId)
-    t(p1, 235, 348, d.oldEquipmentId)
-    t(p1, 415, 348, d.drawingReferenceNo)
-    t(p1,  90, 373, d.manufacturer)
-    t(p1, 235, 373, d.model)
-    t(p1, 415, 373, d.serialNo)
-    tWrap(p1, 50, 410, d.replacementDescription, 495, FONT_SIZE, 5)
-  }
-
-  const rows = (d.additionalItems || []).filter(r =>
-    r.installedOrRemoved || r.equipmentId || r.serialNo ||
-    r.manufacturerModel  || r.description || r.drawingRef
-  )
-
-  const ROW_START = 500
-  const ROW_H     = 24
-
-  rows.slice(0, 11).forEach((row, i) => {
-    const y = ROW_START + i * ROW_H
-    t(p2,  45, y, row.installedOrRemoved)
-    t(p2, 130, y, row.equipmentId)
-    t(p2, 200, y, row.serialNo)
-    t(p2, 233, y, row.manufacturerModel)
-    t(p2, 368, y, row.description)
-    t(p2, 503, y, row.drawingRef)
-  })
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-
-  return await pdfDoc.save()
-}
 
 const emptyRow = () => ({
   installedOrRemoved: '',
@@ -191,16 +84,12 @@ function ZoneSubWizard({ onClose }) {
     return { ...p, additionalItems: items }
   })
 
-
-
   const handleShare = () => {
     const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
     const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.substation), 'Zone Sub Equipment Record'].filter(Boolean)
     const filename = parts.join(' - ') + '.pdf'
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
-
-
 
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
@@ -210,8 +99,8 @@ function ZoneSubWizard({ onClose }) {
     !d.maintenanceApplies && !d.replacementApplies && 'Select at least one work type',
   ].filter(Boolean)
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EF')
-    const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
+  const { set } = useWizardSetup(d, setD, step, '360S014EF')
+  const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
 
   const handleDraftLoad = (draft) => {
     const { photos: draftPhotos, ...formData } = draft.data || {}

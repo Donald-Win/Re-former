@@ -9,52 +9,69 @@ const ignoreFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bundle
 const ignoreExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.pdf', '.zip', '.mp4', '.mov', '.bak', '.log'];
 // ---------------------
 
-// Support targeted bundling: "node bundle.cjs src/shared"
-const scanRoot = process.argv[2] || '.'; 
+// Parse command line arguments for multi-target support
+const targets = process.argv.slice(2);
+if (targets.length === 0) targets.push('.');
+
 let fileStructureLog = [];
 let textFilesQueue = [];
 let skippedFilesCount = 0;
 
-function scanAndQueueFiles(dir) {
-    if (!fs.existsSync(dir)) {
-        console.error(`Error: Path "${dir}" does not exist.`);
-        process.exit(1);
+function scanAndQueue(targetPath) {
+    if (!fs.existsSync(targetPath)) {
+        console.error(`Error: Path "${targetPath}" does not exist. Skipping.`);
+        return;
     }
-    
-    const files = fs.readdirSync(dir);
 
-    files.forEach(file => {
-        const filePath = path.join(dir, file);
-        const stat = fs.statSync(filePath);
-        const relativePath = path.relative(process.cwd(), filePath);
+    const stat = fs.statSync(targetPath);
+    // Get relative path, defaulting to basename if run directly from the same dir
+    const relativePath = path.relative(process.cwd(), targetPath) || path.basename(targetPath);
 
-        if (stat.isDirectory()) {
-            if (!ignoreDirs.includes(file)) {
-                scanAndQueueFiles(filePath); 
-            }
-        } else {
-            const ext = path.extname(file).toLowerCase();
-            
-            if (filePath !== outputFile) {
-                if (ignoreExtensions.includes(ext) || ignoreFiles.includes(file)) {
-                    skippedFilesCount++;
-                } else {
-                    fileStructureLog.push(`[Included] ${relativePath}`);
-                    textFilesQueue.push({ filePath, relativePath });
-                }
+    // If the target is a specific file, process it directly
+    if (stat.isFile()) {
+        const ext = path.extname(targetPath).toLowerCase();
+        const fileName = path.basename(targetPath);
+        
+        // Prevent infinite loops by excluding the output file
+        if (path.resolve(targetPath) !== path.resolve(outputFile)) {
+            if (ignoreExtensions.includes(ext) || ignoreFiles.includes(fileName)) {
+                skippedFilesCount++;
+            } else {
+                fileStructureLog.push(`[Included] ${relativePath}`);
+                textFilesQueue.push({ filePath: targetPath, relativePath });
             }
         }
-    });
+        return;
+    }
+
+    // If the target is a directory, read its contents recursively
+    if (stat.isDirectory()) {
+        const files = fs.readdirSync(targetPath);
+        files.forEach(file => {
+            const filePath = path.join(targetPath, file);
+            const fileStat = fs.statSync(filePath);
+            
+            if (fileStat.isDirectory()) {
+                if (!ignoreDirs.includes(file)) {
+                    scanAndQueue(filePath); 
+                }
+            } else {
+                // Route back through the file processor
+                scanAndQueue(filePath);
+            }
+        });
+    }
 }
 
+// Clear old file if it exists
 if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
 
-console.log(`Scanning target: ${scanRoot}...`);
-scanAndQueueFiles(scanRoot);
+console.log(`Scanning targets: ${targets.join(', ')}...`);
+targets.forEach(target => scanAndQueue(target));
 
 // 1. Write the Directory Structure Map
 fs.writeFileSync(outputFile, `=== PROJECT DIRECTORY MAP ===\n`);
-fs.appendFileSync(outputFile, `Target Target: ${scanRoot}\n`);
+fs.appendFileSync(outputFile, `Targets: ${targets.join(', ')}\n`);
 fs.appendFileSync(outputFile, `Total parsed files: ${fileStructureLog.length}\n`);
 fs.appendFileSync(outputFile, `Ignored binaries/locks: ${skippedFilesCount}\n\n`);
 fs.appendFileSync(outputFile, fileStructureLog.join('\n') + `\n\n=========================================\n\n`);
@@ -67,7 +84,7 @@ textFilesQueue.forEach(({ filePath, relativePath }) => {
     try {
         let content = fs.readFileSync(filePath, 'utf8');
         
-        // Token Optimization: Remove blocks of 3+ consecutive empty lines down to single breaks
+        // Token Optimization: Compress 3+ consecutive empty lines down to a single blank line
         content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
         
         totalChars += content.length;
