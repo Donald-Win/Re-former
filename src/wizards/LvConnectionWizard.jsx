@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { APP_ACCENT } from '../shared/constants'
-import { PDFDocument, rgb } from 'pdf-lib'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
@@ -14,6 +12,7 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { generateEaPdf } from './generators/LvConnectionPdfGenerator'
 
 const LV_SHOW_OVERLAY = false
 
@@ -30,127 +29,6 @@ const LV_STEPS = [
   'Photos',
   'Preview & Print',
 ]
-
-function wrapText(text, font, size, maxPts) {
-  const words = String(text).split(' ')
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? current + ' ' + word : word
-    if (font.widthOfTextAtSize(candidate, size) <= maxPts) {
-      current = candidate
-    } else {
-      if (current) lines.push(current)
-      if (font.widthOfTextAtSize(word, size) > maxPts) {
-        let part = ''
-        for (const char of word) {
-          const next = part + char
-          if (font.widthOfTextAtSize(next, size) <= maxPts) {
-            part = next
-          } else {
-            if (part) lines.push(part)
-            part = char
-          }
-        }
-        current = part
-      } else {
-        current = word
-      }
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-async function generateLvPdf(d, photos = []) {
-  const bytes = await fetch(
-    import.meta.env.BASE_URL + 'forms/360S014EA.pdf'
-  ).then(r => r.arrayBuffer())
-
-  const pdfDoc = await PDFDocument.load(bytes)
-  const pages  = pdfDoc.getPages()
-  const p1     = pages[0]
-
-  const font   = await pdfDoc.embedFont('Helvetica')
-  const PAGE_H = 842
-  const BLUE   = rgb(0/255, 20/255, 160/255)
-
-  const t = (page, x, cssY, str, size = 8.5) => {
-    if (!str) return
-    page.drawText(String(str), {
-      x, y: PAGE_H - cssY - size, size, font, color: BLUE,
-    })
-  }
-
-  const ck = (page, x, cssY, show) => {
-    if (!show) return
-    const by = PAGE_H - cssY - 2
-    page.drawLine({ start: { x,        y: by - 6 }, end: { x: x + 3, y: by - 9 }, thickness: 1.5, color: BLUE })
-    page.drawLine({ start: { x: x + 3, y: by - 9 }, end: { x: x + 9, y: by - 1 }, thickness: 1.5, color: BLUE })
-  }
-
-  const tWrap = (page, x, cssY, str, maxPts, lineH = 11, maxLines = 3, size = 8.5) => {
-    if (!str) return
-    const lines = wrapText(str, font, size, maxPts).slice(0, maxLines)
-    lines.forEach((line, i) => t(page, x, cssY + i * lineH, line, size))
-  }
-
-  tWrap(p1,  55, 128, d.streetRoad, 310, 14, 2)
-  t(p1, 420, 114,  d.contractor)
-  t(p1, 420, 128,  d.dateWorkCompleted)
-  t(p1, 100, 174,  d.cityTown)
-  t(p1, 480, 174,  d.ciwrNo)
-  t(p1, 100, 188,  d.district)
-  t(p1, 480, 188,  d.pcoWONo)
-  t(p1, 200, 202,  d.cowShedNumber)
-  t(p1, 420, 202,  d.cocNumber)
-  t(p1, 115, 216,  d.icpNumber)
-
-  if (d.signed) {
-    try {
-      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
-      const sigBytes = Uint8Array.from(
-        atob(d.signed.split(',')[1]), c => c.charCodeAt(0)
-      )
-      const sigImg = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-      p1.drawImage(sigImg, {
-        x: 365, y: PAGE_H - 164, width: 120, height: 22, opacity: 1,
-      })
-    } catch (_) {}
-  }
-
-  ck(p1, 186, 255, d.installedService === 'Overhead line')
-  ck(p1, 279, 255, d.installedService === 'Underground cable')
-
-  ck(p1, 186, 271, d.connectedTo === 'Box')
-  ck(p1, 279, 271, d.connectedTo === 'Pole')
-  ck(p1, 408, 271, d.connectedTo === 'Other')
-  if (d.connectedTo === 'Other') t(p1, 490, 273, d.connectedToOther)
-
-  t(p1, 174, 289, d.poleServiceBoxNumber)
-
-  t(p1, 122, 320, d.conductorSize)
-  t(p1, 271, 320, d.conductorMaterial)
-  t(p1, 442, 320, d.insulation)
-
-  t(p1, 130, 336, d.numberOfCables)
-  t(p1, 271, 336, d.numberOfCores)
-  t(p1, 442, 336, d.fuseSize)
-
-  t(p1, 130, 352, d.numberOfPhases)
-  t(p1, 271, 352, d.phaseColours)
-
-  ck(p1, 186, 366, d.cableDuct === 'No')
-  ck(p1, 265, 366, d.cableDuct === 'New')
-  if (d.cableDuct === 'New')      t(p1, 360, 368, d.cableDuctNewSize)
-  ck(p1, 406, 366, d.cableDuct === 'Existing')
-  if (d.cableDuct === 'Existing') t(p1, 510, 368, d.cableDuctExistingSize)
-
-  tWrap(p1, 55, 748, d.workDescription, 485, 11, 4)
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-  return await pdfDoc.save()
-}
 
 export default function LvConnectionWizard({ onClose }) {
   const [step, setStep] = useState(0)
@@ -195,9 +73,7 @@ export default function LvConnectionWizard({ onClose }) {
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos,        setPhotos]        = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateLvPdf)
-
-
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEaPdf)
 
   useEffect(() => {
     if (LV_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -215,8 +91,6 @@ export default function LvConnectionWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-
-
   const missingFields = [
     !d.pcoWONo          && 'Powerco W/O Number',
     !d.streetRoad       && 'Physical Address',
@@ -227,7 +101,7 @@ export default function LvConnectionWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EA')
-    const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
+  const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
 
   const handleDraftLoad = (draft) => {
     const { photos: draftPhotos, ...formData } = draft.data || {}
@@ -337,7 +211,7 @@ export default function LvConnectionWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
-        onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={LV_TEAL}
           bg={LV_BG}
           mid={LV_MID}
@@ -368,4 +242,3 @@ export default function LvConnectionWizard({ onClose }) {
     </>
   )
 }
-
