@@ -49,17 +49,16 @@ async function clearAutosave(formKey) {
 }
 
 // ── One-time migration from old localStorage autosave slots ──────────────────
-// Any existing "re-former-autosave-<formKey>" localStorage entries are moved
-// into IndexedDB then removed.  We only do this for known form keys.
+// Uses a Promise rather than a boolean flag so concurrent mounts all await the
+// same in-flight migration rather than each believing it's already done.
 const KNOWN_FORM_KEYS = [
   '360S014EC', '360S014EG', '360S014EE',
   '360S014EA', '360S014EB', '360S014ED',
   '360S014EF', '220F028A',
 ]
-let _autoMigrated = false
-async function migrateAutosaveSlots() {
-  if (_autoMigrated) return
-  _autoMigrated = true
+let _migrationPromise = null
+
+async function _runAutosaveMigration() {
   const OLD_PREFIX = 're-former-autosave-'
   for (const formKey of KNOWN_FORM_KEYS) {
     try {
@@ -68,13 +67,18 @@ async function migrateAutosaveSlots() {
       const parsed = JSON.parse(raw)
       const existing = await get(formKey, autosaveIdb)
       if (!existing) {
-        // Only migrate if slot photos would still fit (they won't have photos
-        // in old format, so it's safe to always migrate)
         await set(formKey, parsed, autosaveIdb)
       }
       localStorage.removeItem(OLD_PREFIX + formKey)
     } catch (_) {}
   }
+}
+
+function migrateAutosaveSlots() {
+  if (!_migrationPromise) {
+    _migrationPromise = _runAutosaveMigration()
+  }
+  return _migrationPromise
 }
 
 // Kick off on module load
@@ -83,18 +87,32 @@ migrateAutosaveSlots()
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useDraft(formKey, d, step, photos = []) {
-  const isMounted = useRef(false)
+  // ── First-render guard ────────────────────────────────────────────────────
+  // We skip the autosave on the very first render so we don't overwrite an
+  // existing autosave slot with a freshly-initialised (possibly empty) form
+  // state before the wizard has had a chance to restore a previous session.
+  //
+  // WHY NOT isMounted (two separate effects)?
+  // React runs effects in declaration order within the same render cycle.
+  // If Effect A sets isMounted.current = true and Effect B checks it, both
+  // run during the first render — Effect B will always see true because
+  // Effect A already ran.  A single ref that flips on first execution is the
+  // correct pattern here.
+  const isFirstRender = useRef(true)
 
   useEffect(() => {
-    isMounted.current = true
-  }, [])
+    // Skip on first call; allow all subsequent changes through
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
 
-  // Autosave on every change, debounced
-  useEffect(() => {
-    if (!isMounted.current) return
     const timer = setTimeout(() => {
       writeAutosave(formKey, d, step, photos)
     }, AUTOSAVE_DEBOUNCE)
+
+    // Cleanup cancels the debounce timer if the component unmounts or deps
+    // change before the 600 ms window expires (e.g. rapid field edits).
     return () => clearTimeout(timer)
   }, [formKey, d, step, photos])
 

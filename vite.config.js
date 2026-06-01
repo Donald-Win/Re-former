@@ -13,7 +13,6 @@ export default defineConfig({
       // We provide our own SW template (src/sw.js).
       // The plugin bundles it via Vite/Rollup and injects the full list of
       // hashed output filenames into self.__WB_MANIFEST at build time.
-      // This is what fixes the offline caching bug.
       strategies: 'injectManifest',
       srcDir: 'src',       // location of our SW template
       filename: 'sw.js',   // output filename — registered as /re-former/sw.js
@@ -46,4 +45,45 @@ export default defineConfig({
   ],
 
   base: '/re-former/',
+
+  build: {
+    // ── Target ───────────────────────────────────────────────────────────────
+    // 'es2020' is safe for field devices running Chrome/Safari (2020+) and
+    // unlocks modern JS syntax in the output (optional chaining, nullish
+    // coalescing etc.) while keeping full browser compatibility.
+    target: 'es2020',
+
+    // ── Chunk size warning threshold ─────────────────────────────────────────
+    // pdf-lib and pdfjs-dist are unavoidably large — raise the limit so the
+    // build doesn't emit noisy warnings for chunks we've already split.
+    chunkSizeWarningLimit: 1500,
+
+    rollupOptions: {
+      output: {
+        // ── Manual chunk splitting ────────────────────────────────────────────
+        // Splitting by domain means each chunk has a long-lived cache entry.
+        // The app shell (React, lucide) is rebuilt rarely; PDF libs only change
+        // when we upgrade their version — so users get cache hits for most builds.
+        manualChunks: {
+          // React core — changes only when we upgrade React itself
+          'vendor-react':   ['react', 'react-dom'],
+
+          // pdf-lib — used only inside wizard generators, never on the list screen
+          'vendor-pdf-lib': ['pdf-lib'],
+
+          // pdfjs-dist — used only for PdfCanvasPreview. The worker is emitted
+          // separately via the ?url import, so this chunk just covers the main lib.
+          'vendor-pdfjs':   ['pdfjs-dist'],
+
+          // IndexedDB wrapper — tiny but shared by every wizard via draftStore /
+          // projectStore; isolating it keeps the idb update footprint minimal
+          'vendor-idb':     ['idb-keyval'],
+
+          // Icon set — tree-shaken by Rollup but still worth isolating since
+          // lucide-react updates frequently and we import from it in many files
+          'vendor-lucide':  ['lucide-react'],
+        },
+      },
+    },
+  },
 })

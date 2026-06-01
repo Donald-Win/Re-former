@@ -26,11 +26,14 @@ const MAX_DRAFTS = 50
 const MAX_PHOTOS = 5
 
 // ── One-time migration from old localStorage drafts ───────────────────────────
-// Runs once on first import; silently moves any legacy data then removes it.
-let _migrated = false
-async function migrateFromLocalStorage() {
-  if (_migrated) return
-  _migrated = true
+// Uses a Promise rather than a boolean flag so concurrent callers all await the
+// same in-flight migration rather than each believing it's already done.
+// Without this, two simultaneous calls (e.g. listDrafts + saveDraft on mount)
+// could both pass the `_migrated` boolean check, then interleave their writes
+// against the half-migrated IndexedDB store.
+let _migrationPromise = null
+
+async function _runMigration() {
   try {
     const OLD_KEY = 're-former-drafts-v2'
     const raw = localStorage.getItem(OLD_KEY)
@@ -50,6 +53,13 @@ async function migrateFromLocalStorage() {
   } catch (err) {
     console.warn('[draftStore] Migration failed (non-critical):', err)
   }
+}
+
+function migrateFromLocalStorage() {
+  if (!_migrationPromise) {
+    _migrationPromise = _runMigration()
+  }
+  return _migrationPromise
 }
 
 // Kick off migration immediately when the module loads

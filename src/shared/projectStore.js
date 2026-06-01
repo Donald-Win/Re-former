@@ -18,10 +18,14 @@ const projectIdb = createStore('re-former-projects', 'projects')
 const MAX_PROJECTS = 20
 
 // ── One-time migration from old localStorage projects ─────────────────────────
-let _migrated = false
-async function migrateFromLocalStorage() {
-  if (_migrated) return
-  _migrated = true
+// Uses a Promise rather than a boolean flag so concurrent callers all await the
+// same in-flight migration rather than each believing it's already done.
+// Without this, two simultaneous callers (e.g. ProjectPicker opening while a
+// wizard is already mounted) could both pass the boolean check, then interleave
+// their writes against the half-migrated IndexedDB store.
+let _migrationPromise = null
+
+async function _runMigration() {
   try {
     const OLD_KEY = 're-former-projects'
     const raw = localStorage.getItem(OLD_KEY)
@@ -40,6 +44,13 @@ async function migrateFromLocalStorage() {
   } catch (err) {
     console.warn('[projectStore] Migration failed (non-critical):', err)
   }
+}
+
+function migrateFromLocalStorage() {
+  if (!_migrationPromise) {
+    _migrationPromise = _runMigration()
+  }
+  return _migrationPromise
 }
 
 migrateFromLocalStorage()

@@ -18,7 +18,8 @@ export const APP_ID = 'reformer'
 const DEVICE_ID_KEY  = 'dcw-device-id'
 const AUTH_CACHE_KEY = 're-former-auth-cache'
 const POLL_MS        = 14_400_000 // 4 hours — ~6 req/day per user
-const CHECK_COOLDOWN = 3_600_000 // 1 hour — minimum gap between visibility/online checks
+const CHECK_COOLDOWN = 3_600_000  // 1 hour — minimum gap between visibility/online checks
+const FETCH_TIMEOUT  = 10_000     // 10 seconds — abort hung auth checks
 
 let _lastCheckedAt = 0  // timestamp of most recent successful network check
 
@@ -28,7 +29,12 @@ let _lastCheckedAt = 0  // timestamp of most recent successful network check
 // Format: DCW-XXXX-XXXX-XXXX
 
 function generateDeviceId() {
-  const uuid = (crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16))).replace(/-/g, '').toUpperCase()
+  const uuid = (
+    crypto.randomUUID
+      ? crypto.randomUUID()
+      : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16))
+  ).replace(/-/g, '').toUpperCase()
   return `DCW-${uuid.slice(0, 4)}-${uuid.slice(4, 8)}-${uuid.slice(8, 12)}`
 }
 
@@ -101,22 +107,39 @@ export function getCachedResult() {
 
 // ── NETWORK CHECK ─────────────────────────────────────────────────────────────
 
+/**
+ * Hits the Cloudflare Worker to check device access.
+ * Uses an AbortController to enforce a hard 10 s timeout — if the Worker is
+ * slow or the device has a captive portal connection, the fetch won't hang
+ * indefinitely and block the auth gate from showing the cached result.
+ */
 export async function checkAccessOnline() {
-  const deviceId = getDeviceId()
-  const res = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId, app: APP_ID }),
-    cache: 'no-store',
-  })
-  if (!res.ok) throw new Error(`Worker responded ${res.status}`)
-  const result = await res.json()
-  _lastCheckedAt = Date.now()
-  // Cache all results including denied — so offline behaviour is correct.
-  // Denied cache is cleared immediately after the lock screen is shown,
-  // so it never persists to block a user who has since been granted access.
-  cacheResult(result)
-  return result
+  const deviceId  = getDeviceId()
+  const controller = new AbortController()
+  const timeoutId  = setTimeout(() => controller.abort(), FETCH_TIMEOUT)
+
+  try {
+    const res = await fetch(WORKER_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ deviceId, app: APP_ID }),
+      cache:   'no-store',
+      signal:  controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    if (!res.ok) throw new Error(`Worker responded ${res.status}`)
+    const result = await res.json()
+    _lastCheckedAt = Date.now()
+    // Cache all results including denied — so offline behaviour is correct.
+    // Denied cache is cleared immediately after the lock screen is shown,
+    // so it never persists to block a user who has since been granted access.
+    cacheResult(result)
+    return result
+  } catch (err) {
+    clearTimeout(timeoutId)
+    throw err
+  }
 }
 
 // ── POLLING & EVENT LISTENERS ─────────────────────────────────────────────────
@@ -143,7 +166,8 @@ export function startPolling() {
         _onRevoked(getDeviceId())
       }
     } catch {
-      // Network hiccup — don't penalise user, just try next interval
+      // Network hiccup (including AbortError from timeout) — don't penalise
+      // the user, just try again at the next interval
     }
   }, POLL_MS)
 }
@@ -173,7 +197,7 @@ export function addVisibilityListener() {
         stopPolling()
         _onRevoked(getDeviceId())
       }
-    } catch { /* network error — ignore */ }
+    } catch { /* network error or timeout — ignore */ }
   })
 }
 
@@ -196,23 +220,29 @@ export function addOnlineListener() {
         stopPolling()
         _onRevoked(getDeviceId())
       }
-    } catch { /* network error — ignore */ }
+    } catch { /* network error or timeout — ignore */ }
   })
 }
 
-// ── DEBUG HELPERS (available in browser console) ─────────────────────────────
+// ── DEBUG HELPERS ─────────────────────────────────────────────────────────────
+// Only exposed in development builds.
+// import.meta.env.DEV is replaced with a boolean literal at build time, so
+// this entire block is dead-code-eliminated in production bundles — the
+// window.__reformerAuth property is never set for field users.
 
-window.__reformerAuth = {
-  getDeviceId,
-  getCachedResult,
-  checkAccessOnline,
-  clearCache: () => {
-    localStorage.removeItem(AUTH_CACHE_KEY)
-    console.log('[re-former auth] Cache cleared. Reload to re-check.')
-  },
-  resetDeviceId: () => {
-    localStorage.removeItem(DEVICE_ID_KEY)
-    localStorage.removeItem(AUTH_CACHE_KEY)
-    console.log('[re-former auth] Device ID and cache cleared. Reload to generate new ID.')
-  },
+if (import.meta.env.DEV) {
+  window.__reformerAuth = {
+    getDeviceId,
+    getCachedResult,
+    checkAccessOnline,
+    clearCache: () => {
+      localStorage.removeItem(AUTH_CACHE_KEY)
+      console.log('[re-former auth] Cache cleared. Reload to re-check.')
+    },
+    resetDeviceId: () => {
+      localStorage.removeItem(DEVICE_ID_KEY)
+      localStorage.removeItem(AUTH_CACHE_KEY)
+      console.log('[re-former auth] Device ID and cache cleared. Reload to generate new ID.')
+    },
+  }
 }

@@ -6,9 +6,16 @@
  *
  * Template cache
  * ──────────────
- * fetchPdfTemplate(url) fetches the raw PDF once, stores the ArrayBuffer, and
- * returns a .slice(0) clone on every subsequent call so the cached master copy
+ * fetchPdfTemplate(url) fetches the raw PDF once and stores the ArrayBuffer.
+ * Returns a .slice(0) clone on every subsequent call so the cached master copy
  * is never mutated by pdf-lib's load().
+ *
+ * Concurrent-fetch deduplication: if two wizards call fetchPdfTemplate(url)
+ * at the same time before the first fetch has resolved, only one HTTP request
+ * is made — both callers await the same in-flight Promise.  Without this,
+ * two simultaneous opens of the same form template each fire a separate fetch,
+ * and whichever finishes last clobbers the cache with a potentially
+ * already-detached ArrayBuffer.
  *
  * Drawing helpers
  * ───────────────
@@ -25,10 +32,18 @@ import { rgb } from 'pdf-lib'
 // ── Default ink colour — deep navy, matches premium ballpoint blue ────────────
 export const DEFAULT_INK = rgb(0 / 255, 20 / 255, 160 / 255)
 
-// ── In-memory template cache ─────────────────────────────────────────────────
-// key   → url string
-// value → ArrayBuffer (the original fetch result — never passed to pdf-lib directly)
-const templateCache = {}
+// ── Template cache ────────────────────────────────────────────────────────────
+// templateCache:       url → ArrayBuffer  (resolved bytes — never exposed directly)
+// templateInFlight:    url → Promise<ArrayBuffer>  (in-progress fetches)
+//
+// Keeping two separate maps means:
+//   1. A completed fetch is served from templateCache as a .slice(0) clone.
+//   2. A concurrent second call during an in-progress fetch awaits the same
+//      Promise from templateInFlight — only one HTTP request ever fires per URL.
+//   3. If a fetch fails, the in-flight Promise rejects and is removed from the
+//      map so the next call tries again (no permanent poison-pill).
+const templateCache    = {}
+const templateInFlight = {}
 
 /**
  * Fetch a PDF template from `url`, cache the ArrayBuffer on the first call,
@@ -42,13 +57,36 @@ const templateCache = {}
  * @returns {Promise<ArrayBuffer>}
  */
 export async function fetchPdfTemplate(url) {
-  if (!templateCache[url]) {
-    const response = await fetch(url)
-    if (!response.ok) throw new Error(`fetchPdfTemplate: HTTP ${response.status} for ${url}`)
-    templateCache[url] = await response.arrayBuffer()
+  // ── 1. Byte cache hit — fastest path ────────────────────────────────────
+  if (templateCache[url]) {
+    return templateCache[url].slice(0)
   }
-  // Always return a clone — never expose the master buffer
-  return templateCache[url].slice(0)
+
+  // ── 2. In-flight deduplication — second caller joins existing fetch ──────
+  if (!templateInFlight[url]) {
+    // ── 3. First caller — start the fetch and register the Promise ──────────
+    templateInFlight[url] = fetch(url)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`fetchPdfTemplate: HTTP ${response.status} for ${url}`)
+        }
+        return response.arrayBuffer()
+      })
+      .then(buffer => {
+        templateCache[url] = buffer        // store master
+        delete templateInFlight[url]       // no longer in-flight
+        return buffer
+      })
+      .catch(err => {
+        delete templateInFlight[url]       // allow retry on next call
+        throw err
+      })
+  }
+
+  // Both the original and any concurrent callers await the same Promise.
+  // When it resolves we get the master buffer and return a clone of it.
+  const buf = await templateInFlight[url]
+  return buf.slice(0)
 }
 
 /**
@@ -65,8 +103,10 @@ export function primePdfTemplateCache(url, arrayBuffer) {
 export function clearPdfTemplateCache(url) {
   if (url) {
     delete templateCache[url]
+    delete templateInFlight[url]
   } else {
     Object.keys(templateCache).forEach(k => delete templateCache[k])
+    Object.keys(templateInFlight).forEach(k => delete templateInFlight[k])
   }
 }
 

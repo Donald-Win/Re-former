@@ -1,11 +1,18 @@
 /**
  * sharePdf — shared share/save handler for all wizards.
  *
- * Shows an on-screen debug overlay when share fails so errors are
+ * In development the debug overlay is shown when share fails so errors are
  * visible on iPad without a connected Mac console.
+ * In production the overlay is suppressed — field users should never see
+ * raw stack traces.
  */
 
 function showDebug(lines) {
+  // Only expose the debug overlay during local development.
+  // import.meta.env.DEV is replaced with a boolean literal at build time,
+  // so this entire branch is dead-code-eliminated in production bundles.
+  if (!import.meta.env.DEV) return
+
   const existing = document.getElementById('__sharePdfDebug')
   if (existing) existing.remove()
   const el = document.createElement('div')
@@ -72,6 +79,6 @@ export async function sharePdf(pdfBytes, filename, blobUrl, onSuccess) {
   const url = blobUrl ?? URL.createObjectURL(blob)
   window.open(url, '_blank')
 
-  // Show debug overlay so we can see what happened
+  // Show debug overlay (dev only — no-op in production)
   showDebug(log)
 }
