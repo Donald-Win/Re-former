@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { APP_ACCENT } from '../shared/constants'
-import { PDFDocument, rgb } from 'pdf-lib'
 import { Box } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
 import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
@@ -14,6 +12,7 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { generateEdPdf } from './generators/LvBoxPdfGenerator'
 
 const ED_SHOW_OVERLAY = false
 
@@ -92,91 +91,6 @@ function BoxRow({ row, idx, setRow, onRemove, canRemove }) {
   )
 }
 
-function wrapText(text, font, size, maxPts) {
-  const words = String(text).split(' ')
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? current + ' ' + word : word
-    if (font.widthOfTextAtSize(candidate, size) <= maxPts) {
-      current = candidate
-    } else {
-      if (current) lines.push(current)
-      if (font.widthOfTextAtSize(word, size) > maxPts) {
-        let part = ''
-        for (const char of word) {
-          const next = part + char
-          if (font.widthOfTextAtSize(next, size) <= maxPts) { part = next } else { if (part) lines.push(part); part = char }
-        }
-        current = part
-      } else { current = word }
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-async function generateEdPdf(d, photos = []) {
-  const bytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014ED.pdf').then(r => r.arrayBuffer())
-  const srcDoc = await PDFDocument.load(bytes)
-  const pdfDoc = await PDFDocument.create()
-  const [copiedPage] = await pdfDoc.copyPages(srcDoc, [0])
-  pdfDoc.addPage(copiedPage)
-  const p1   = pdfDoc.getPages()[0]
-  const font = await pdfDoc.embedFont('Helvetica')
-  const PAGE_H = p1.getHeight()
-  const BLUE   = rgb(0/255, 20/255, 160/255)
-
-  const t = (x, cssY, str, size = 7) => {
-    if (!str) return
-    p1.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
-  }
-  const tWrap = (x, cssY, str, maxPts, lineH = 9, maxLines = 3, size = 7) => {
-    if (!str) return
-    wrapText(str, font, size, maxPts).slice(0, maxLines).forEach((line, i) => t(x, cssY + i * lineH, line, size))
-  }
-
-  t(120, 150, d.streetRoad)
-  t(120, 160, [d.cityTown, d.district].filter(Boolean).join(', '))
-  t(120, 170, d.pcoWONo)
-  t(120, 180, d.ciwrNo)
-  t(460, 150, d.contractor)
-  t(460, 160, d.dateWorkCompleted)
-  t(460, 170, d.npJobNumber)
-
-  if (d.signed) {
-    try {
-      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
-      const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-      p1.drawImage(sigImg, { x: 460, y: PAGE_H - 190, width: 90, height: 15, opacity: 1 })
-    } catch (_) {}
-  }
-
-  const ROW_START_Y = 249
-  const ROW_H       = 9.8
-  d.boxRows.slice(0, 20).forEach((row, i) => {
-    const y = ROW_START_Y + i * ROW_H
-    t(59,  y, row.equipIdNew,          6.5)
-    t(115, y, row.equipIdOld,          6.5)
-    t(169, y, row.address,             6.5)
-    t(290, y, row.manufacturer,        6.5)
-    t(347, y, row.model,               6.5)
-    if (row.serviceOrDist === 'Service')      t(452, y, 'Service', 6.5)
-    if (row.serviceOrDist === 'Distribution') t(452, y, 'Distribution', 6.5)
-    t(498, y, row.numberOfDisconnects, 6.5)
-    t(520, y, row.fuseHolders,         6.5)
-    t(595, y, row.typeOfChange,        6.5)
-    t(640, y, row.reasonForRemoval,    6.5)
-    t(695, y, row.owner,               6.5)
-  })
-
-  tWrap(45, 455, d.comments, 700, 10, 5, 7)
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-  return await pdfDoc.save()
-}
-
 export default function LvBoxWizard({ onClose }) {
   const [step, setStep] = useState(0)
 
@@ -196,12 +110,10 @@ export default function LvBoxWizard({ onClose }) {
   const [photos,        setPhotos]        = useState([])
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEdPdf)
 
-
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, boxRows: rows }
   })
-
 
   useEffect(() => {
     if (ED_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -220,8 +132,6 @@ export default function LvBoxWizard({ onClose }) {
     sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
   }
 
-
-
   const missingFields = [
     !d.pcoWONo     && 'Powerco WO No.',
     !d.streetRoad  && 'No./Street/Road',
@@ -230,7 +140,7 @@ export default function LvBoxWizard({ onClose }) {
   ].filter(Boolean)
 
   const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
-    const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
+  const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
 
   const handleDraftLoad = (draft) => {
     const { photos: draftPhotos, ...formData } = draft.data || {}
@@ -299,7 +209,7 @@ export default function LvBoxWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
-        onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
@@ -330,4 +240,3 @@ export default function LvBoxWizard({ onClose }) {
     </>
   )
 }
-
