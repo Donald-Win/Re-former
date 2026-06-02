@@ -19,7 +19,7 @@
 
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
-import { NetworkFirst } from 'workbox-strategies'
+import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { clientsClaim } from 'workbox-core'
 
@@ -54,12 +54,25 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// ── Runtime: PDFs — network-first, fall back to cache when offline ────────────
-// PDFs are excluded from precaching (too large to bulk-download on install).
-// They're cached individually the first time each is opened.
+// ── Runtime: PDFs — stale-while-revalidate ────────────────────────────────────
+// CHANGED from NetworkFirst to StaleWhileRevalidate.
+//
+// WHY: NetworkFirst tries the network before serving from cache. In weak 3G
+// areas the network attempt can take several seconds before timing out and
+// falling back to the cache — the app appears hung while a PDF is "opening".
+//
+// StaleWhileRevalidate serves the cached PDF INSTANTLY on every subsequent
+// open, then fires a background fetch to refresh the cache entry silently.
+// The user gets immediate response; the cache stays fresh for next time.
+//
+// Trade-off: a field tech who opens a form immediately after a PDF is updated
+// server-side will see the old version on that first open, and get the new
+// version the next time they open it (once the background refresh completes).
+// For Powerco form PDFs — which change infrequently and where responsiveness
+// matters more than instant propagation — this is the correct trade-off.
 registerRoute(
   ({ url }) => /\/forms\/.*\.pdf$/i.test(url.pathname),
-  new NetworkFirst({
+  new StaleWhileRevalidate({
     cacheName: 're-former-pdfs',
     plugins: [
       new ExpirationPlugin({
@@ -73,6 +86,8 @@ registerRoute(
 // ── Runtime: manifest.json — network-first ────────────────────────────────────
 // Chrome re-checks the manifest for PWA install eligibility on every visit.
 // Network-first guarantees it always sees the freshest version.
+// This stays on NetworkFirst intentionally — the manifest is tiny (< 1 KB)
+// and incorrect PWA metadata (icon, theme colour) is confusing to users.
 registerRoute(
   ({ url }) => url.pathname.endsWith('/manifest.json'),
   new NetworkFirst({ cacheName: 're-former-manifest' })

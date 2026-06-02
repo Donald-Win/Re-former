@@ -2,8 +2,23 @@
 // Only text fields are stored (no signature blob — too large).
 // Primary identifier: NP Job Number, then PCo W/O No., then project+address combo.
 //
-// Also provides draft autosave — each wizard saves its in-progress state so
-// an accidental close or page refresh doesn't lose work.
+// ── Draft autosave functions REMOVED ─────────────────────────────────────────
+// saveDraft, loadDraft, clearDraft, and draftAge previously lived here and
+// persisted wizard state to localStorage under "re-former-draft-<formKey>" keys.
+//
+// The app has fully migrated to idb-keyval (see src/shared/useDraft.jsx and
+// src/shared/draftStore.js). Keeping these localStorage functions alongside
+// the IndexedDB implementation created two active storage paths for the same
+// data, with no guarantee of which one any given call-site was actually using.
+//
+// Removing them here means:
+//   • All draft I/O goes through the IndexedDB layer exclusively.
+//   • Any legacy "re-former-draft-*" keys left in localStorage are harmless
+//     orphans — useDraft.jsx's one-time migration already moved them to IDB
+//     and removed the originals.
+//   • Callers that were still importing { saveDraft } from './jobHistory' will
+//     get a clear build-time error rather than silently writing to the wrong
+//     store — making the migration visible rather than hidden.
 
 export const STORAGE_KEY = 're-former-job-history'
 const MAX_ENTRIES = 5
@@ -20,10 +35,15 @@ export const JOB_FIELDS = [
 function makeId(d) {
   if (d.npJobNumber) return `np:${d.npJobNumber.trim()}`
   if (d.pcoWONo)     return `wo:${d.pcoWONo.trim()}`
-  const combo = [d.projectName, d.streetRoad, d.contractor].filter(Boolean).map(s => s.trim()).join('|')
+  const combo = [d.projectName, d.streetRoad, d.contractor]
+    .filter(Boolean).map(s => s.trim()).join('|')
   if (combo) return `job:${combo}`
-  return `ts:${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`
+  return `ts:${typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Date.now()}`
 }
+
+// ── Job history (localStorage — text fields only, no blobs) ──────────────────
 
 export function loadHistory() {
   try {
@@ -55,6 +75,8 @@ export function saveToHistory(d) {
   }
 }
 
+// ── Display helpers ───────────────────────────────────────────────────────────
+
 export function formatJobLabel(entry) {
   const parts = [entry.npJobNumber, entry.projectName, entry.streetRoad].filter(Boolean)
   return parts.join(' — ') || 'Unnamed job'
@@ -67,70 +89,4 @@ export function formatJobDate(entry) {
       day: 'numeric', month: 'short', year: 'numeric',
     })
   } catch { return '' }
-}
-
-// ── Draft autosave ────────────────────────────────────────────────────────────
-// Each wizard uses a unique formKey (e.g. '360S014EB') so drafts don't collide.
-// Signature blobs are excluded — too large for localStorage.
-
-const DRAFT_PREFIX = 're-former-draft-'
-
-export function saveDraft(formKey, data, step) {
-  // Don't bother saving a blank step-0 form — nothing worth restoring
-  const hasContent = JOB_FIELDS.some(k => data[k])
-  if (step === 0 && !hasContent) return
-
-  const draft = {
-    version: 1,
-    step,
-    savedAt: Date.now(),
-    data: Object.fromEntries(
-      Object.entries(data).filter(([k, v]) =>
-        // Exclude signature data URL (large string) and non-serialisable objects
-        k !== 'signed' && (typeof v !== 'object' || v === null || Array.isArray(v))
-      )
-    ),
-  }
-
-  try {
-    localStorage.setItem(DRAFT_PREFIX + formKey, JSON.stringify(draft))
-  } catch { /* storage full — skip silently */ }
-}
-
-export function loadDraft(formKey) {
-  try {
-    const raw = localStorage.getItem(DRAFT_PREFIX + formKey)
-    if (!raw) return null
-    const draft = JSON.parse(raw)
-    // Discard drafts older than 7 days — they're stale
-    if (Date.now() - draft.savedAt > 7 * 24 * 60 * 60 * 1000) {
-      localStorage.removeItem(DRAFT_PREFIX + formKey)
-      return null
-    }
-    // Discard drafts from an older schema version
-    if (!draft.version || draft.version < 1) {
-      localStorage.removeItem(DRAFT_PREFIX + formKey)
-      return null
-    }
-    return draft
-  } catch {
-    return null
-  }
-}
-
-export function clearDraft(formKey) {
-  try {
-    localStorage.removeItem(DRAFT_PREFIX + formKey)
-  } catch {}
-}
-
-export function draftAge(draft) {
-  if (!draft?.savedAt) return ''
-  const mins = Math.round((Date.now() - draft.savedAt) / 60000)
-  if (mins < 2)  return 'just now'
-  if (mins < 60) return `${mins} minutes ago`
-  const hrs = Math.round(mins / 60)
-  if (hrs < 24)  return `${hrs} hour${hrs > 1 ? 's' : ''} ago`
-  const days = Math.round(hrs / 24)
-  return `${days} day${days > 1 ? 's' : ''} ago`
 }

@@ -8,20 +8,66 @@
  *
  * Shows inline loading and error states. Does nothing silently on AbortError.
  *
+ * Rate-limit protection
+ * ─────────────────────
+ * Nominatim's usage policy bans IPs that send more than ~1 request/second.
+ * On a failed request a user might rapidly re-tap the button, firing
+ * multiple reverse-geocode requests in quick succession and triggering a
+ * temporary HTTP 429 ban.
+ *
+ * A strict 2-second cooldown is applied after ANY error (geolocation or
+ * network). During the cooldown the button is disabled and shows a
+ * "Please wait…" label. The error message remains visible below.
+ *
  * Props:
  *   onLocation(fields)  — called with { streetRoad, cityTown, district }
  *   accent              — hex colour for the button border/text
  */
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+
+const COOLDOWN_MS = 2000
 
 export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
-  const [status, setStatus] = useState('idle') // 'idle' | 'locating' | 'geocoding' | 'error'
-  const [errorMsg, setErrorMsg] = useState('')
+  const [status,     setStatus]     = useState('idle') // 'idle' | 'locating' | 'geocoding' | 'error'
+  const [errorMsg,   setErrorMsg]   = useState('')
+  const [isCooldown, setIsCooldown] = useState(false)
+
+  // Holds the cooldown timer so we can clear it on unmount
+  const cooldownRef = useRef(null)
+
+  // Clear any pending cooldown when the component unmounts so we never call
+  // setIsCooldown on an unmounted component (avoids a React state update warning)
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearTimeout(cooldownRef.current)
+    }
+  }, [])
+
+  /**
+   * Transition into the error state and start the 2-second cooldown.
+   * Clears any existing cooldown first (defensive — shouldn't be running,
+   * but safe if handlePress is somehow called while a cooldown is active).
+   */
+  const enterError = (msg) => {
+    setStatus('error')
+    setErrorMsg(msg)
+
+    if (cooldownRef.current) clearTimeout(cooldownRef.current)
+
+    setIsCooldown(true)
+    cooldownRef.current = setTimeout(() => {
+      setIsCooldown(false)
+      cooldownRef.current = null
+    }, COOLDOWN_MS)
+  }
 
   const handlePress = () => {
+    // Double-guard: the button is visually disabled during loading and
+    // cooldown, but explicit checks here prevent any edge-case double-tap.
+    if (loading || isCooldown) return
+
     if (!navigator.geolocation) {
-      setStatus('error')
-      setErrorMsg('Geolocation is not supported by this browser.')
+      enterError('Geolocation is not supported by this browser.')
       return
     }
 
@@ -55,19 +101,21 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           setStatus('idle')
         } catch (err) {
           console.error('GpsLocationButton: reverse geocode failed', err)
-          setStatus('error')
-          setErrorMsg('Could not look up address. Check your internet connection.')
+          // Network / Nominatim error — apply cooldown to avoid 429 on rapid retry
+          enterError('Could not look up address. Check your internet connection.')
         }
       },
       (err) => {
+        // Geolocation errors do not hit Nominatim, but we still apply the
+        // cooldown for consistency — it prevents UI flicker from rapid taps
+        // and covers the edge case where the user hammers retry on a timeout.
         if (err.code === err.PERMISSION_DENIED) {
           const isInsecure = location.protocol !== 'https:' && location.hostname !== 'localhost'
           if (isInsecure) {
-            setStatus('error')
-            setErrorMsg('GPS is only available on the deployed app (HTTPS). It will not work on the local dev server.')
+            enterError('GPS is only available on the deployed app (HTTPS). It will not work on the local dev server.')
             return
           }
-          const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+          const isIOS        = /iphone|ipad|ipod/i.test(navigator.userAgent)
           const isStandalone = window.matchMedia('(display-mode: standalone)').matches
           let msg
           if (isIOS) {
@@ -77,23 +125,23 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           } else {
             msg = 'Location was previously blocked. In Chrome, tap ⋮ (menu) → Settings → Site settings → Location → find this site and allow it.'
           }
-          setStatus('error')
-          setErrorMsg(msg)
+          enterError(msg)
         } else if (err.code === err.TIMEOUT) {
-          setStatus('error')
-          setErrorMsg('Location timed out. Try again outdoors with a clear sky view.')
+          enterError('Location timed out. Try again outdoors with a clear sky view.')
         } else {
-          setStatus('error')
-          setErrorMsg('Could not get location. Try again.')
+          enterError('Could not get location. Try again.')
         }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     )
   }
 
-  const loading = status === 'locating' || status === 'geocoding'
-  const label = status === 'locating' ? '📡 Getting location…'
+  const loading  = status === 'locating' || status === 'geocoding'
+  const disabled = loading || isCooldown
+
+  const label = status === 'locating'  ? '📡 Getting location…'
               : status === 'geocoding' ? '🗺 Looking up address…'
+              : isCooldown             ? '⏳ Please wait…'
               : '📍 Use my location'
 
   return (
@@ -101,17 +149,17 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
       <button
         type="button"
         onClick={handlePress}
-        disabled={loading}
+        disabled={disabled}
         style={{
           width: '100%',
           padding: '10px 0',
           borderRadius: 8,
           border: `2px dashed ${accent}`,
-          background: loading ? '#f5f5ff' : '#eef2ff',
-          color: loading ? '#9ca3af' : accent,
+          background: disabled ? '#f5f5ff' : '#eef2ff',
+          color: disabled ? '#9ca3af' : accent,
           fontWeight: 700,
           fontSize: 14,
-          cursor: loading ? 'default' : 'pointer',
+          cursor: disabled ? 'default' : 'pointer',
           fontFamily: 'inherit',
           transition: 'opacity 0.15s',
         }}

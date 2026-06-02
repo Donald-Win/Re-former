@@ -7,6 +7,20 @@
  *
  * pdfjs-dist v5+ uses .mjs worker — imported via Vite's ?url modifier so the
  * file is emitted to dist/assets/ and cached by the service worker.
+ *
+ * Layout-shift fix
+ * ────────────────
+ * The original code set `width: 100%` on each canvas but left height
+ * unspecified. Before pdf.js rendered the page content, the canvas had zero
+ * intrinsic height, so the scroll container collapsed and then snapped to
+ * its full height when rendering completed — a jarring layout shift on every
+ * page, particularly visible on multi-page forms.
+ *
+ * The fix sets `aspect-ratio: <width> / <height>` on each canvas element
+ * immediately after the viewport is computed, before rendering begins.
+ * The browser can then reserve the correct vertical space as soon as the
+ * canvas is appended, so the container height is stable for the entire
+ * render duration regardless of how long each page takes to paint.
  */
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
@@ -43,19 +57,31 @@ export function PdfCanvasPreview({ pdfBytes }) {
         for (let pageNum = 1; pageNum <= total; pageNum++) {
           if (cancelled) break
 
-          const page     = await pdfDoc.getPage(pageNum)
+          const page = await pdfDoc.getPage(pageNum)
           if (cancelled) { page.cleanup(); break }
 
           // Scale so the canvas width fills the container at ~1x on retina;
           // 1.5 gives a good balance of sharpness vs memory.
           const viewport = page.getViewport({ scale: 1.5 })
-          const canvas   = document.createElement('canvas')
-          canvas.width   = viewport.width
-          canvas.height  = viewport.height
 
-          // Fluid width; height scales proportionally via aspect-ratio trick
+          const canvas  = document.createElement('canvas')
+          canvas.width  = viewport.width
+          canvas.height = viewport.height
+
+          // ── Aspect-ratio reservation ──────────────────────────────────────
+          // Set aspect-ratio BEFORE appending to the DOM so the browser
+          // reserves the correct height immediately. Without this the canvas
+          // has zero intrinsic height until pdf.js finishes painting — causing
+          // the scroll container to collapse and snap on each page, producing
+          // a visible layout shift on multi-page documents.
+          //
+          // width: 100% makes the canvas fluid; aspect-ratio then drives the
+          // height proportionally. The explicit canvas.width / canvas.height
+          // values are the physical pixel dimensions (already scaled by 1.5),
+          // so the ratio is always exact regardless of the PDF page size.
           canvas.style.cssText = [
             'width: 100%',
+            `aspect-ratio: ${viewport.width} / ${viewport.height}`,
             'display: block',
             'margin-bottom: 8px',
             'border-radius: 4px',
