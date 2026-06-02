@@ -13,10 +13,15 @@ export const wLbl = {
 
 export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
   const [focused, setFocused] = useState(false)
+  const isNumeric = type === 'number'
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
-      <input type={type} value={v || ''} onChange={e => set(e.target.value)}
+      <input
+        type={isNumeric ? 'text' : type}
+        inputMode={isNumeric ? 'numeric' : undefined}
+        pattern={isNumeric ? '[0-9]*' : undefined}
+        value={v || ''} onChange={e => set(e.target.value)}
         placeholder={ph}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}

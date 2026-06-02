@@ -45,7 +45,7 @@ function readIdFromCookie() {
 // Write device ID to a 10-year cookie (backup store)
 function writeIdToCookie(id) {
   const expires = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toUTCString()
-  document.cookie = `dcw-device-id=${encodeURIComponent(id)};expires=${expires};path=/;SameSite=Strict`
+  document.cookie = `dcw-device-id=${encodeURIComponent(id)};expires=${expires};path=/;SameSite=Strict;Secure`
 }
 
 export function getDeviceId() {
