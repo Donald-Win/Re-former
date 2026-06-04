@@ -14,7 +14,14 @@ import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
-import { generateEEPdf } from './generators/ElecEquipPdfGenerator'
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadEEGenerator = () =>
+  import('./generators/ElecEquipPdfGenerator').then(m => m.generateEEPdf)
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -64,7 +71,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
   const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(generateEEPdf)
+    usePdfGenerate(loadEEGenerator)
 
   const {
     contractor: _contractor,
@@ -159,8 +166,6 @@ function ElecEquipWizard({ onClose = () => {} }) {
     sharePdf(pdfBytes, parts.join(' - ') + '.pdf', pdfBlobUrl, clearFormDraft)
   }
 
-  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
-  // (job details are loaded via ProjectPicker / DraftPicker instead).
   const { set } = useWizardSetup(d, setD, step, '360S014EE')
   const { clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, photos)
 
@@ -400,6 +405,12 @@ function ElecEquipWizard({ onClose = () => {} }) {
     <div key="7">
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
     </div>,
+
+    // 8 — Preview & Print
+    // WizardShell renders previewContent when isPreview is true; this placeholder
+    // keeps formSteps in sync with EE_STEPS (9 entries) so formSteps[step] is
+    // never undefined when step === 8.
+    <div key="s8" />,
   ]
 
   const missingFields = [

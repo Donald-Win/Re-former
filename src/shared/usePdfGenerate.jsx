@@ -3,47 +3,69 @@
  *
  * Usage:
  *   const { pdfBytes, pdfBlobUrl, pdfGenerating, pdfError,
- *           triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateMyPdf)
+ *           triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generatorFn)
  *
- *   // Trigger generation (e.g. when navigating to preview step):
- *   triggerGenerate(d, photos)
+ * Generator argument — two supported patterns
+ * ────────────────────────────────────────────
+ * (a) Direct function (original API — fully backward-compatible):
+ *       import { generateEEPdf } from './generators/ElecEquipPdfGenerator'
+ *       usePdfGenerate(generateEEPdf)
  *
- *   // Build the preview panel:
- *   previewContent={buildPreviewContent(() => triggerGenerate(d, photos), accent)}
+ * (b) Zero-argument thunk returning a Promise that resolves to the generator
+ *     function (preferred — enables Vite code-splitting per wizard):
+ *       // Define at module scope so the reference is stable across renders:
+ *       const loadEEGenerator = () =>
+ *         import('./generators/ElecEquipPdfGenerator').then(m => m.generateEEPdf)
  *
- *   // Close preview:
- *   onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
+ *       usePdfGenerate(loadEEGenerator)
+ *
+ *     The thunk is resolved on each triggerGenerate call; the browser's
+ *     native module cache means the network round-trip only happens once.
+ *
+ * Detection: a thunk is distinguished from a direct generator by `.length === 0`
+ * (zero declared parameters).  All project generators declare at least one
+ * parameter (`d`), so the heuristic is reliable for this codebase.
+ *
+ * Web Worker — Comlink scaffold
+ * ──────────────────────────────
+ * appendPhotosToPdf now uses OffscreenCanvas/createImageBitmap when running
+ * inside a worker, so the full generation pipeline is worker-safe.
+ *
+ * To offload generation off the main thread:
+ *   1. npm i comlink
+ *   2. Use src/workers/pdfGen.worker.js (ready-to-use scaffold).
+ *   3. In the wizard, wrap the worker call in a thunk and pass it here:
+ *
+ *       import PdfGenWorker from '../workers/pdfGen.worker.js?worker'
+ *       import * as Comlink from 'comlink'
+ *
+ *       // Create once at module scope:
+ *       const _w  = new PdfGenWorker()
+ *       const api = Comlink.wrap(_w)
+ *
+ *       // Thunk passed to the hook (d and photos come from triggerGenerate):
+ *       const genThunk = (d, photos) =>
+ *         api.generate('ElecEquipPdfGenerator', 'generateEEPdf', d, photos)
+ *
+ *       usePdfGenerate(genThunk)
+ *
+ *   Note: when routing through a worker the function receives (d, photos)
+ *   directly (length > 0), so the hook treats it as a direct generator and
+ *   calls it normally — no changes needed below.
  *
  * Race-condition guard
  * ────────────────────
- * If the user reaches the preview step, then quickly navigates back and
- * forward again before the first generation completes, two concurrent
- * generator Promises are in flight.  Without a guard the slower one could
- * resolve last and overwrite the results from the newer call.
- *
- * We use a generation-counter ref (genIdRef).  Each triggerGenerate call
- * stamps its own id.  When the Promise resolves it checks whether its id
- * still matches the current counter — if not, the result is silently
- * discarded and the stale blob URL is immediately revoked.
- *
- * Unmount safety
- * ──────────────
- * The same counter is incremented in the cleanup returned by a useEffect,
- * so any in-flight generation that completes after the wizard is closed
- * will also find its id stale and discard cleanly.
+ * genIdRef increments on every triggerGenerate call and on unmount. A
+ * resolved Promise that finds its id stale discards its result silently.
  *
  * Generation timeout
  * ──────────────────
- * If the generator function (or the underlying PDF template fetch) hangs
- * indefinitely — e.g. when the service worker is stale and the network is
- * unavailable — the user would otherwise see an infinite spinner.
- * A 30-second timeout races against the generator and rejects with a
- * distinct message if it wins, giving the user a clear retry prompt.
+ * A 30-second timeout races against the generator. On expiry the user sees
+ * a distinct "timed out" message instead of an infinite spinner.
  */
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { PdfCanvasPreview } from './PdfCanvasPreview'
 
-// Maximum time to allow a single PDF generation attempt before giving up.
 const GENERATION_TIMEOUT_MS = 30_000
 
 export function usePdfGenerate(generatorFn) {
@@ -52,19 +74,13 @@ export function usePdfGenerate(generatorFn) {
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [pdfError,      setPdfError]      = useState(null)
 
-  // Tracks the most recent generation attempt.
-  // Incremented on every triggerGenerate call and on unmount.
   const genIdRef   = useRef(0)
-  // Holds the blob URL so it can be revoked without reading from state
-  // (reading state inside an async callback captures a stale closure).
   const blobUrlRef = useRef(null)
 
   // ── Unmount cleanup ───────────────────────────────────────────────────────
-  // Invalidate any in-flight generation when the wizard unmounts so it cannot
-  // update state on an already-unmounted component.
   useEffect(() => {
     return () => {
-      genIdRef.current += 1   // mark all outstanding generations as stale
+      genIdRef.current += 1
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current)
         blobUrlRef.current = null
@@ -73,7 +89,6 @@ export function usePdfGenerate(generatorFn) {
   }, [])
 
   const triggerGenerate = useCallback((d, photos = []) => {
-    // Stamp this generation attempt with a unique id
     const myGenId = ++genIdRef.current
 
     setPdfBytes(null)
@@ -81,15 +96,12 @@ export function usePdfGenerate(generatorFn) {
     setPdfGenerating(true)
     setPdfError(null)
 
-    // Revoke the previous blob URL synchronously before starting the new gen
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current)
       blobUrlRef.current = null
     }
 
-    // ── Timeout race ─────────────────────────────────────────────────────────
-    // If the generator hasn't resolved within GENERATION_TIMEOUT_MS we reject
-    // with a sentinel error so the catch block can show a specific message.
+    // ── Timeout race ──────────────────────────────────────────────────────────
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error('GENERATION_TIMEOUT')),
@@ -97,12 +109,19 @@ export function usePdfGenerate(generatorFn) {
       )
     )
 
-    Promise.race([
-      Promise.resolve(generatorFn(d, photos)),
-      timeoutPromise,
-    ])
+    // ── Generator resolution ──────────────────────────────────────────────────
+    // A thunk (length === 0) is a lazy import factory: () => Promise<generatorFn>.
+    // A direct generator (length >= 1) is called immediately with (d, photos).
+    const runGeneration = async () => {
+      let fn = generatorFn
+      if (typeof generatorFn === 'function' && generatorFn.length === 0) {
+        fn = await generatorFn()
+      }
+      return fn(d, photos)
+    }
+
+    Promise.race([runGeneration(), timeoutPromise])
       .then(result => {
-        // Discard if a newer generation has already started (or unmounted)
         if (myGenId !== genIdRef.current) return
 
         const bytes = result instanceof Uint8Array ? result : new Uint8Array(result)
@@ -115,7 +134,6 @@ export function usePdfGenerate(generatorFn) {
         setPdfGenerating(false)
       })
       .catch(err => {
-        // Discard if stale
         if (myGenId !== genIdRef.current) return
 
         console.error('PDF generation failed:', err)
@@ -131,7 +149,6 @@ export function usePdfGenerate(generatorFn) {
   }, [generatorFn])
 
   const clearPdf = useCallback(() => {
-    // Increment counter so any in-flight generation treats itself as stale
     genIdRef.current += 1
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current)
@@ -143,7 +160,7 @@ export function usePdfGenerate(generatorFn) {
 
   /**
    * Returns the standard spinner / error / canvas preview node.
-   * Pass onRetry (a fn that calls triggerGenerate) and the wizard accent colour.
+   * Pass onRetry (calls triggerGenerate) and the wizard accent colour.
    */
   const buildPreviewContent = useCallback((onRetry, accent) => {
     if (pdfGenerating) return (
