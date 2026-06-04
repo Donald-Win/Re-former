@@ -100,7 +100,9 @@ export default function LvConnectionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EA')
+  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
+  // (job details are loaded via ProjectPicker / DraftPicker instead).
+  const { set } = useWizardSetup(d, setD, step, '360S014EA')
   const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
 
   const handleDraftLoad = (draft) => {

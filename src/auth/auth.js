@@ -20,7 +20,7 @@ const AUTH_CACHE_KEY = 're-former-auth-cache'
 const POLL_MS        = 1_800_000 // 30 minutes — ~48 req/day per user
 const CHECK_COOLDOWN = 120_000  // 2 minutes — minimum gap between visibility/online checks
 
-let _lastCheckedAt = 0  // timestamp of most recent successful network check
+let _lastCheckedAt = 0  // timestamp of most recent check attempt (success OR failure)
 
 // ── DEVICE ID ─────────────────────────────────────────────────────────────────
 // Uses crypto.randomUUID() for a truly stable, unpredictable device identity.
@@ -101,22 +101,35 @@ export function getCachedResult() {
 
 // ── NETWORK CHECK ─────────────────────────────────────────────────────────────
 
+/**
+ * Check device access against the Cloudflare Worker.
+ *
+ * Bug fix: _lastCheckedAt is now updated in a finally block so the cooldown
+ * window applies after ANY attempt — success, server error, or network failure.
+ * Previously it was only set on a successful response, meaning a transient
+ * network error would not advance the cooldown clock, allowing rapid hammering
+ * of the auth endpoint when the device came back online with a flaky signal.
+ */
 export async function checkAccessOnline() {
   const deviceId = getDeviceId()
-  const res = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId, app: APP_ID }),
-    cache: 'no-store',
-  })
-  if (!res.ok) throw new Error(`Worker responded ${res.status}`)
-  const result = await res.json()
-  _lastCheckedAt = Date.now()
-  // Cache all results including denied — so offline behaviour is correct.
-  // Denied cache is cleared immediately after the lock screen is shown,
-  // so it never persists to block a user who has since been granted access.
-  cacheResult(result)
-  return result
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId, app: APP_ID }),
+      cache: 'no-store',
+    })
+    if (!res.ok) throw new Error(`Worker responded ${res.status}`)
+    const result = await res.json()
+    // Cache all results including denied — so offline behaviour is correct.
+    cacheResult(result)
+    return result
+  } finally {
+    // Always record the attempt time, regardless of outcome, so that
+    // addVisibilityListener / addOnlineListener respect the cooldown
+    // even when the network is unreliable.
+    _lastCheckedAt = Date.now()
+  }
 }
 
 // ── POLLING & EVENT LISTENERS ─────────────────────────────────────────────────

@@ -1,19 +1,11 @@
 // CoordOverlay — accurate click-to-coordinate calibration tool.
 //
-// pdfjs-dist v5+ uses .mjs worker — imported via Vite's ?url modifier so the
-// file is emitted to dist/assets/ and cached by the service worker.
-//
 // Usage: <CoordOverlay pdfBytes={bytes} page={1} />
 // Set SHOW_OVERLAY = true in the wizard to reveal the calibrate tab.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { pdfjsLib } from './pdfjsInit'
 import { APP_ACCENT, APP_YELLOW } from './constants'
-
-// Configure the worker once at module load time.
-// Vite resolves ?url to a hashed asset path the service worker will cache.
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 export function CoordOverlay({ pdfBytes, page = 1 }) {
   const containerRef = useRef(null)

@@ -31,9 +31,20 @@
  * The same counter is incremented in the cleanup returned by a useEffect,
  * so any in-flight generation that completes after the wizard is closed
  * will also find its id stale and discard cleanly.
+ *
+ * Generation timeout
+ * ──────────────────
+ * If the generator function (or the underlying PDF template fetch) hangs
+ * indefinitely — e.g. when the service worker is stale and the network is
+ * unavailable — the user would otherwise see an infinite spinner.
+ * A 30-second timeout races against the generator and rejects with a
+ * distinct message if it wins, giving the user a clear retry prompt.
  */
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { PdfCanvasPreview } from './PdfCanvasPreview'
+
+// Maximum time to allow a single PDF generation attempt before giving up.
+const GENERATION_TIMEOUT_MS = 30_000
 
 export function usePdfGenerate(generatorFn) {
   const [pdfBytes,      setPdfBytes]      = useState(null)
@@ -76,7 +87,20 @@ export function usePdfGenerate(generatorFn) {
       blobUrlRef.current = null
     }
 
-    Promise.resolve(generatorFn(d, photos))
+    // ── Timeout race ─────────────────────────────────────────────────────────
+    // If the generator hasn't resolved within GENERATION_TIMEOUT_MS we reject
+    // with a sentinel error so the catch block can show a specific message.
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('GENERATION_TIMEOUT')),
+        GENERATION_TIMEOUT_MS,
+      )
+    )
+
+    Promise.race([
+      Promise.resolve(generatorFn(d, photos)),
+      timeoutPromise,
+    ])
       .then(result => {
         // Discard if a newer generation has already started (or unmounted)
         if (myGenId !== genIdRef.current) return
@@ -95,7 +119,13 @@ export function usePdfGenerate(generatorFn) {
         if (myGenId !== genIdRef.current) return
 
         console.error('PDF generation failed:', err)
-        setPdfError('Could not generate PDF — please try again.')
+
+        const isTimeout = err.message === 'GENERATION_TIMEOUT'
+        setPdfError(
+          isTimeout
+            ? 'Generation timed out — check your connection and try again.'
+            : 'Could not generate PDF — please try again.',
+        )
         setPdfGenerating(false)
       })
   }, [generatorFn])
@@ -132,7 +162,9 @@ export function usePdfGenerate(generatorFn) {
         alignItems: 'center', justifyContent: 'center',
         height: '100%',
       }}>
-        <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12 }}>{pdfError}</div>
+        <div style={{ fontSize: 14, color: '#f87171', marginBottom: 12, textAlign: 'center', padding: '0 24px' }}>
+          {pdfError}
+        </div>
         <button
           onClick={onRetry}
           style={{

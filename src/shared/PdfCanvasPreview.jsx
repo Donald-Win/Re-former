@@ -5,9 +5,6 @@
  * elements using pdfjs-dist, bundled locally via npm so the service worker
  * can cache it for offline use.
  *
- * pdfjs-dist v5+ uses .mjs worker — imported via Vite's ?url modifier so the
- * file is emitted to dist/assets/ and cached by the service worker.
- *
  * Layout-shift fix
  * ────────────────
  * The original code set `width: 100%` on each canvas but left height
@@ -23,12 +20,7 @@
  * render duration regardless of how long each page takes to paint.
  */
 import { useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-
-// Configure the worker once at module load time.
-// Vite resolves ?url to a hashed asset path the service worker will cache.
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
+import { pdfjsLib } from './pdfjsInit'
 
 export function PdfCanvasPreview({ pdfBytes }) {
   const containerRef  = useRef(null)

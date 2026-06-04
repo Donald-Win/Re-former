@@ -133,7 +133,9 @@ export default function ElecDistributionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EB')
+  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
+  // (job details are loaded via ProjectPicker / DraftPicker instead).
+  const { set } = useWizardSetup(d, setD, step, '360S014EB')
   const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
 
   const handleDraftLoad = (draft) => {

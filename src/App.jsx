@@ -79,11 +79,6 @@ const WIZARD_CONFIG = {
 }
 
 // ── Static data (module-level — these never change at runtime) ─────────────────
-// Previously these were declared inside AsBuiltFormSelector, which meant every
-// re-render (search typing, step changes, etc.) recreated all these objects from
-// scratch and forced every derived useMemo to invalidate.  At module scope they
-// are created once and remain stable references forever.
-
 const formDefinitions = {
   '360S014EA': { name: 'As-built Low Voltage Connection Record',                          fileName: '360S014EA.pdf' },
   '360S014EB': { name: 'As-built Electrical Distribution Record',                         fileName: '360S014EB.pdf' },
@@ -278,17 +273,26 @@ const AsBuiltFormSelector = () => {
   const [viewMode, setViewMode]             = useState('workType')
   const [formSearchTerm, setFormSearchTerm] = useState('')
 
+  // ── Online / offline status ───────────────────────────────────────────────
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true)
+    const goOffline = () => setIsOnline(false)
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
+
   // ── PDF viewer state — grouped into one object ────────────────────────────
-  // Grouping these 5 related values prevents the 4-5 separate re-renders that
-  // the original individual setters triggered whenever a new PDF was opened.
-  // Functional updates (setPdfViewer(prev => ...)) ensure we always read the
-  // freshest state inside callbacks — important for blob URL revocation.
   const [pdfViewer, setPdfViewer] = useState({
     open:    false,
     url:     '',
     name:    '',
-    bytes:   null,  // Uint8Array — drives PdfCanvasPreview
-    blobUrl: null,  // object URL — drives Share button
+    bytes:   null,
+    blobUrl: null,
   })
 
   const [activeWizard, setActiveWizard] = useState(null)
@@ -310,11 +314,6 @@ const AsBuiltFormSelector = () => {
   const [changelogIdx, setChangelogIdx]     = useState(0)
   const [updateReady, setUpdateReady]       = useState(false)
 
-  // ── Stale-fetch guard ─────────────────────────────────────────────────────
-  // Incrementing this ref on each new handleFormClick call means any in-flight
-  // fetch from a previous click is identified as stale and its result silently
-  // discarded — preventing the wrong PDF appearing if the user taps two forms
-  // in quick succession.
   const fetchRequestIdRef = useRef(0)
 
   // ── Service worker update detection ──────────────────────────────────────
@@ -397,19 +396,6 @@ const AsBuiltFormSelector = () => {
   }, [installPrompt])
 
   // ── PDF viewer handlers ───────────────────────────────────────────────────
-
-  /**
-   * Open a PDF in the viewer, or route to the WizardChoiceModal if the form
-   * has a wizard attached.
-   *
-   * Race-condition fix: fetchRequestIdRef is incremented on every call.
-   * If the user taps two forms in quick succession both fetches fire, but only
-   * the one matching the current requestId is allowed to update state.
-   *
-   * Blob URL leak fix: any existing blobUrl is explicitly revoked inside the
-   * functional state update before the new URL is stored, even if the viewer
-   * is already open (user switches PDF without closing first).
-   */
   const handleFormClick = useCallback((url, name, formId) => {
     if (formId && WIZARD_CONFIG[formId]) {
       setActiveWizard({ formId, mode: 'choice' })
@@ -420,7 +406,6 @@ const AsBuiltFormSelector = () => {
     const rawName     = name || url.split('/').pop()
     const displayName = rawName.endsWith('.pdf') ? rawName : rawName + '.pdf'
 
-    // Open viewer immediately in loading state; revoke any previous blob URL
     setPdfViewer(prev => {
       if (prev.blobUrl) URL.revokeObjectURL(prev.blobUrl)
       return { open: true, url, name: displayName, bytes: null, blobUrl: null }
@@ -432,14 +417,11 @@ const AsBuiltFormSelector = () => {
         return r.arrayBuffer()
       })
       .then(buf => {
-        // Discard result if a newer click has already taken over
         if (requestId !== fetchRequestIdRef.current) return
         const bytes   = new Uint8Array(buf)
         const blob    = new Blob([bytes], { type: 'application/pdf' })
         const blobUrl = URL.createObjectURL(blob)
         setPdfViewer(prev => {
-          // If the viewer was closed while the fetch was in flight, revoke
-          // the newly created URL immediately rather than leaking it
           if (!prev.open) {
             URL.revokeObjectURL(blobUrl)
             return prev
@@ -449,14 +431,13 @@ const AsBuiltFormSelector = () => {
       })
       .catch(() => {
         if (requestId !== fetchRequestIdRef.current) return
-        // Close the viewer and fall back to a new tab
         setPdfViewer(prev => {
           if (prev.blobUrl) URL.revokeObjectURL(prev.blobUrl)
           return { open: false, url: '', name: '', bytes: null, blobUrl: null }
         })
         window.open(url, '_blank', 'noopener,noreferrer')
       })
-  }, []) // WIZARD_CONFIG, setActiveWizard, setPdfViewer are all stable references
+  }, [])
 
   const handleClosePdf = useCallback(() => {
     setPdfViewer(prev => {
@@ -465,10 +446,6 @@ const AsBuiltFormSelector = () => {
     })
   }, [])
 
-  /**
-   * Share the currently-open PDF.
-   * Uses pdfViewer.bytes directly to avoid a redundant fetch(blobUrl) round-trip.
-   */
   const handleShare = async () => {
     if (!pdfViewer.bytes) return
     try {
@@ -485,11 +462,6 @@ const AsBuiltFormSelector = () => {
   }
 
   // ── Derived lists — memoised ──────────────────────────────────────────────
-  // All these were previously computed on every render. Now they only
-  // recompute when their specific inputs change. The static lookup tables
-  // (workTypeMapping, formDefinitions, etc.) are module-level so they are
-  // never listed as dependencies — they are guaranteed stable references.
-
   const filteredWorkTypes = useMemo(
     () => Object.keys(workTypeMapping).filter(work =>
       work.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1042,6 +1014,26 @@ const AsBuiltFormSelector = () => {
               Later
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Offline indicator ─────────────────────────────────────────────── */}
+      {!isOnline && (
+        <div style={{
+          position: 'fixed',
+          bottom: 44,  // sits just above the version badge
+          left: 0, right: 0,
+          zIndex: 999,
+          background: '#1f2937',
+          color: '#f9fafb',
+          padding: '9px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 13, fontWeight: 600,
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.25)',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}>
+          <span>📵</span>
+          <span>You're offline — forms and drafts work, but sharing requires a connection</span>
         </div>
       )}
 

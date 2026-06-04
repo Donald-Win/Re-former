@@ -20,7 +20,6 @@ import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { getUserPrefs } from '../shared/userPrefs'
-import { saveToHistory } from '../shared/jobHistory'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
@@ -293,7 +292,9 @@ export default function HVInspectionWizard({ onClose }) {
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, FORM_KEY)
+  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
+  // (job details are loaded via ProjectPicker / DraftPicker instead).
+  const { set } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(generateHvPdf)

@@ -159,7 +159,9 @@ function ElecEquipWizard({ onClose = () => {} }) {
     sharePdf(pdfBytes, parts.join(' - ') + '.pdf', pdfBlobUrl, clearFormDraft)
   }
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014EE')
+  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
+  // (job details are loaded via ProjectPicker / DraftPicker instead).
+  const { set } = useWizardSetup(d, setD, step, '360S014EE')
   const { clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, photos)
 
   const handleDraftLoad = (draft) => {
