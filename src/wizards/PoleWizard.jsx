@@ -13,7 +13,13 @@ import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-import { generatePolePdf } from './generators/PolePdfGenerator'
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadPoleGenerator = () =>
+  import('./generators/PolePdfGenerator').then(m => m.generatePolePdf)
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -300,7 +306,7 @@ function PoleRecordWizard({ onClose }) {
   const [photos, setPhotos] = useState([])
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(generatePolePdf)
+    usePdfGenerate(loadPoleGenerator)
 
   const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } =
     getUserPrefs()

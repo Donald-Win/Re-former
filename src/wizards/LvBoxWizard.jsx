@@ -12,7 +12,13 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-import { generateEdPdf } from './generators/LvBoxPdfGenerator'
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadEdGenerator = () =>
+  import('./generators/LvBoxPdfGenerator').then(m => m.generateEdPdf)
 
 const ED_SHOW_OVERLAY = false
 
@@ -108,7 +114,7 @@ export default function LvBoxWizard({ onClose }) {
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos,        setPhotos]        = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEdPdf)
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(loadEdGenerator)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)

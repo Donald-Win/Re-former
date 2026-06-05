@@ -12,7 +12,13 @@ import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-import { generateEbPdf } from './generators/ElecDistributionPdfGenerator'
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadEbGenerator = () =>
+  import('./generators/ElecDistributionPdfGenerator').then(m => m.generateEbPdf)
 
 const EB_SHOW_OVERLAY = false
 
@@ -102,7 +108,7 @@ export default function ElecDistributionWizard({ onClose }) {
   const [photos,          setPhotos]          = useState([])
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(generateEbPdf)
+    usePdfGenerate(loadEbGenerator)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.cableRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)

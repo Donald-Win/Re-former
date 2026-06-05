@@ -121,9 +121,9 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           if (isIOS) {
             msg = 'Location denied. Go to Settings → Safari → Location → Allow.'
           } else if (isStandalone) {
-            msg = 'Location was previously blocked. Go to Android Settings → Apps → Chrome → Permissions → Location → Allow.'
+            msg = 'Location was previously blocked. In Android Settings → Apps, find the browser you installed this app from, then go to Permissions → Location → Allow.'
           } else {
-            msg = 'Location was previously blocked. In Chrome, tap ⋮ (menu) → Settings → Site settings → Location → find this site and allow it.'
+            msg = 'Location was previously blocked. In your browser settings, find this site under Location permissions and change it to Allow.'
           }
           enterError(msg)
         } else if (err.code === err.TIMEOUT) {

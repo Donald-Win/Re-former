@@ -13,7 +13,13 @@ import { sharePdf } from '../shared/sharePdf'
 import { getUserPrefs } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-import { generateTransformerPdf } from './generators/TransformerPdfGenerator'
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadTransformerGenerator = () =>
+  import('./generators/TransformerPdfGenerator').then(m => m.generateTransformerPdf)
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -80,7 +86,7 @@ function TransformerWizardApp({ onClose }) {
   const [photos, setPhotos] = useState([])
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(generateTransformerPdf)
+    usePdfGenerate(loadTransformerGenerator)
 
   const {
     contractor: _contractor,

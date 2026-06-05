@@ -12,7 +12,13 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { APP_ACCENT } from '../shared/constants'
-import { generateEfPdf } from './generators/ZoneSubPdfGenerator'
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadEfGenerator = () =>
+  import('./generators/ZoneSubPdfGenerator').then(m => m.generateEfPdf)
 
 const ACCENT    = APP_ACCENT
 const EF_BG     = '#eef2ff'
@@ -42,7 +48,7 @@ function ZoneSubWizard({ onClose }) {
   const [draftPickerOpen, setDraftPickerOpen] = useState(false)
   const [draftPickerMode, setDraftPickerMode] = useState('menu')
   const [photos, setPhotos]           = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEfPdf)
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(loadEfGenerator)
 
   const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
 

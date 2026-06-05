@@ -27,7 +27,6 @@ import { DraftPicker } from '../shared/DraftPicker'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
 import {
-  generateHvPdf,
   EQUIP_TYPES,
   VISUAL_CHECKS,
   OPERATION_CHECKS,
@@ -35,7 +34,15 @@ import {
   QA_CHECKS,
   DOC_CHECKS,
   OTHER_CHECKS,
-} from './generators/HVInspectionPdfGenerator'
+} from './generators/HVInspectionChecks'
+
+// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
+// Defined at module scope so the reference is stable — usePdfGenerate's
+// useCallback won't re-create triggerGenerate on every render.
+// The browser's native module cache ensures the network round-trip only
+// happens once per session.
+const loadHvGenerator = () =>
+  import('./generators/HVInspectionPdfGenerator').then(m => m.generateHvPdf)
 
 const FORM_KEY   = '220F028A'
 const FORM_LABEL = 'HV Inspection Certificate'
@@ -297,7 +304,7 @@ export default function HVInspectionWizard({ onClose }) {
   const { set } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(generateHvPdf)
+    usePdfGenerate(loadHvGenerator)
 
   const handleDraftLoad = (draft) => {
     const { photos: dp, ...fd } = draft.data || {}
