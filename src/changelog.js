@@ -13,6 +13,55 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.13.0',
+    changes: [
+      {
+        heading: 'Offline indicator',
+        detail: 'A bar now appears at the bottom of the screen whenever your device loses its connection — "📵 You\'re offline — forms and drafts work, but sharing requires a connection." It disappears automatically when you\'re back online.',
+      },
+      {
+        heading: 'Blank PDFs open instantly on repeat access',
+        detail: 'Form PDFs are now served from the cache immediately on every open after the first — no more waiting for a network response before the PDF appears. A background fetch keeps the cached copy fresh for next time.',
+      },
+      {
+        heading: 'App updates are now user-controlled',
+        detail: 'Previously, a new app version would install and reload automatically. Now the "Update available" banner appears and nothing happens until you tap "Update now". No more surprise reloads while filling out a form.',
+      },
+      {
+        heading: 'Offline use is fully reliable',
+        detail: 'The service worker has been rebuilt using Workbox. All app code — including the PDF renderer (pdfjs) — is now properly pre-cached when you first load the app. Forms, wizards, and PDF previews all work the same with no internet connection.',
+      },
+      {
+        heading: 'Draft photos can no longer be lost',
+        detail: 'Draft and project storage has been moved from localStorage to IndexedDB. Photo data in drafts is no longer at risk of being silently deleted by the browser when device storage gets tight.',
+      },
+      {
+        heading: 'Number fields show the number pad on mobile',
+        detail: 'All numeric input fields (cable lengths, fuse sizes, number of conductors, etc.) now bring up the numeric keypad on iOS and Android instead of the full keyboard. Letters are also blocked so you can\'t accidentally type text into a numbers-only field.',
+      },
+      {
+        heading: '"Use my location" button improved',
+        detail: 'The GPS button now shows "⏳ Please wait…" and disables itself for 2 seconds after any error, preventing accidental rapid re-taps that could temporarily block location lookups. The error message for Android has also been updated to work for any browser, not just Chrome.',
+      },
+      {
+        heading: 'PDF preview no longer jumps when loading',
+        detail: 'Multi-page form previews previously caused a jarring snap — the preview area would collapse and then suddenly expand as each page finished rendering. The correct height is now reserved upfront so the scroll position stays stable throughout.',
+      },
+      {
+        heading: 'Signature feels smoother on iPads',
+        detail: 'The signature bounding-box calculation was rewritten to be significantly faster. On retina/HiDPI iPads the old code was scanning ~240,000 pixels on every stroke end, causing a brief stutter. The new code typically exits after scanning ~10–20 rows.',
+      },
+      {
+        heading: 'Accidental zoom disabled on field devices',
+        detail: 'Pinch-to-zoom is now disabled. On iPads and Android tablets, accidentally zooming the form while tapping or swiping between fields is no longer possible.',
+      },
+      {
+        heading: 'Faster startup',
+        detail: 'The app bundle is now split into separate chunks — React, pdf-lib, pdfjs, and each wizard\'s PDF generator only load when needed. First load and navigation are noticeably quicker on slower mobile connections.',
+      },
+    ],
+  },
+  {
     version: '2.12.0',
     changes: [
       {
