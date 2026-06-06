@@ -1,31 +1,29 @@
 import { useState, useEffect } from 'react'
-import { APP_ACCENT } from '../shared/constants'
+import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+import { useDraftPicker } from '../shared/useDraftPicker'
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEaGenerator = () =>
   import('./generators/LvConnectionPdfGenerator').then(m => m.generateEaPdf)
 
 const LV_SHOW_OVERLAY = false
 
 const LV_TEAL   = APP_ACCENT
-const LV_BG     = '#eef2ff'
-const LV_MID    = '#e0e7ff'
-const LV_BORDER = '#c7d2fe'
+const LV_BG     = WIZARD_COLORS.bg
+const LV_MID    = WIZARD_COLORS.mid
+const LV_BORDER = WIZARD_COLORS.border
 
 const LV_STEPS = [
   'Job Details',
@@ -37,49 +35,42 @@ const LV_STEPS = [
 ]
 
 export default function LvConnectionWizard({ onClose }) {
-  const [step, setStep] = useState(0)
-
-  const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-  const [d, setD] = useState({
-    npJobNumber:          '',
-    projectName:          '',
-    pcoWONo:              '',
-    ciwrNo:               '',
-    streetRoad:           '',
-    cityTown:             '',
-    district:             '',
-    contractor:           _contractor,
-    dateWorkCompleted:    _date,
-    namePrint:            _namePrint,
-    signed:               _signed,
-    cocNumber:            '',
-    cowShedNumber:        '',
-    icpNumber:            '',
-    installedService:     '',
-    connectedTo:          '',
-    connectedToOther:     '',
-    poleServiceBoxNumber: '',
-    conductorSize:        '',
-    conductorMaterial:    '',
-    insulation:           '',
-    numberOfCables:       '',
-    numberOfCores:        '',
-    fuseSize:             '',
-    numberOfPhases:       '',
-    phaseColours:         '',
-    cableDuct:            '',
-    cableDuctNewSize:     '',
-    cableDuctExistingSize:'',
-    workDescription:      '',
-  })
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
+    cocNumber:             '',
+    cowShedNumber:         '',
+    icpNumber:             '',
+    installedService:      '',
+    connectedTo:           '',
+    connectedToOther:      '',
+    poleServiceBoxNumber:  '',
+    conductorSize:         '',
+    conductorMaterial:     '',
+    insulation:            '',
+    numberOfCables:        '',
+    numberOfCores:         '',
+    fuseSize:              '',
+    numberOfPhases:        '',
+    phaseColours:          '',
+    cableDuct:             '',
+    cableDuctNewSize:      '',
+    cableDuctExistingSize: '',
+    workDescription:       '',
+  }))
+  const [photos, setPhotos] = useState([])
+  const [overlayTab, setOverlayTab]     = useState('form')
+  const [overlayBytes, setOverlayBytes] = useState(null)
 
   const isPreview = step === LV_STEPS.length - 1
-  const [overlayTab,    setOverlayTab]    = useState('form')
-  const [overlayBytes,  setOverlayBytes]  = useState(null)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos,        setPhotos]        = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(loadEaGenerator)
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EA', formLabel: 'LV Connection Record',
+    d, step, photos, accent: LV_TEAL,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadEaGenerator)
 
   useEffect(() => {
     if (LV_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -91,10 +82,12 @@ export default function LvConnectionWizard({ onClose }) {
   }, [overlayTab, overlayBytes])
 
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.icpNumber), 'LV Connection Record'].filter(Boolean)
-    const filename = parts.join(' - ') + '.pdf'
-    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.icpNumber, 'LV Connection Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   const missingFields = [
@@ -106,27 +99,20 @@ export default function LvConnectionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
-  // (job details are loaded via ProjectPicker / DraftPicker instead).
   const { set } = useWizardSetup(d, setD, step, '360S014EA')
   const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
 
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
-
   const formSteps = [
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}><div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={LV_TEAL} onOpenDrafts={openLoad}>
+      <div style={{ height: 1, background: '#eee', margin: '14px 0' }} />
       <SectionHead label="Connection Identifiers" accent={LV_TEAL} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
         <WF label="C.O.C Number"           v={d.cocNumber}     set={v => set('cocNumber',     v)} accent={LV_TEAL} />
         <WF label="Cow Shed / Dairy No."   v={d.cowShedNumber} set={v => set('cowShedNumber', v)} accent={LV_TEAL} />
         <WF label="ICP Number"             v={d.icpNumber}     set={v => set('icpNumber',     v)} accent={LV_TEAL} />
-      </div></JobDetailsStep>,
+      </div>
+    </JobDetailsStep>,
 
     <div key="s1">
       <SectionHead label="Physical Connection Point" accent={LV_TEAL} />
@@ -218,7 +204,7 @@ export default function LvConnectionWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+          onSaveDraft={openSave}
           onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={LV_TEAL}
           bg={LV_BG}
@@ -235,18 +221,7 @@ export default function LvConnectionWizard({ onClose }) {
         </WizardShell>
       )}
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EA"
-        formLabel="LV Connection Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={LV_TEAL}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

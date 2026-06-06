@@ -1,25 +1,21 @@
 // 360S014EE — AS-Built Electrical Equipment Record
-// PDF generation extracted to src/wizards/generators/ElecEquipPdfGenerator.js
 import React, { useState, useEffect } from 'react'
 import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
-import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
+import { APP_ACCENT, APP_YELLOW, WIZARD_COLORS } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { useDraftPicker } from '../shared/useDraftPicker'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
 const loadEEGenerator = () =>
   import('./generators/ElecEquipPdfGenerator').then(m => m.generateEEPdf)
 
@@ -28,9 +24,9 @@ const W_YELLOW = APP_YELLOW
 
 const EE_SHOW_OVERLAY = false
 
-const EE_BG     = '#eef2ff'
-const EE_MID    = '#e0e7ff'
-const EE_BORDER = '#c7d2fe'
+const EE_BG     = WIZARD_COLORS.bg
+const EE_MID    = WIZARD_COLORS.mid
+const EE_BORDER = WIZARD_COLORS.border
 
 const EE_STEPS = [
   'Job Details',
@@ -62,30 +58,13 @@ const emptyMultiRow = () => ({
 })
 
 function ElecEquipWizard({ onClose = () => {} }) {
-  const [tab, setTab]                         = useState('wizard')
-  const [calPage, setCalPage]                 = useState(1)
-  const [step, setStep]                       = useState(0)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos, setPhotos]                   = useState([])
+  const [tab, setTab]       = useState('wizard')
+  const [calPage, setCalPage] = useState(1)
+  const [step, setStep]     = useState(0)
+  const [photos, setPhotos] = useState([])
   const [calibrationPdfBytes, setCalibrationPdfBytes] = useState(null)
 
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEEGenerator)
-
-  const {
-    contractor: _contractor,
-    namePrint:  _namePrint,
-    signed:     _signed,
-    dateWorkCompleted: _date,
-  } = getUserPrefs()
-
-  const [d, setD] = useState({
-    npJobNumber: '', projectName: '',
-    pcoWONo: '', ciwrNo: '',
-    streetRoad: '', cityTown: '', district: '',
-    contractor: _contractor, dateWorkCompleted: _date,
-    signed: _signed, namePrint: _namePrint,
+  const [d, setD] = useState(() => getBaseFormState({
     newEquipmentId: '', oldEquipmentId: '', locationPoleSiteId: '',
     manufacturer: '', model: '', serialNo: '',
     equipmentType: '', equipmentTypeOther: '',
@@ -95,9 +74,18 @@ function ElecEquipWizard({ onClose = () => {} }) {
     remoteControlled: '', remoteIndication: '',
     comments: '',
     multiItems: [emptyMultiRow()],
-  })
+  }))
 
   const isPreview = step === EE_STEPS.length - 1
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EE', formLabel: 'Elec Equipment Record',
+    d, step, photos, accent: W_PURPLE,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadEEGenerator)
 
   useEffect(() => {
     if (!EE_SHOW_OVERLAY) return
@@ -156,31 +144,21 @@ function ElecEquipWizard({ onClose = () => {} }) {
   )
 
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [
-      sanitise(d.projectName),
-      sanitise(d.npJobNumber),
-      sanitise(d.newEquipmentId),
-      'Elec Equipment Record',
-    ].filter(Boolean)
-    sharePdf(pdfBytes, parts.join(' - ') + '.pdf', pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.newEquipmentId, 'Elec Equipment Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   const { set } = useWizardSetup(d, setD, step, '360S014EE')
   const { clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, photos)
 
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
-
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE}
-      onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} onOpenDrafts={openLoad} />,
 
     // 1 — Equipment Details
     <div key="1">
@@ -406,10 +384,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
     </div>,
 
-    // 8 — Preview & Print
-    // WizardShell renders previewContent when isPreview is true; this placeholder
-    // keeps formSteps in sync with EE_STEPS (9 entries) so formSteps[step] is
-    // never undefined when step === 8.
+    // 8 — Preview & Print (placeholder)
     <div key="s8" />,
   ]
 
@@ -477,7 +452,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
           onStepClick={setStep}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+          onSaveDraft={openSave}
           onNext={() => {
             const next = step + 1
             setStep(next)
@@ -498,18 +473,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
         </WizardShell>
       )}
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EE"
-        formLabel="Elec Equipment Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={W_PURPLE}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

@@ -1,5 +1,4 @@
 // 360S014EG — AS-Built Transformer Record
-// PDF generation extracted to src/wizards/generators/TransformerPdfGenerator.js
 import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -7,17 +6,15 @@ import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { useDraftPicker } from '../shared/useDraftPicker'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadTransformerGenerator = () =>
   import('./generators/TransformerPdfGenerator').then(m => m.generateTransformerPdf)
 
@@ -80,27 +77,8 @@ const REMOVAL_OPTS = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 function TransformerWizardApp({ onClose }) {
-  const [step, setStep] = useState(0)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos, setPhotos] = useState([])
-
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadTransformerGenerator)
-
-  const {
-    contractor: _contractor,
-    namePrint:  _namePrint,
-    signed:     _signed,
-    dateWorkCompleted: _date,
-  } = getUserPrefs()
-
-  const [d, setD] = useState({
-    streetRoad: '', cityTown: '', district: '',
-    contractor: _contractor, namePrint: _namePrint,
-    npJobNumber: '', projectName: '',
-    pcoWONo: '', ciwrNo: '',
-    dateWorkCompleted: _date, signed: _signed,
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
     transformerSiteId: '', poleId: '',
     zoneSubstation: '', feederId: '',
     installationType: '', ownership: '', ownershipOther: '',
@@ -125,11 +103,21 @@ function TransformerWizardApp({ onClose }) {
     },
     removedToStore: '',
     comments: '',
-  })
+  }))
+  const [photos, setPhotos] = useState([])
 
   const isPreview = step === T_STEPS.length - 1
   const scheme    = schemeColors(STEP_SCHEME[step])
   const G         = scheme.accent
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EG', formLabel: 'Transformer Record',
+    d, step, photos, accent: G,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadTransformerGenerator)
 
   // ── State helpers ─────────────────────────────────────────────────────────
   const tog  = k => v => setD(p => ({ ...p,          [k]: p[k]          === v ? '' : v }))
@@ -144,26 +132,17 @@ function TransformerWizardApp({ onClose }) {
 
   // ── PDF share ─────────────────────────────────────────────────────────────
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [
-      sanitise(d.projectName),
-      sanitise(d.npJobNumber),
-      sanitise(d.transformerSiteId),
-      'Transformer Record',
-    ].filter(Boolean)
-    sharePdf(pdfBytes, parts.join(' - ') + '.pdf', pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.transformerSiteId, 'Transformer Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   // ── Shared hooks ──────────────────────────────────────────────────────────
   const { set } = useWizardSetup(d, setD, step, '360S014EG')
   const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
-
-  const handleDraftLoad = draft => {
-    const { photos: dp, ...fd } = draft.data || {}
-    setD(prev => ({ ...prev, ...fd }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
 
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
@@ -174,21 +153,17 @@ function TransformerWizardApp({ onClose }) {
 
   // ─────────────────────────────────────────────────────────────────────────
   // STEP CONTENT
-  // Only the current step is rendered to avoid iOS keyboard-collapse issues.
   // ─────────────────────────────────────────────────────────────────────────
   const renderCurrentStep = () => {
     if (isPreview) return null
 
     switch (step) {
 
-      // 0 — Job Details
       case 0:
         return (
-          <JobDetailsStep d={d} setD={setD} accent={G}
-            onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />
+          <JobDetailsStep d={d} setD={setD} accent={G} onOpenDrafts={openLoad} />
         )
 
-      // 1 — Site Details
       case 1:
         return (
           <div>
@@ -211,7 +186,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 2 — Issued: Voltage & Connection
       case 2:
         return (
           <div>
@@ -227,7 +201,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 3 — Issued: Capacity & Phases
       case 3:
         return (
           <div>
@@ -240,7 +213,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 4 — Issued: Enclosure & Type
       case 4:
         return (
           <div>
@@ -253,7 +225,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 5 — Issued: Make, Model & Volt Test
       case 5:
         return (
           <div>
@@ -266,7 +237,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 6 — Issued: Technical
       case 6:
         return (
           <div>
@@ -299,7 +269,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 7 — Removed: Voltage & Connection
       case 7:
         return (
           <div>
@@ -315,7 +284,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 8 — Removed: Capacity & Phases
       case 8:
         return (
           <div>
@@ -328,7 +296,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 9 — Removed: Enclosure & Type
       case 9:
         return (
           <div>
@@ -341,7 +308,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 10 — Removed: Make & Model
       case 10:
         return (
           <div>
@@ -352,7 +318,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 11 — Removal Details
       case 11:
         return (
           <div>
@@ -364,7 +329,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 12 — Comments
       case 12:
         return (
           <div>
@@ -378,7 +342,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 13 — Photos
       case 13:
         return <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
 
@@ -389,9 +352,6 @@ function TransformerWizardApp({ onClose }) {
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), scheme.accent)
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <WizardShell
@@ -404,7 +364,7 @@ function TransformerWizardApp({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
-        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onSaveDraft={openSave}
         onNext={() => {
           const next = step + 1
           setStep(next)
@@ -431,18 +391,7 @@ function TransformerWizardApp({ onClose }) {
         {renderCurrentStep()}
       </WizardShell>
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EG"
-        formLabel="Transformer Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={G}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

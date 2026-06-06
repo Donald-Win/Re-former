@@ -1,16 +1,5 @@
 /**
  * HVInspectionWizard — 220F028A Pre-Commissioning HV Inspection Certificate
- *
- * Steps:
- *   0. Job Details
- *   1. Equipment Types (select which apply)
- *   2…N. One check step per selected equipment type
- *   N+1. Signatures
- *   N+2. Photos
- *   N+3. Preview & Print
- *
- * PDF generation is handled entirely by HVInspectionPdfGenerator.js.
- * This file contains only UI state, step rendering, and wizard orchestration.
  */
 import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
@@ -19,10 +8,12 @@ import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { SignaturePad } from '../shared/SignaturePad'
 import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
-import { getUserPrefs } from '../shared/userPrefs'
+import { getUserPrefs, getBaseFormState } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
+import { useDraftPicker } from '../shared/useDraftPicker'
 import { DraftPicker } from '../shared/DraftPicker'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
@@ -36,11 +27,7 @@ import {
   OTHER_CHECKS,
 } from './generators/HVInspectionChecks'
 
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadHvGenerator = () =>
   import('./generators/HVInspectionPdfGenerator').then(m => m.generateHvPdf)
 
@@ -49,8 +36,6 @@ const FORM_LABEL = 'HV Inspection Certificate'
 const ACCENT     = APP_ACCENT
 
 // ── N/A maps — shaded cells from the original form ───────────────────────────
-// Key = row index, value = array of EQUIP_TYPES indices that are N/A for that row.
-// Extracted by pixel analysis of the original PDF.
 const P1_NA = {
   0:  [7, 8, 12],
   1:  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -68,12 +53,10 @@ const P1_NA = {
 }
 
 const P2_NA = {
-  // Operation (rows 0–3)
   0:  [1, 2, 3, 7, 8, 9, 10, 11, 12],
   1:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 12],
   2:  [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
   3:  [0, 1, 2, 3, 7, 8, 9, 10, 11, 12],
-  // Performance (rows 4–16)
   4:  [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
   5:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12],
   6:  [2, 3],
@@ -89,17 +72,11 @@ const P2_NA = {
   16: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 }
 
-/**
- * Returns true when a particular cell in the check grid is N/A (shaded).
- * @param {'visual'|'operation'|'performance'|'qa'|'doc'} checkGroup
- * @param {number} rowIdx - Row index within the check group
- * @param {number} colIdx - Equipment-type column index
- */
 function isNA(checkGroup, rowIdx, colIdx) {
   if (checkGroup === 'visual')      return (P1_NA[rowIdx] || []).includes(colIdx)
   if (checkGroup === 'operation')   return (P2_NA[rowIdx] || []).includes(colIdx)
   if (checkGroup === 'performance') return (P2_NA[rowIdx + 4] || []).includes(colIdx)
-  return false  // QA, Doc, Other have no N/A cells
+  return false
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,26 +90,19 @@ function initChecks(checkList) {
 }
 
 function initState() {
+  // getUserPrefs() is called here for certNo (not in getBaseFormState) and
+  // to pre-fill the WTL signature fields from user settings.
   const prefs = getUserPrefs()
-  return {
-    // Job details
-    projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '',
+  return getBaseFormState({
     siteId: '',
-    streetRoad: '', cityTown: '', district: '',
-    dateWorkCompleted: prefs.dateWorkCompleted || '',
-    contractor:  prefs.contractor  || '',
-    namePrint:   prefs.namePrint   || '',
-    signed:      prefs.signed      || '',
-    // Equipment selection
     selectedEquip: [],
-    // Check states
     visualChecks:      initChecks(VISUAL_CHECKS),
     operationChecks:   initChecks(OPERATION_CHECKS),
     performanceChecks: initChecks(PERFORMANCE_CHECKS),
     qaChecks:          initChecks(QA_CHECKS),
     docChecks:         initChecks(DOC_CHECKS),
     otherChecks:       initChecks(OTHER_CHECKS),
-    // Signatures — WTL pre-filled from user settings
+    // WTL section — pre-filled from user settings
     wtlName:   prefs.namePrint || '',
     wtlSigned: prefs.signed    || '',
     wtlCertNo: prefs.certNo    || '',
@@ -140,10 +110,10 @@ function initState() {
     fsName: '', fsSigned: '', fsSinNapa: '',
     // Other (Specify) labels
     other1: '', other2: '', other3: '',
-  }
+  })
 }
 
-// ── Check sections definition — used by EquipCheckList ───────────────────────
+// ── Check sections definition ─────────────────────────────────────────────────
 const CHECK_SECTIONS = [
   { title: 'Visual Checks',     checks: VISUAL_CHECKS,      stateKey: 'visualChecks',      group: 'visual'      },
   { title: 'Operation',         checks: OPERATION_CHECKS,   stateKey: 'operationChecks',   group: 'operation'   },
@@ -154,8 +124,6 @@ const CHECK_SECTIONS = [
 ]
 
 // ── EquipCheckList ────────────────────────────────────────────────────────────
-// Shows checks for ONE equipment type as simple tick toggles.
-// Only renders rows that are applicable (not N/A) for this equipment type.
 function EquipCheckList({ checkSections, equip, d, setD, accent }) {
   const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
 
@@ -172,7 +140,6 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
     }))
   }
 
-  // Tick all applicable checks across all non-Other sections at once
   const nonOtherSections = checkSections.filter(s => s.group !== 'other')
 
   const allNonOtherTicked = nonOtherSections.every(({ checks, stateKey, group }) =>
@@ -273,7 +240,6 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
         )
       })}
 
-      {/* Tick All button — excludes Other (Specify) rows */}
       <button
         onClick={tickAllSections}
         style={{
@@ -296,22 +262,17 @@ export default function HVInspectionWizard({ onClose }) {
   const [d, setD]       = useState(initState)
   const [step, setStep] = useState(0)
   const [photos, setPhotos] = useState([])
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
 
-  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
-  // (job details are loaded via ProjectPicker / DraftPicker instead).
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: FORM_KEY, formLabel: FORM_LABEL,
+    d, step, photos, accent: ACCENT,
+  })
+
   const { set } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadHvGenerator)
-
-  const handleDraftLoad = (draft) => {
-    const { photos: dp, ...fd } = draft.data || {}
-    setD(prev => ({ ...prev, ...fd }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
 
   // ── Dynamic step list based on selected equipment ──────────────────────────
   const selectedEquipObjs = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
@@ -326,7 +287,7 @@ export default function HVInspectionWizard({ onClose }) {
   ]
 
   const EQUIP_STEP_START = 2
-  const EQUIP_STEP_END   = 2 + selectedEquipObjs.length  // exclusive
+  const EQUIP_STEP_END   = 2 + selectedEquipObjs.length
   const SIG_STEP         = EQUIP_STEP_END
   const PHOTO_STEP       = SIG_STEP + 1
   const PREVIEW_STEP     = PHOTO_STEP + 1
@@ -345,11 +306,14 @@ export default function HVInspectionWizard({ onClose }) {
     setStep(s => Math.max(s - 1, 0))
   }
 
-  const handleShare = async () => {
-    if (!pdfBytes) return
-    const { sharePdf } = await import('../shared/sharePdf')
-    const parts = [d.npJobNumber || d.projectName || 'HV Inspection', 'HV Inspection Certificate'].filter(Boolean)
-    await sharePdf(pdfBytes, `${parts.join(' - ')}.pdf`, pdfBlobUrl, clearFormDraft)
+  // sharePdf is now imported at the top of the file (not lazily) for consistency.
+  const handleShare = () => {
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.npJobNumber || d.projectName, 'HV Inspection Certificate'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   const missingFields = []
@@ -361,12 +325,10 @@ export default function HVInspectionWizard({ onClose }) {
     if (isPreview) return null
 
     // Step 0 — Job Details
+    // Dead props (formKey, formLabel, step, photos, setPhotos) removed —
+    // JobDetailsStep does not declare or use those props.
     if (step === 0) return (
-      <JobDetailsStep d={d} setD={setD} accent={ACCENT}
-        formKey={FORM_KEY} formLabel={FORM_LABEL}
-        step={step} photos={photos} setPhotos={setPhotos}
-        onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
-      >
+      <JobDetailsStep d={d} setD={setD} accent={ACCENT} onOpenDrafts={openLoad}>
         <WF label="Site ID" v={d.siteId} set={val => setD(p => ({ ...p, siteId: val }))}
           ph="e.g. SUB-123 or Zone Sub name" accent={ACCENT} />
       </JobDetailsStep>
@@ -434,7 +396,7 @@ export default function HVInspectionWizard({ onClose }) {
       />
     )
 
-    // Signatures — WTL loaded silently from user settings; only FS fields shown
+    // Signatures
     if (step === SIG_STEP) return (
       <div>
         <SectionHead label="Field Switcher" accent={ACCENT} />
@@ -463,7 +425,7 @@ export default function HVInspectionWizard({ onClose }) {
       onClose={onClose}
       onBack={handleBack}
       onNext={handleNext}
-      onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+      onSaveDraft={openSave}
       accent={ACCENT}
       isPreview={isPreview}
       onShare={handleShare}
@@ -473,16 +435,7 @@ export default function HVInspectionWizard({ onClose }) {
     >
       {renderStep()}
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey={FORM_KEY}
-        formLabel={FORM_LABEL}
-        d={d} step={step} photos={photos}
-        onLoad={handleDraftLoad}
-        accent={ACCENT}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </WizardShell>
   )
 }

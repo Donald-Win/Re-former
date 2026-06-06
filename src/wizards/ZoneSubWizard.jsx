@@ -4,26 +4,24 @@ import { Building2 } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-import { APP_ACCENT } from '../shared/constants'
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+import { useDraftPicker } from '../shared/useDraftPicker'
+import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEfGenerator = () =>
   import('./generators/ZoneSubPdfGenerator').then(m => m.generateEfPdf)
 
 const ACCENT    = APP_ACCENT
-const EF_BG     = '#eef2ff'
-const EF_MID    = '#e0e7ff'
-const EF_BORDER = '#c7d2fe'
+const EF_BG     = WIZARD_COLORS.bg
+const EF_MID    = WIZARD_COLORS.mid
+const EF_BORDER = WIZARD_COLORS.border
 
 const EF_STEPS = [
   'Job Details',
@@ -44,28 +42,10 @@ const emptyRow = () => ({
 })
 
 function ZoneSubWizard({ onClose }) {
-  const [step, setStep]               = useState(0)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos, setPhotos]           = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(loadEfGenerator)
-
-  const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-
-  const [d, setD] = useState({
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
     substation: '',
-    npJobNumber: '',
-    projectName: '',
-    pcoWONo: '',
-    ciwrNo: '',
-    streetRoad: '',
-    cityTown: '',
-    district: '',
-    contractor: _contractor,
     contractorJobCostCode: '',
-    dateWorkCompleted: _date,
-    namePrint: _namePrint,
-    signed: _signed,
     maintenanceApplies: false,
     maintenanceEquipmentId: '',
     maintenanceParentEquipmentId: '',
@@ -80,9 +60,19 @@ function ZoneSubWizard({ onClose }) {
     serialNo: '',
     replacementDescription: '',
     additionalItems: [emptyRow()],
-  })
+  }))
+  const [photos, setPhotos] = useState([])
 
   const isPreview = step === EF_STEPS.length - 1
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EF', formLabel: 'Zone Sub Equipment Record',
+    d, step, photos, accent: ACCENT,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadEfGenerator)
 
   const setRow = (i, field, val) => setD(p => {
     const items = [...p.additionalItems]
@@ -91,10 +81,12 @@ function ZoneSubWizard({ onClose }) {
   })
 
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.substation), 'Zone Sub Equipment Record'].filter(Boolean)
-    const filename = parts.join(' - ') + '.pdf'
-    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.substation, 'Zone Sub Equipment Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   const missingFields = [
@@ -107,13 +99,6 @@ function ZoneSubWizard({ onClose }) {
 
   const { set } = useWizardSetup(d, setD, step, '360S014EF')
   const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
-
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
 
   const AppliesToggle = ({ applies, label, onToggle }) => (
     <button type="button" onClick={onToggle} style={{
@@ -132,7 +117,7 @@ function ZoneSubWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={ACCENT} onOpenDrafts={openLoad}
       topChildren={<>
         <WF label="Substation" v={d.substation} set={v => set('substation', v)} accent={ACCENT} />
         <WF label="Contractor Job Cost Code" v={d.contractorJobCostCode} set={v => set('contractorJobCostCode', v)} accent={ACCENT} />
@@ -236,7 +221,7 @@ function ZoneSubWizard({ onClose }) {
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ACCENT} />
     </div>,
 
-    // 5 — Preview & Print
+    // 5 — Preview & Print (placeholder)
     <div key="s5" />,
   ]
 
@@ -253,14 +238,14 @@ function ZoneSubWizard({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
-        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onSaveDraft={openSave}
         onNext={() => {
           const next = step + 1
           setStep(next)
           if (next === EF_STEPS.length - 1) triggerGenerate(d, photos)
         }}
         accent={ACCENT}
-        bg="#f4f4f8"
+        bg={EF_BG}
         mid={EF_MID}
         border={EF_BORDER}
         isPreview={isPreview}
@@ -271,18 +256,8 @@ function ZoneSubWizard({ onClose }) {
       >
         {formSteps[step]}
       </WizardShell>
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EF"
-        formLabel="Zone Sub Equipment Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={ACCENT}
-        initialMode={draftPickerMode}
-      />
+
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

@@ -1,5 +1,4 @@
 // 360S014EC — AS-Built Pole Record
-// PDF generation extracted to src/wizards/generators/PolePdfGenerator.js
 import React, { useState, useRef } from 'react'
 import { PenLine } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -7,17 +6,15 @@ import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { useDraftPicker } from '../shared/useDraftPicker'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadPoleGenerator = () =>
   import('./generators/PolePdfGenerator').then(m => m.generatePolePdf)
 
@@ -53,13 +50,11 @@ const POLE_TYPES = [
   '4 Pole', 'H Pole', 'Double', 'Stay Pole',
 ]
 
-// Copper standard sizes for quick-pick
 const CU_SIZES = [
   '10mm²','16mm²','25mm²','35mm²','50mm²',
   '70mm²','95mm²','120mm²','150mm²','185mm²','240mm²',
 ]
 
-// Aluminium conductors — common ones pinned at top, rest alphabetical
 const ALI_COMMON = ['Namu','Squirrel','Ferret','Flourine','Kutu','Iodine','Wasp']
 const ALI_ALL = [
   {name:'Argon',type:'AAAC'},{name:'Bee',type:'AAC'},{name:'Beetle',type:'AAC'},
@@ -153,7 +148,6 @@ function DateBoxInput({ label, value, onChange }) {
 }
 
 // ── ConductorPicker ───────────────────────────────────────────────────────────
-// Guided quick-pick for Cu / Ali conductor selection, with manual fallback.
 
 function ConductorPicker({ c, i, setCond, setMultiCond }) {
   const picker = c.picker || (c.size || c.material ? 'manual' : null)
@@ -178,7 +172,6 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
     }}>{label}</button>
   )
 
-  // Summary badge shown once size + material + insulation are all chosen
   const summary = c.size && c.material && c.insulation ? (
     <div style={{
       background: '#eef2ff', border: `1px solid ${accent}`, borderRadius: 7,
@@ -202,7 +195,6 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
     </div>
   )
 
-  // No picker selected yet
   if (!picker) return (
     <div>
       {summary}
@@ -211,7 +203,6 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
     </div>
   )
 
-  // Copper path
   if (picker === 'cu') return (
     <div>
       {summary}
@@ -242,7 +233,6 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
     </div>
   )
 
-  // Aluminium path
   if (picker === 'ali') return (
     <div>
       {summary}
@@ -283,7 +273,6 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
     </div>
   )
 
-  // Manual path
   return (
     <div>
       {summary}
@@ -300,29 +289,24 @@ function ConductorPicker({ c, i, setCond, setMultiCond }) {
 // ── Wizard component ──────────────────────────────────────────────────────────
 
 function PoleRecordWizard({ onClose }) {
-  const [step, setStep] = useState(0)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
+    conductors: [{ level: '1', existing: '', size: '', material: '', insulation: '', picker: null }],
+    crossarms:  [{ level: '1', existing: '', voltage: '', endSize: '', length: '', arms: '', insulatorType: '', armMaterial: '', wires: '' }],
+    accessories: [],
+  }))
   const [photos, setPhotos] = useState([])
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadPoleGenerator)
 
-  const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } =
-    getUserPrefs()
-
-  const [d, setD] = useState({
-    npJobNumber: '', projectName: '',
-    conductors: [{ level: '1', existing: '', size: '', material: '', insulation: '', picker: null }],
-    crossarms:  [{ level: '1', existing: '', voltage: '', endSize: '', length: '', arms: '', insulatorType: '', armMaterial: '', wires: '' }],
-    accessories: [],
-    contractor:        _contractor,
-    namePrint:         _namePrint,
-    signed:            _signed,
-    dateWorkCompleted: _date,
-  })
-
   const isPreview = step === W_STEPS.length - 1
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EC', formLabel: 'Pole Record',
+    d, step, photos, accent: W_PURPLE,
+  })
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -354,27 +338,18 @@ function PoleRecordWizard({ onClose }) {
   // ── PDF share ─────────────────────────────────────────────────────────────
 
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [
-      sanitise(d.projectName),
-      sanitise(d.npJobNumber),
-      sanitise(d.oldPoleId),
-      'Pole Record',
-    ].filter(Boolean)
-    sharePdf(pdfBytes, parts.join(' - ') + '.pdf', pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.oldPoleId, 'Pole Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   // ── Shared hooks ──────────────────────────────────────────────────────────
 
   const { set } = useWizardSetup(d, setD, step, '360S014EC')
   const { clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, photos)
-
-  const handleDraftLoad = draft => {
-    const { photos: dp, ...fd } = draft.data || {}
-    setD(prev => ({ ...prev, ...fd }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
 
   // ── Missing-field warnings ────────────────────────────────────────────────
 
@@ -399,8 +374,7 @@ function PoleRecordWizard({ onClose }) {
   const formSteps = [
 
     // 0 — Location & Contractor
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE}
-      onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
+    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} onOpenDrafts={openLoad} />,
 
     // 1 — Pole IDs & Activity
     <div key="1">
@@ -451,7 +425,6 @@ function PoleRecordWizard({ onClose }) {
           )}
           <WCB label="Pole Condition" options={['New','Pre-Used']} value={d.poleCondition} onChange={tog('poleCondition')} />
 
-          {/* Pole code grid */}
           <div style={{ marginBottom:14 }}>
             <label style={wLbl}>New Pole Code & Manufacturer</label>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, marginTop:4 }}>
@@ -705,9 +678,6 @@ function PoleRecordWizard({ onClose }) {
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), W_PURPLE)
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <WizardShell
@@ -719,7 +689,7 @@ function PoleRecordWizard({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
-        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onSaveDraft={openSave}
         onNext={() => {
           const n = step + 1
           setStep(n)
@@ -738,18 +708,7 @@ function PoleRecordWizard({ onClose }) {
         {formSteps[step]}
       </WizardShell>
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EC"
-        formLabel="Pole Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={W_PURPLE}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

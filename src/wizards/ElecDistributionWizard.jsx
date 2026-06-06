@@ -1,31 +1,29 @@
 import { useState, useEffect } from 'react'
-import { APP_ACCENT } from '../shared/constants'
+import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Zap } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
-// ── Lazy generator import ───────────────────────────────────────────────────────────────────────────────
-// Defined at module scope so the reference is stable — usePdfGenerate's
-// useCallback won't re-create triggerGenerate on every render.
-// The browser's native module cache ensures the network round-trip only
-// happens once per session.
+import { useDraftPicker } from '../shared/useDraftPicker'
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEbGenerator = () =>
   import('./generators/ElecDistributionPdfGenerator').then(m => m.generateEbPdf)
 
 const EB_SHOW_OVERLAY = false
 
 const EB_ORANGE = APP_ACCENT
-const EB_BG     = '#eef2ff'
-const EB_MID    = '#e0e7ff'
-const EB_BORDER = '#c7d2fe'
+const EB_BG     = WIZARD_COLORS.bg
+const EB_MID    = WIZARD_COLORS.mid
+const EB_BORDER = WIZARD_COLORS.border
 
 const EB_STEPS = [
   'Job Details',
@@ -83,13 +81,8 @@ function CableRow({ row, idx, setRow, onRemove, canRemove }) {
 }
 
 export default function ElecDistributionWizard({ onClose }) {
-  const [step, setStep] = useState(0)
-
-  const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-  const [d, setD] = useState({
-    npJobNumber: '', projectName: '', pcoWONo: '', ciwrNo: '',
-    streetRoad: '', cityTown: '', district: '',
-    contractor: _contractor, dateWorkCompleted: _date, namePrint: _namePrint, signed: _signed,
+  const [step, setStep]           = useState(0)
+  const [d, setD]                 = useState(() => getBaseFormState({
     distributionMain: '', undergroundCableDepth: '',
     cableRows: [EMPTY_ROW()],
     ownership: '', ownershipOther: '',
@@ -98,14 +91,18 @@ export default function ElecDistributionWizard({ onClose }) {
     otherServicesInTrench: [], otherServicesOther: '',
     gpsRequired: '', gpsFiles: '',
     comments: '',
-  })
+  }))
+  const [photos, setPhotos]       = useState([])
+  const [overlayTab, setOverlayTab]     = useState('form')
+  const [overlayBytes, setOverlayBytes] = useState(null)
 
   const isPreview = step === EB_STEPS.length - 1
-  const [overlayTab,      setOverlayTab]      = useState('form')
-  const [overlayBytes,    setOverlayBytes]    = useState(null)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos,          setPhotos]          = useState([])
+
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EB', formLabel: 'Elec Distribution Record',
+    d, step, photos, accent: EB_ORANGE,
+  })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEbGenerator)
@@ -125,10 +122,12 @@ export default function ElecDistributionWizard({ onClose }) {
   }, [overlayTab, overlayBytes])
 
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.streetRoad), 'Elec Distribution Record'].filter(Boolean)
-    const filename = parts.join(' - ') + '.pdf'
-    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.streetRoad, 'Elec Distribution Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
   const missingFields = [
@@ -139,22 +138,13 @@ export default function ElecDistributionWizard({ onClose }) {
     !d.signed           && 'Signature',
   ].filter(Boolean)
 
-  // loadJobHistory is provided by useWizardSetup but not needed in this wizard
-  // (job details are loaded via ProjectPicker / DraftPicker instead).
   const { set } = useWizardSetup(d, setD, step, '360S014EB')
   const { clearDraft: clearFormDraft } = useDraft('360S014EB', d, step, photos)
-
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
 
   const formSteps = [
 
     // 0 — Job Details
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
+    <JobDetailsStep key="s0" d={d} setD={setD} accent={EB_ORANGE} onOpenDrafts={openLoad} />,
 
     // 1 — Distribution Main
     <div key="s1">
@@ -251,7 +241,7 @@ export default function ElecDistributionWizard({ onClose }) {
       <PhotoAttachStep photos={photos} onChange={setPhotos} accent={EB_ORANGE} />
     </div>,
 
-    // 5 — Preview (empty — WizardShell renders the PDF overlay)
+    // 5 — Preview (placeholder — WizardShell renders the PDF overlay)
     <div key="s5" />,
   ]
 
@@ -284,7 +274,7 @@ export default function ElecDistributionWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+          onSaveDraft={openSave}
           onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={EB_ORANGE}
           bg={EB_BG}
@@ -301,18 +291,7 @@ export default function ElecDistributionWizard({ onClose }) {
         </WizardShell>
       )}
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EB"
-        formLabel="Elec Distribution Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={EB_ORANGE}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

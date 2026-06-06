@@ -41,12 +41,42 @@ export function getUserPrefs() {
   }
 }
 
-/** Saves a single pref. key must be one of the four pref keys. */
+/** Saves a single pref. key must be one of the five pref keys. */
 export function saveUserPref(key, value) {
   if (!KEYS[key]) return
   if (value) {
     localStorage.setItem(KEYS[key], value)
   } else {
     localStorage.removeItem(KEYS[key])
+  }
+}
+
+/**
+ * Returns the common form-state fields that every wizard initialises from
+ * user preferences, merged with any form-specific extras.
+ *
+ * Designed for use as a useState initialiser (function form) so getUserPrefs()
+ * is called only once at mount rather than on every render:
+ *
+ *   const [d, setD] = useState(() => getBaseFormState({ myField: '' }))
+ *
+ * @param {object} [extras={}]  Form-specific fields to merge in after the base.
+ * @returns {object}
+ */
+export function getBaseFormState(extras = {}) {
+  const p = getUserPrefs()
+  return {
+    npJobNumber:       '',
+    projectName:       '',
+    pcoWONo:           '',
+    ciwrNo:            '',
+    streetRoad:        '',
+    cityTown:          '',
+    district:          '',
+    contractor:        p.contractor,
+    dateWorkCompleted: p.dateWorkCompleted,
+    namePrint:         p.namePrint,
+    signed:            p.signed,
+    ...extras,
   }
 }
