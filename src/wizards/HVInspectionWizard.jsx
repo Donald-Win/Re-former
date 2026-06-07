@@ -1,3 +1,4 @@
+
 /**
  * HVInspectionWizard — 220F028A Pre-Commissioning HV Inspection Certificate
  */
@@ -14,6 +15,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 import { DraftPicker } from '../shared/DraftPicker'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
@@ -274,6 +276,8 @@ export default function HVInspectionWizard({ onClose }) {
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadHvGenerator)
 
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
+
   // ── Dynamic step list based on selected equipment ──────────────────────────
   const selectedEquipObjs = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
 
@@ -426,6 +430,7 @@ export default function HVInspectionWizard({ onClose }) {
       onBack={handleBack}
       onNext={handleNext}
       onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
       accent={ACCENT}
       isPreview={isPreview}
       onShare={handleShare}
@@ -439,3 +444,4 @@ export default function HVInspectionWizard({ onClose }) {
     </WizardShell>
   )
 }
+

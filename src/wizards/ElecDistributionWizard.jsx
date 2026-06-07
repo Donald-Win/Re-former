@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Zap } from 'lucide-react'
@@ -13,6 +14,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEbGenerator = () =>
@@ -106,6 +108,8 @@ export default function ElecDistributionWizard({ onClose }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEbGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.cableRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
@@ -275,6 +279,7 @@ export default function ElecDistributionWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
           onNext={() => { const n = step + 1; setStep(n); if (n === EB_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={EB_ORANGE}
           bg={EB_BG}
@@ -295,3 +300,4 @@ export default function ElecDistributionWizard({ onClose }) {
     </>
   )
 }
+

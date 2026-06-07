@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Box } from 'lucide-react'
@@ -13,6 +14,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEdGenerator = () =>
@@ -116,6 +118,8 @@ export default function LvBoxWizard({ onClose }) {
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEdGenerator)
 
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
+
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, boxRows: rows }
@@ -210,6 +214,7 @@ export default function LvBoxWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
           onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={ED_GREEN}
           bg={ED_BG}
@@ -230,3 +235,4 @@ export default function LvBoxWizard({ onClose }) {
     </>
   )
 }
+

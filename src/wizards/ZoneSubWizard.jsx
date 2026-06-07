@@ -1,3 +1,4 @@
+
 // 360S014EF — AS-Built Zone Substation Equipment Record
 import { useState } from 'react'
 import { Building2 } from 'lucide-react'
@@ -12,6 +13,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
@@ -73,6 +75,8 @@ function ZoneSubWizard({ onClose }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEfGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   const setRow = (i, field, val) => setD(p => {
     const items = [...p.additionalItems]
@@ -239,6 +243,7 @@ function ZoneSubWizard({ onClose }) {
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
         onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
         onNext={() => {
           const next = step + 1
           setStep(next)
@@ -263,3 +268,4 @@ function ZoneSubWizard({ onClose }) {
 }
 
 export default ZoneSubWizard
+

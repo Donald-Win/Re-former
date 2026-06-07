@@ -1,3 +1,4 @@
+
 // 360S014EG — AS-Built Transformer Record
 import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
@@ -7,6 +8,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -118,6 +120,8 @@ function TransformerWizardApp({ onClose }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadTransformerGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   // ── State helpers ─────────────────────────────────────────────────────────
   const tog  = k => v => setD(p => ({ ...p,          [k]: p[k]          === v ? '' : v }))
@@ -365,6 +369,7 @@ function TransformerWizardApp({ onClose }) {
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
         onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
         onNext={() => {
           const next = step + 1
           setStep(next)
@@ -397,3 +402,4 @@ function TransformerWizardApp({ onClose }) {
 }
 
 export default TransformerWizardApp
+

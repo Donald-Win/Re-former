@@ -1,3 +1,4 @@
+
 // 360S014EE — AS-Built Electrical Equipment Record
 import React, { useState, useEffect } from 'react'
 import { FileText } from 'lucide-react'
@@ -7,6 +8,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -86,6 +88,8 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEEGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   useEffect(() => {
     if (!EE_SHOW_OVERLAY) return
@@ -453,6 +457,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
           onNext={() => {
             const next = step + 1
             setStep(next)
@@ -479,3 +484,4 @@ function ElecEquipWizard({ onClose = () => {} }) {
 }
 
 export default ElecEquipWizard
+

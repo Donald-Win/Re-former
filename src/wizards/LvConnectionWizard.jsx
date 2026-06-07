@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Zap } from 'lucide-react'
@@ -13,6 +14,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEaGenerator = () =>
@@ -71,6 +73,8 @@ export default function LvConnectionWizard({ onClose }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEaGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   useEffect(() => {
     if (LV_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
@@ -205,6 +209,7 @@ export default function LvConnectionWizard({ onClose }) {
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
           onNext={() => { const n = step + 1; setStep(n); if (n === LV_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={LV_TEAL}
           bg={LV_BG}
@@ -225,3 +230,4 @@ export default function LvConnectionWizard({ onClose }) {
     </>
   )
 }
+

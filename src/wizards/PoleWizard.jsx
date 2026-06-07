@@ -1,3 +1,4 @@
+
 // 360S014EC — AS-Built Pole Record
 import React, { useState, useRef } from 'react'
 import { PenLine } from 'lucide-react'
@@ -7,6 +8,7 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { devFillState } from '../shared/devFillState'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -299,6 +301,8 @@ function PoleRecordWizard({ onClose }) {
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadPoleGenerator)
+
+  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   const isPreview = step === W_STEPS.length - 1
 
@@ -690,6 +694,7 @@ function PoleRecordWizard({ onClose }) {
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
         onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
         onNext={() => {
           const n = step + 1
           setStep(n)
@@ -714,3 +719,4 @@ function PoleRecordWizard({ onClose }) {
 }
 
 export default PoleRecordWizard
+

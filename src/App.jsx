@@ -10,13 +10,14 @@ import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import ZoneSubWizard from './wizards/ZoneSubWizard'
 import HVInspectionWizard from './wizards/HVInspectionWizard'
+import DistributionTransformerWizard from './wizards/DistributionTransformerWizard'
 import { AuthGate } from './auth/AuthGate'
 import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.13.0'
+const APP_VERSION = '2.12.1'
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
@@ -68,6 +69,13 @@ const WIZARD_CONFIG = {
     fileName:  '220F028A.pdf',
     accent:    '#4f46e5',
     Component: HVInspectionWizard,
+  },
+  '220F028B': {
+    label:     '220F028B – Distribution Transformer Commissioning Certificate',
+    pdfName:   'Distribution Transformer Commissioning Certificate',
+    fileName:  '220F028B.pdf',
+    accent:    '#4f46e5',
+    Component: DistributionTransformerWizard,
   },
   '360S014EF': {
     label:     '360S014EF – As-built Zone Substation Equipment Record',
@@ -1021,7 +1029,7 @@ const AsBuiltFormSelector = () => {
       {!isOnline && (
         <div style={{
           position: 'fixed',
-          bottom: 44,  // sits just above the version badge
+          bottom: 44,
           left: 0, right: 0,
           zIndex: 999,
           background: '#1f2937',

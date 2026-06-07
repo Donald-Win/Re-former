@@ -18,6 +18,9 @@ import { APP_YELLOW } from './constants'
  *   onBack         fn()          — ← Back button (hidden on step 0)
  *   onNext         fn()          — Next / Preview button
  *   onSaveDraft    fn()|null     — optional: shows 💾 button in nav bar on all steps
+ *   onFillTestData fn()|null     — DEV ONLY: shows 🧪 button; fills state with dummy data
+ *                                  Dead-code-eliminated in production builds.
+ *                                  Pass: import.meta.env.DEV ? () => setD(devFillState) : undefined
  *
  *   accent         string        — header bg, card shadow, active dot, nav buttons
  *   bg             string        — outer background colour
@@ -50,6 +53,8 @@ export function WizardShell({
   onBack,
   onNext,
   onSaveDraft,
+  onFillTestData,
+
   // Colours
   accent,
   bg = '#f4f4f8',
@@ -177,7 +182,7 @@ export function WizardShell({
         transition: 'background 0.3s',
       }}>
 
-        {/* Save draft button — shown on all steps when handler provided */}
+        {/* 💾 Save draft — all steps when handler provided */}
         {onSaveDraft && !isPreview && (
           <button
             onClick={onSaveDraft}
@@ -194,6 +199,25 @@ export function WizardShell({
             💾
           </button>
         )}
+
+        {/* 🧪 Fill test data — DEV ONLY, dead-code-eliminated in production */}
+        {import.meta.env.DEV && onFillTestData && !isPreview && (
+          <button
+            onClick={onFillTestData}
+            title="Fill with test data for PDF coordinate calibration (DEV only)"
+            style={{
+              padding: '13px 14px', borderRadius: 12, flexShrink: 0,
+              border: '2px solid #d97706',
+              background: '#fffbeb', color: '#d97706',
+              fontFamily: 'inherit', fontSize: 16, fontWeight: 700,
+              cursor: 'pointer', minWidth: 48,
+              transition: 'all 0.15s',
+            }}
+          >
+            🧪
+          </button>
+        )}
+
         {!isFirstStep && (
           <button onClick={onBack} style={{
             flex: 1, padding: 13, borderRadius: 12,
