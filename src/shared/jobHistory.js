@@ -20,10 +20,10 @@
 //     get a clear build-time error rather than silently writing to the wrong
 //     store — making the migration visible rather than hidden.
 
-export const STORAGE_KEY = 're-former-job-history'
+const STORAGE_KEY = 're-former-job-history'
 const MAX_ENTRIES = 5
 
-export const JOB_FIELDS = [
+const JOB_FIELDS = [
   'npJobNumber', 'projectName',
   'pcoWONo', 'ciwrNo',
   'streetRoad', 'cityTown', 'district',
@@ -45,7 +45,7 @@ function makeId(d) {
 
 // ── Job history (localStorage — text fields only, no blobs) ──────────────────
 
-export function loadHistory() {
+function loadHistory() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
   } catch {
@@ -75,18 +75,3 @@ export function saveToHistory(d) {
   }
 }
 
-// ── Display helpers ───────────────────────────────────────────────────────────
-
-export function formatJobLabel(entry) {
-  const parts = [entry.npJobNumber, entry.projectName, entry.streetRoad].filter(Boolean)
-  return parts.join(' — ') || 'Unnamed job'
-}
-
-export function formatJobDate(entry) {
-  if (!entry.savedAt) return ''
-  try {
-    return new Date(entry.savedAt).toLocaleDateString('en-NZ', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    })
-  } catch { return '' }
-}

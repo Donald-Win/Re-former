@@ -183,7 +183,6 @@ const OVERRIDE_VALUES = {
   phase:          'Three',
   cableSize:      '95mm²',
   material:       'ACSR',
-  numberOfCores:  '4',
   circuitLength:  '150m',
 
   // ── LV Box wizard (360S014ED) ────────────────────────────────────────────────
@@ -239,18 +238,18 @@ const OVERRIDE_VALUES = {
   jRW: '0.08', jRB: '0.07', jWB: '0.09',
   jRN: '0.06', jWN: '0.07', jBN: '0.08',
 
-  // Voltage measurement arrays (full circuit arrays)
-  fRW: ['235', '237', '236', '238'],
-  fWB: ['234', '236', '237', '235'],
-  fBR: ['236', '235', '238', '237'],
-  fRN: ['135', '136', '134', '136'],
-  fWN: ['135', '134', '136', '135'],
-  fBN: ['134', '136', '135', '134'],
+  // Circuit-centric voltage checks — 2 circuits with readings in acceptable range
+  // (R–W/W–B/B–R: 412–422 V  ·  R–N/W–N/B–N: 238–244 V)
+  fCircuits: [
+    { rw: '416', wb: '418', br: '415', rn: '240', wn: '241', bn: '239' },
+    { rw: '417', wb: '419', br: '416', rn: '241', wn: '240', bn: '240' },
+  ],
 
-  // Phasing measurement arrays
-  iR1R2: ['2', '3', '1', '2'],
-  iW1W2: ['3', '2', '2', '3'],
-  iB1B2: ['1', '3', '2', '1'],
+  // Circuit-centric phasing/paralleling checks — 2 circuits, <10 V, neutrals connected
+  iCircuits: [
+    { r1r2: '2', w1w2: '3', b1b2: '1', neutral: true },
+    { r1r2: '3', w1w2: '2', b1b2: '2', neutral: true },
+  ],
 
   // ── Shared text fields ───────────────────────────────────────────────────────
   comments:          'Test comment for coordinate calibration.',
@@ -304,10 +303,14 @@ function inferEmptyArray(key) {
     // Transformer — removed.reasonForRemoval
     case 'reasonForRemoval':     return ['End of Life']
 
-    // 220F028B boolean arrays — these start empty in initState
-    case 'fConfirmed':           return [true, true, true, true, true, true]
-    case 'iConfirmed':           return [true, true, true]
-    case 'iNeutrals':            return [true, true, true, true]
+    // 220F028B — fallback for circuit arrays if somehow empty
+    // (normally caught by OVERRIDE_VALUES since they're always non-empty)
+    case 'fCircuits': return [
+      { rw: '416', wb: '418', br: '415', rn: '240', wn: '241', bn: '239' },
+    ]
+    case 'iCircuits': return [
+      { r1r2: '2', w1w2: '3', b1b2: '1', neutral: true },
+    ]
 
     default: return []  // leave unknown empty arrays alone
   }

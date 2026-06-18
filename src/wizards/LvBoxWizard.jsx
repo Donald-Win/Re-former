@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Box } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
@@ -9,18 +9,14 @@ import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
-import { devFillState } from '../shared/devFillState'
 
 // ── Lazy generator import ─────────────────────────────────────────────────────
 const loadEdGenerator = () =>
   import('./generators/LvBoxPdfGenerator').then(m => m.generateEdPdf)
-
-const ED_SHOW_OVERLAY = false
 
 const ED_GREEN  = APP_ACCENT
 const ED_BG     = WIZARD_COLORS.bg
@@ -104,8 +100,6 @@ export default function LvBoxWizard({ onClose }) {
     comments: '',
   }))
   const [photos, setPhotos] = useState([])
-  const [overlayTab, setOverlayTab]     = useState('form')
-  const [overlayBytes, setOverlayBytes] = useState(null)
 
   const isPreview = step === ED_STEPS.length - 1
 
@@ -118,22 +112,10 @@ export default function LvBoxWizard({ onClose }) {
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadEdGenerator)
 
-  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
-
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, boxRows: rows }
   })
-
-  useEffect(() => {
-    if (ED_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
-      fetch(import.meta.env.BASE_URL + 'forms/360S014ED.pdf')
-        .then(r => r.arrayBuffer())
-        .then(buf => setOverlayBytes(new Uint8Array(buf)))
-        .catch(() => {})
-    }
-  }, [overlayTab, overlayBytes])
-
   const handleShare = () => {
     const siteId = d.boxRows?.[0]?.equipIdNew || d.boxRows?.[0]?.equipIdOld || ''
     sharePdf(
@@ -151,59 +133,54 @@ export default function LvBoxWizard({ onClose }) {
     !d.signed      && 'Signature',
   ].filter(Boolean)
 
-  const { set } = useWizardSetup(d, setD, step, '360S014ED')
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014ED')
   const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
 
-  const formSteps = [
+  const renderCurrentStep = () => {
+    switch (step) {
+      case 0: return (
+        <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} onOpenDrafts={openLoad} />
+      )
 
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} onOpenDrafts={openLoad} />,
+      case 1: return (
+        <div key="s1">
+          <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
+          {d.boxRows.map((row, i) => (
+            <BoxRow key={i} row={row} idx={i} setRow={setRow} canRemove={d.boxRows.length > 1}
+              onRemove={() => setD(prev => ({ ...prev, boxRows: prev.boxRows.filter((_, ri) => ri !== i) }))} />
+          ))}
+          {d.boxRows.length < 20 && (
+            <button onClick={() => setD(prev => ({ ...prev, boxRows: [...prev.boxRows, EMPTY_BOX_ROW()] }))}
+              style={{ width: '100%', padding: '10px 0', marginTop: 2, borderRadius: 8, border: `2px dashed ${ED_GREEN}`, background: ED_BG, color: ED_GREEN, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Add Box Entry
+            </button>
+          )}
+        </div>
+      )
 
-    <div key="s1">
-      <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
-      {d.boxRows.map((row, i) => (
-        <BoxRow key={i} row={row} idx={i} setRow={setRow} canRemove={d.boxRows.length > 1}
-          onRemove={() => setD(prev => ({ ...prev, boxRows: prev.boxRows.filter((_, ri) => ri !== i) }))} />
-      ))}
-      {d.boxRows.length < 20 && (
-        <button onClick={() => setD(prev => ({ ...prev, boxRows: [...prev.boxRows, EMPTY_BOX_ROW()] }))}
-          style={{ width: '100%', padding: '10px 0', marginTop: 2, borderRadius: 8, border: `2px dashed ${ED_GREEN}`, background: ED_BG, color: ED_GREEN, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-          + Add Box Entry
-        </button>
-      )}
-    </div>,
+      case 2: return (
+        <div key="s2">
+          <SectionHead label="Additional Comments" accent={ED_GREEN} />
+          <WTA label="Comments" v={d.comments} set={v => set('comments', v)} accent={ED_GREEN} rows={5} />
+        </div>
+      )
 
-    <div key="s2">
-      <SectionHead label="Additional Comments" accent={ED_GREEN} />
-      <WTA label="Comments" v={d.comments} set={v => set('comments', v)} accent={ED_GREEN} rows={5} />
-    </div>,
+      case 3: return (
+        <div key="s3">
+          <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ED_GREEN} />
+        </div>
+      )
 
-    <div key="s3">
-      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ED_GREEN} />
-    </div>,
+      case 4: return null
 
-    <div key="s4" />,
-  ]
+      default: return null
+    }
+  }
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), ED_GREEN)
 
   return (
     <>
-      {ED_SHOW_OVERLAY && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 44, background: '#1e1e2e', display: 'flex', alignItems: 'center', zIndex: 9999, padding: '0 16px', gap: 8 }}>
-          {['form', 'calibrate'].map(tab => (
-            <button key={tab} onClick={() => setOverlayTab(tab)} style={{ padding: '4px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, background: overlayTab === tab ? ED_GREEN : 'transparent', color: overlayTab === tab ? '#fff' : '#888' }}>
-              {tab === 'form' ? 'Form' : 'Calibrate'}
-            </button>
-          ))}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555', letterSpacing: 1 }}>CALIBRATION MODE — ED_SHOW_OVERLAY = true</span>
-        </div>
-      )}
-
-      {ED_SHOW_OVERLAY && overlayTab === 'calibrate' ? (
-        <div style={{ position: 'fixed', inset: 0, top: 44, background: '#111', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflow: 'auto' }}>
-          {overlayBytes ? <CoordOverlay pdfBytes={overlayBytes} page={1} /> : <div style={{ color: '#888', marginTop: 40 }}>Loading PDF…</div>}
-        </div>
-      ) : (
         <WizardShell
           title="AS-Built LV Box Record"
           formNumber="360S014ED"
@@ -215,21 +192,21 @@ export default function LvBoxWizard({ onClose }) {
           onBack={() => setStep(s => s - 1)}
           onSaveDraft={openSave}
         onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/360S014ED.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 1 : undefined}
           onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
           border={ED_BORDER}
-          devPaddingTop={ED_SHOW_OVERLAY ? 44 : 0}
           isPreview={isPreview}
           onShare={handleShare}
           onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
           missingFields={missingFields}
           previewContent={previewContent}
         >
-          {formSteps[step]}
+          {renderCurrentStep()}
         </WizardShell>
-      )}
 
       <DraftPicker {...draftPickerProps} />
     </>

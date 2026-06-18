@@ -1,12 +1,12 @@
 /**
  * UserSettings — dedicated settings page for persistent user details.
  *
- * Stores: contractor name, printed name, signature.
+ * Stores: contractor name, printed name, ISN ID, competency cert no, signature.
  * These are loaded silently into every wizard and written to the PDF
  * without the user being asked each time.
  */
 import { useState, useEffect } from 'react'
-import { CheckCircle2, User, Building2, PenLine, Trash2, FileText } from 'lucide-react'
+import { CheckCircle2, User, Building2, PenLine, Trash2, FileText, Hash } from 'lucide-react'
 import { getUserPrefs, saveUserPref } from './userPrefs'
 import { SignaturePad } from './SignaturePad'
 import { APP_ACCENT } from './constants'
@@ -14,6 +14,7 @@ import { APP_ACCENT } from './constants'
 export function UserSettings({ onClose }) {
   const [contractor, setContractor] = useState('')
   const [namePrint,  setNamePrint]  = useState('')
+  const [isnId,      setIsnId]      = useState('')
   const [certNo,     setCertNo]     = useState('')
   const [signed,     setSigned]     = useState('')
   const [saved,      setSaved]      = useState(false)
@@ -23,6 +24,7 @@ export function UserSettings({ onClose }) {
     const prefs = getUserPrefs()
     setContractor(prefs.contractor || '')
     setNamePrint(prefs.namePrint   || '')
+    setIsnId(prefs.isnId           || '')
     setCertNo(prefs.certNo         || '')
     setSigned(prefs.signed         || '')
   }, [])
@@ -30,6 +32,7 @@ export function UserSettings({ onClose }) {
   const handleSave = () => {
     saveUserPref('contractor', contractor)
     saveUserPref('namePrint',  namePrint)
+    saveUserPref('isnId',      isnId)
     saveUserPref('certNo',     certNo)
     saveUserPref('signed',     signed)
     setSaved(true)
@@ -40,10 +43,12 @@ export function UserSettings({ onClose }) {
     if (!window.confirm('Clear all saved user details?')) return
     saveUserPref('contractor', '')
     saveUserPref('namePrint',  '')
+    saveUserPref('isnId',      '')
     saveUserPref('certNo',     '')
     saveUserPref('signed',     '')
     setContractor('')
     setNamePrint('')
+    setIsnId('')
     setCertNo('')
     setSigned('')
   }
@@ -114,7 +119,7 @@ export function UserSettings({ onClose }) {
         }}>
           <strong>ℹ️ How this works</strong><br />
           Save your details here once. Every form wizard will automatically
-          fill in your contractor, name, and signature — you won't be asked again.
+          fill in your contractor, name, ISN ID, and signature — you won't be asked again.
         </div>
 
         {/* Contractor */}
@@ -145,6 +150,23 @@ export function UserSettings({ onClose }) {
             value={namePrint}
             onChange={e => setNamePrint(e.target.value)}
             placeholder="e.g. Donald Win"
+            style={inp}
+            onFocus={e => e.target.style.borderColor = APP_ACCENT}
+            onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}
+          />
+        </div>
+
+        {/* ISN ID */}
+        <div style={section}>
+          <label style={lbl}>
+            <Hash size={14} />
+            ISN ID Number
+          </label>
+          <input
+            type="text"
+            value={isnId}
+            onChange={e => setIsnId(e.target.value)}
+            placeholder="e.g. ISN12345"
             style={inp}
             onFocus={e => e.target.style.borderColor = APP_ACCENT}
             onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}

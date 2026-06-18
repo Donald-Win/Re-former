@@ -5,14 +5,7 @@
  * ⚠️  COORDINATE CALIBRATION REQUIRED
  * ────────────────────────────────────
  * All LAYOUT coordinates are approximate estimates. Use CoordOverlay
- * to calibrate against the actual 220F028B.pdf template:
- *
- *   1. Add `const B_SHOW_OVERLAY = true` near the top of
- *      DistributionTransformerWizard.jsx, then add the overlay tab UI
- *      following the pattern in ElecEquipWizard.jsx (EE_SHOW_OVERLAY).
- *   2. Open the wizard, switch to the Calibrate tab and click each
- *      field to get exact x/y values for the LAYOUT constants below.
- *   3. Update LAYOUT, then set B_SHOW_OVERLAY back to false.
+ * to calibrate against the actual 220F028B.pdf template.
  *
  * Template: forms/220F028B.pdf
  *   Page 1 — Header, sections a, b, c
@@ -20,11 +13,20 @@
  *   Page 3 — Sections i, j, k, l
  *   Page 4 — Document control (not written to)
  *
+ * Data shape (wizard state)
+ * ─────────────────────────
+ * Section f:  d.fCircuits  — Array<{ rw, wb, br, rn, wn, bn, confirmed }>
+ *             d.fTapSetting — string
+ *
+ * Section i:  d.iCircuits  — Array<{ r1r2, w1w2, b1b2, neutral, confirmed }>
+ *
+ * The PDF template has 4 circuit columns; only the first 4 circuits are written.
+ * Confirmed ticks are set when ALL supplied circuits have confirmed = true.
+ *
  * Coordinate convention
  * ─────────────────────
  * All Y values are TOP-ORIGIN (CSS / screen style).
  * createPageDrawer converts them to pdf-lib bottom-origin internally.
- * Signature cssY = A4_HEIGHT − (pdfY_bottom + imgHeight)
  */
 
 import { PDFDocument, StandardFonts } from 'pdf-lib'
@@ -46,11 +48,6 @@ const FS_SM = 7.5  // narrow circuit value cells
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LAYOUT  ⚠️ Approximate — calibrate with CoordOverlay before release
-//
-// All Y values are top-origin. Formulae used for estimation:
-//   field text Y  =  842 − (pdf-lib bottom-origin y) − fontSize
-//   checkbox Y    =  834 − (pdf-lib bottom-origin y)
-//   signature Y   =  842 − (pdf-lib y_bottom + img_height)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LAYOUT = {
@@ -59,24 +56,18 @@ const LAYOUT = {
 
   p1: {
 
-    // Header
-    // Left column:  Job Name, No/Street/Road, CIWR No., SAP W/O No.
-    // Right column: Contractor Name, Town/District, Contractor Ref No,
-    //               Date Completed, Transformer No.
     header: {
-      jobName:         { x: 115, y: 147 },   // → d.projectName
+      jobName:         { x: 115, y: 147 },
       streetRoad:      { x: 115, y: 162 },
       ciwrNo:          { x: 115, y: 192 },
-      sapWONo:         { x: 115, y: 207 },   // → d.pcoWONo
+      sapWONo:         { x: 115, y: 207 },
       contractor:      { x: 395, y: 147 },
-      townDistrict:    { x: 395, y: 162 },   // cityTown + district
+      townDistrict:    { x: 395, y: 162 },
       contractorRefNo: { x: 395, y: 177 },
       dateCompleted:   { x: 395, y: 192 },
       transformerNo:   { x: 395, y: 207 },
     },
 
-    // Section a) — Confirmed ✓ ticks (one per as-built form row)
-    // ckX is the left edge of the tick within the confirmed cell.
     sectionA: {
       ckX:        549,
       eeY:        232,
@@ -88,8 +79,6 @@ const LAYOUT = {
       labellingY: 310,
     },
 
-    // Section b) — Earth test result values
-    // valueX is the left edge of the measured-value text in the Result column.
     sectionB: {
       valueX: 230,
       leg1Y:  355,
@@ -98,7 +87,6 @@ const LAYOUT = {
       ruralY: 396,
     },
 
-    // Section c) — Phase connection confirmation ticks (a, b, c cells on right)
     sectionC: {
       ckX: 549,
       aY:  445,
@@ -111,19 +99,16 @@ const LAYOUT = {
 
   p2: {
 
-    // Section d) — Neutral Earth Bonding
-    // Yes / No / N/A tick columns; separate Y per row.
     sectionD: {
-      yesX: 313,  // tick left edge for "Yes" column
-      noX:  373,  // tick left edge for "No" column
-      naX:  430,  // tick left edge for "Not applicable" column (pole mounted only)
+      yesX: 313,
+      noX:  373,
+      naX:  430,
       poleBushingY:     105,
       poleNeutralCondY: 120,
       poleEarthY:       138,
       groundBushingY:   163,
     },
 
-    // Section e) — Pre HV-Fuse checks
     sectionE: {
       ckX:             549,
       lvIsolatedY:     215,
@@ -132,10 +117,10 @@ const LAYOUT = {
       hvFuseSize: { x: 250, y: 258 },
     },
 
-    // Section f) — Off-Load Voltage Checks
-    // circuitX[i] = left edge of circuit i+1 value column.
-    // ckX = left edge of the Confirmed ✓ cell on the far right.
-    // rowRWY … rowBNY = top-origin Y for each measurement row.
+    // Section f — circuit columns shared across all measurement rows.
+    // circuitX[n] = left-edge x for circuit n+1 value.
+    // ckX = left-edge of the Confirmed tick column (far right).
+    // Confirmed is marked when ALL supplied circuits are confirmed.
     sectionF: {
       circuitX: [143, 222, 302, 382],
       ckX:      549,
@@ -148,13 +133,11 @@ const LAYOUT = {
       tapSetting: { x: 115, y: 423 },
     },
 
-    // Section g) — Pre LV-Fuse Insertion Check
     sectionG: {
       ckX: 549,
       y:   460,
     },
 
-    // Section h) — Phase Rotation Checks
     sectionH: {
       ckX:               549,
       phaseRotationY:    497,
@@ -166,35 +149,29 @@ const LAYOUT = {
 
   p3: {
 
-    // Section i) — Phasing In / Paralleling Checks
-    // circuitX[i] = left edge of circuit i+1 column (shared for measurements & neutrals).
+    // Section i — same column layout as section f.
+    // circuitX[n] = left-edge x for circuit n+1 measurement AND neutral tick.
     sectionI: {
-      circuitX: [193, 262, 332, 402],
-      ckX:          549,
-      rowR1R2Y:     115,
-      rowW1W2Y:     133,
-      rowB1B2Y:     151,
-      rowNeutralsY: 169,
+      circuitX:    [193, 262, 332, 402],
+      ckX:         549,
+      rowR1R2Y:    115,
+      rowW1W2Y:    133,
+      rowB1B2Y:    151,
+      rowNeutralsY:169,
     },
 
-    // Section j) — Loop Impedance Tests
-    // valueX = left edge of the measured impedance text.
     sectionJ: {
       valueX: 350,
       rwY: 238, rbY: 258, wbY: 278,
       rnY: 298, wnY: 318, bnY: 338,
     },
 
-    // Section k) — LV Open Point Restoration
-    // locationX = left edge of location text; ckX = confirmed tick.
     sectionK: {
       locationX: 120,
       ckX:       549,
       rowY:      [402, 417, 432, 447],
     },
 
-    // Section l) — Testing Attestation
-    // Signature top in top-origin coords = A4_HEIGHT − (pdf_y_bottom + imgHeight).
     sectionL: {
       printName: { x: 120, y: 490 },
       date:      { x: 120, y: 505 },
@@ -213,7 +190,6 @@ export async function generateB28Pdf(d, photos = []) {
   const pdfDoc        = await PDFDocument.load(templateBytes)
   const font          = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
-  // Template has 4 pages; only pages 1-3 receive written content.
   const [p1, p2, p3] = pdfDoc.getPages()
   const draw1 = createPageDrawer(p1, font, DEFAULT_INK, A4_HEIGHT)
   const draw2 = createPageDrawer(p2, font, DEFAULT_INK, A4_HEIGHT)
@@ -223,15 +199,15 @@ export async function generateB28Pdf(d, photos = []) {
   const h = LAYOUT.p1.header
   const townDistrict = [d.cityTown, d.district].filter(Boolean).join(', ')
 
-  draw1.t(h.jobName.x,         h.jobName.y,         d.projectName,    FS)
-  draw1.t(h.streetRoad.x,      h.streetRoad.y,      d.streetRoad,     FS)
-  draw1.t(h.ciwrNo.x,          h.ciwrNo.y,          d.ciwrNo,         FS)
-  draw1.t(h.sapWONo.x,         h.sapWONo.y,         d.pcoWONo,        FS)
-  draw1.t(h.contractor.x,      h.contractor.y,      d.contractor,     FS)
-  draw1.t(h.townDistrict.x,    h.townDistrict.y,    townDistrict,     FS)
-  draw1.t(h.contractorRefNo.x, h.contractorRefNo.y, d.contractorRefNo, FS)
+  draw1.t(h.jobName.x,         h.jobName.y,         d.projectName,     FS)
+  draw1.t(h.streetRoad.x,      h.streetRoad.y,      d.streetRoad,      FS)
+  draw1.t(h.ciwrNo.x,          h.ciwrNo.y,          d.ciwrNo,          FS)
+  draw1.t(h.sapWONo.x,         h.sapWONo.y,         d.pcoWONo,         FS)
+  draw1.t(h.contractor.x,      h.contractor.y,      d.contractor,      FS)
+  draw1.t(h.townDistrict.x,    h.townDistrict.y,    townDistrict,      FS)
+  draw1.t(h.contractorRefNo.x, h.contractorRefNo.y, d.npJobNumber, FS)
   draw1.t(h.dateCompleted.x,   h.dateCompleted.y,   d.dateWorkCompleted, FS)
-  draw1.t(h.transformerNo.x,   h.transformerNo.y,   d.transformerNo,  FS)
+  draw1.t(h.transformerNo.x,   h.transformerNo.y,   d.transformerNo,   FS)
 
   // ── Page 1: Section a) As-Built Records ──────────────────────────────────
   const a = LAYOUT.p1.sectionA
@@ -258,7 +234,6 @@ export async function generateB28Pdf(d, photos = []) {
 
   // ── Page 2: Section d) Neutral Earth Bonding ──────────────────────────────
   const dL = LAYOUT.p2.sectionD
-  // Pole Mounted
   draw2.ck(dL.yesX, dL.poleBushingY,     d.dPoleBushing === 'Yes')
   draw2.ck(dL.noX,  dL.poleBushingY,     d.dPoleBushing === 'No')
   draw2.ck(dL.yesX, dL.poleNeutralCondY, d.dPoleNeutralCond === 'Yes')
@@ -266,9 +241,8 @@ export async function generateB28Pdf(d, photos = []) {
   draw2.ck(dL.naX,  dL.poleNeutralCondY, d.dPoleNeutralCond === 'NA')
   draw2.ck(dL.yesX, dL.poleEarthY,       d.dPoleEarth === 'Yes')
   draw2.ck(dL.noX,  dL.poleEarthY,       d.dPoleEarth === 'No')
-  // Ground Mounted
-  draw2.ck(dL.yesX, dL.groundBushingY, d.dGroundBushing === 'Yes')
-  draw2.ck(dL.noX,  dL.groundBushingY, d.dGroundBushing === 'No')
+  draw2.ck(dL.yesX, dL.groundBushingY,   d.dGroundBushing === 'Yes')
+  draw2.ck(dL.noX,  dL.groundBushingY,   d.dGroundBushing === 'No')
 
   // ── Page 2: Section e) Pre HV-Fuse Checks ─────────────────────────────────
   const e = LAYOUT.p2.sectionE
@@ -278,23 +252,47 @@ export async function generateB28Pdf(d, photos = []) {
   draw2.t(e.hvFuseSize.x, e.hvFuseSize.y, d.eHvFuseSize, FS)
 
   // ── Page 2: Section f) Off-Load Voltage Checks ────────────────────────────
-  const f = LAYOUT.p2.sectionF
-  const voltRowDefs = [
-    { key: 'fRW', y: f.rowRWY, ci: 0 },
-    { key: 'fWB', y: f.rowWBY, ci: 1 },
-    { key: 'fBR', y: f.rowBRY, ci: 2 },
-    { key: 'fRN', y: f.rowRNY, ci: 3 },
-    { key: 'fWN', y: f.rowWNY, ci: 4 },
-    { key: 'fBN', y: f.rowBNY, ci: 5 },
-  ]
-  voltRowDefs.forEach(({ key, y, ci }) => {
-    const vals    = d[key] || []
-    const confirm = (d.fConfirmed || [])[ci]
-    f.circuitX.forEach((x, circIdx) => {
-      draw2.t(x, y, vals[circIdx], FS_SM)
+  // Each measurement row gets its own tick/cross/blank based on the values entered
+  // across all circuits for that row:
+  //   confirmed → tick  (all entered values in range)
+  //   failed    → 'X'   (one or more values out of range)
+  //   empty     → nothing drawn  (no values entered for this row — not required)
+  const f         = LAYOUT.p2.sectionF
+  const fCircuits = (d.fCircuits || []).slice(0, 4)
+
+  // Inline per-row status helpers (avoid import dependency)
+  const _voltRowStatus = (key) => {
+    const filled = fCircuits.map(c => c[key]).filter(v => v !== '' && v != null)
+    if (filled.length === 0) return 'empty'
+    const allOk = filled.every(v => {
+      const n = parseFloat(v)
+      if (isNaN(n)) return false
+      if (['rw','wb','br'].includes(key)) return n >= 412 && n <= 422
+      if (['rn','wn','bn'].includes(key)) return n >= 238 && n <= 244
+      return false
     })
-    draw2.ck(f.ckX, y, confirm)
+    return allOk ? 'confirmed' : 'failed'
+  }
+
+  const voltMeasurements = [
+    { fieldKey: 'rw', y: f.rowRWY },
+    { fieldKey: 'wb', y: f.rowWBY },
+    { fieldKey: 'br', y: f.rowBRY },
+    { fieldKey: 'rn', y: f.rowRNY },
+    { fieldKey: 'wn', y: f.rowWNY },
+    { fieldKey: 'bn', y: f.rowBNY },
+  ]
+
+  voltMeasurements.forEach(({ fieldKey, y }) => {
+    fCircuits.forEach((circ, circIdx) => {
+      const x = f.circuitX[circIdx]
+      if (x !== undefined) draw2.t(x, y, circ[fieldKey] || '', FS_SM)
+    })
+    const status = _voltRowStatus(fieldKey)
+    if (status === 'confirmed') draw2.ck(f.ckX, y, true)
+    else if (status === 'failed') draw2.t(f.ckX, y, 'X', FS)
   })
+
   draw2.t(f.tapSetting.x, f.tapSetting.y, d.fTapSetting, FS)
 
   // ── Page 2: Section g) Pre LV-Fuse Checks ────────────────────────────────
@@ -307,23 +305,40 @@ export async function generateB28Pdf(d, photos = []) {
   draw2.ck(hL.ckX, hL.consumerRotationY, d.hConsumerRotation)
 
   // ── Page 3: Section i) Phasing / Paralleling Checks ──────────────────────
-  const iL = LAYOUT.p3.sectionI
-  const phasingRowDefs = [
-    { key: 'iR1R2', y: iL.rowR1R2Y, ci: 0 },
-    { key: 'iW1W2', y: iL.rowW1W2Y, ci: 1 },
-    { key: 'iB1B2', y: iL.rowB1B2Y, ci: 2 },
+  // Each measurement row gets its own tick/cross/blank:
+  //   confirmed → tick  (all entered values < 10 V)
+  //   failed    → 'X'   (one or more values ≥ 10 V)
+  //   empty     → nothing drawn
+  const iL        = LAYOUT.p3.sectionI
+  const iCircuits = (d.iCircuits || []).slice(0, 4)
+
+  const _phasingRowStatus = (key) => {
+    const filled = iCircuits.map(c => c[key]).filter(v => v !== '' && v != null)
+    if (filled.length === 0) return 'empty'
+    const allOk = filled.every(v => { const n = parseFloat(v); return !isNaN(n) && n < 10 })
+    return allOk ? 'confirmed' : 'failed'
+  }
+
+  const phasingMeasurements = [
+    { fieldKey: 'r1r2', y: iL.rowR1R2Y },
+    { fieldKey: 'w1w2', y: iL.rowW1W2Y },
+    { fieldKey: 'b1b2', y: iL.rowB1B2Y },
   ]
-  phasingRowDefs.forEach(({ key, y, ci }) => {
-    const vals    = d[key] || []
-    const confirm = (d.iConfirmed || [])[ci]
-    iL.circuitX.forEach((x, circIdx) => {
-      draw3.t(x, y, vals[circIdx], FS_SM)
+
+  phasingMeasurements.forEach(({ fieldKey, y }) => {
+    iCircuits.forEach((circ, circIdx) => {
+      const x = iL.circuitX[circIdx]
+      if (x !== undefined) draw3.t(x, y, circ[fieldKey] || '', FS_SM)
     })
-    draw3.ck(iL.ckX, y, confirm)
+    const status = _phasingRowStatus(fieldKey)
+    if (status === 'confirmed') draw3.ck(iL.ckX, y, true)
+    else if (status === 'failed') draw3.t(iL.ckX, y, 'X', FS)
   })
+
   // Neutrals connected — one tick per circuit column in the neutrals row
-  ;(d.iNeutrals || []).forEach((connected, circIdx) => {
-    draw3.ck(iL.circuitX[circIdx], iL.rowNeutralsY, connected)
+  iCircuits.forEach((circ, circIdx) => {
+    const x = iL.circuitX[circIdx]
+    if (x !== undefined) draw3.ck(x, iL.rowNeutralsY, circ.neutral)
   })
 
   // ── Page 3: Section j) Loop Impedance Tests ───────────────────────────────
@@ -339,7 +354,7 @@ export async function generateB28Pdf(d, photos = []) {
   const kL = LAYOUT.p3.sectionK
   ;(d.kPoints || []).forEach((pt, idx) => {
     const y = kL.rowY[idx]
-    if (!y) return
+    if (y === undefined) return
     draw3.t(kL.locationX, y, pt.location, FS)
     draw3.ck(kL.ckX, y, pt.restored)
   })

@@ -7,7 +7,7 @@
  *   3. setD convenience setter
  *
  * Usage:
- *   const { loadJobHistory, set } =
+ *   const { loadJobHistory, set, handleDevFill } =
  *     useWizardSetup(d, setD, step, formType)
  *
  * Props:
@@ -31,6 +31,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { saveToHistory } from './jobHistory'
+import { devFillState } from './devFillState'
 
 export function useWizardSetup(d, setD, step, formType) {
   const prevStepRef = useRef(0)
@@ -67,5 +68,10 @@ export function useWizardSetup(d, setD, step, formType) {
     }
   }, [setD])
 
-  return { loadJobHistory, set }
+  // DEV-only — dead-code eliminated by Vite/Rollup in production builds
+  const handleDevFill = import.meta.env.DEV
+    ? () => setD(devFillState)
+    : undefined
+
+  return { loadJobHistory, set, handleDevFill }
 }

@@ -8,14 +8,12 @@ import { WizardShell } from '../shared/WizardShell'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { SignaturePad } from '../shared/SignaturePad'
-import { PdfCanvasPreview } from '../shared/PdfCanvasPreview'
 import { getUserPrefs, getBaseFormState } from '../shared/userPrefs'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useDraftPicker } from '../shared/useDraftPicker'
-import { devFillState } from '../shared/devFillState'
 import { DraftPicker } from '../shared/DraftPicker'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
@@ -271,12 +269,10 @@ export default function HVInspectionWizard({ onClose }) {
     d, step, photos, accent: ACCENT,
   })
 
-  const { set } = useWizardSetup(d, setD, step, FORM_KEY)
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadHvGenerator)
-
-  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
 
   // ── Dynamic step list based on selected equipment ──────────────────────────
   const selectedEquipObjs = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
@@ -305,10 +301,7 @@ export default function HVInspectionWizard({ onClose }) {
     setStep(s => Math.min(s + 1, PREVIEW_STEP))
   }
 
-  const handleBack = () => {
-    if (isPreview) { clearPdf(); setStep(s => s - 1); return }
-    setStep(s => Math.max(s - 1, 0))
-  }
+  const handleBack = () => setStep(s => Math.max(s - 1, 0))
 
   // sharePdf is now imported at the top of the file (not lazily) for consistency.
   const handleShare = () => {
@@ -419,6 +412,7 @@ export default function HVInspectionWizard({ onClose }) {
   }
 
   return (
+    <>
     <WizardShell
       title={FORM_LABEL}
       formNumber={FORM_KEY}
@@ -431,6 +425,8 @@ export default function HVInspectionWizard({ onClose }) {
       onNext={handleNext}
       onSaveDraft={openSave}
         onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/220F028A.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 3 : undefined}
       accent={ACCENT}
       isPreview={isPreview}
       onShare={handleShare}
@@ -439,9 +435,10 @@ export default function HVInspectionWizard({ onClose }) {
       previewContent={buildPreviewContent(() => triggerGenerate(d, photos), ACCENT)}
     >
       {renderStep()}
-
-      <DraftPicker {...draftPickerProps} />
     </WizardShell>
+
+    <DraftPicker {...draftPickerProps} />
+    </>
   )
 }
 

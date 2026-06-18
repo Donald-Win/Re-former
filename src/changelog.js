@@ -13,6 +13,19 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.13.1',
+    changes: [
+      {
+        heading: 'Pinch-to-zoom works in PDF previews',
+        detail: 'Pinch-to-zoom was switched off everywhere in 2.13.0 to stop accidental zooming while filling out a form. It now switches back on automatically whenever you\'re viewing a PDF — both the blank form viewer and the filled-form preview before sharing — so you can zoom in to check fine detail. It switches off again the moment you close the preview, so the rest of the app is unaffected.',
+      },
+      {
+        heading: '"My Details" icon updated',
+        detail: 'The header button for your contractor, name, ISN ID and signature now shows a person icon instead of a generic gear, so it reads as your personal details rather than an app-wide settings screen.',
+      },
+    ],
+  },
+  {
     version: '2.13.0',
     changes: [
       {

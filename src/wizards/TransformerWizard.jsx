@@ -8,7 +8,6 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
-import { devFillState } from '../shared/devFillState'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -121,8 +120,6 @@ function TransformerWizardApp({ onClose }) {
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadTransformerGenerator)
 
-  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
-
   // ── State helpers ─────────────────────────────────────────────────────────
   const tog  = k => v => setD(p => ({ ...p,          [k]: p[k]          === v ? '' : v }))
   const setI = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: v } }))
@@ -145,7 +142,7 @@ function TransformerWizardApp({ onClose }) {
   }
 
   // ── Shared hooks ──────────────────────────────────────────────────────────
-  const { set } = useWizardSetup(d, setD, step, '360S014EG')
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EG')
   const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
 
   const missingFields = [
@@ -370,6 +367,8 @@ function TransformerWizardApp({ onClose }) {
         onBack={() => setStep(s => s - 1)}
         onSaveDraft={openSave}
         onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/360S014EG.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 2 : undefined}
         onNext={() => {
           const next = step + 1
           setStep(next)

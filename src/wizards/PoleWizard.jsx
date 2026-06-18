@@ -3,12 +3,11 @@
 import React, { useState, useRef } from 'react'
 import { PenLine } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
-import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
+import { APP_ACCENT, APP_YELLOW, WIZARD_COLORS } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
-import { devFillState } from '../shared/devFillState'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -302,8 +301,6 @@ function PoleRecordWizard({ onClose }) {
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
     usePdfGenerate(loadPoleGenerator)
 
-  const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
-
   const isPreview = step === W_STEPS.length - 1
 
   const { draftPickerProps, openSave, openLoad } = useDraftPicker({
@@ -352,7 +349,7 @@ function PoleRecordWizard({ onClose }) {
 
   // ── Shared hooks ──────────────────────────────────────────────────────────
 
-  const { set } = useWizardSetup(d, setD, step, '360S014EC')
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EC')
   const { clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, photos)
 
   // ── Missing-field warnings ────────────────────────────────────────────────
@@ -375,109 +372,143 @@ function PoleRecordWizard({ onClose }) {
   const END_SIZE_OPTS= [['A','A — 75×100mm'],['B','B — 100×100mm'],['D','D — 150×100mm'],['Z','Z — 75×75mm Angle Iron']]
   const MATERIAL_OPTS= [['T','Timber (T)'],['S','Steel (S)'],['C','Composite (C)']]
 
-  const formSteps = [
+  const renderCurrentStep = () => {
+    switch (step) {
+      case 0: return (
+        // 0 — Location & Contractor
+        <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} onOpenDrafts={openLoad} />
+      )
 
-    // 0 — Location & Contractor
-    <JobDetailsStep key="0" d={d} setD={setD} accent={W_PURPLE} onOpenDrafts={openLoad} />,
-
-    // 1 — Pole IDs & Activity
-    <div key="1">
-      <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set('oldPoleId')} />
-      <WCB label="Type of Pole Activity"
-        options={['New','Removed','Replaced','Relocation','Label Replaced']}
-        value={d.poleActivity} onChange={tog('poleActivity')} />
-      {(d.poleActivity==='New'||d.poleActivity==='Replaced'||d.poleActivity==='Label Replaced') &&
-        <WF label="Powerco New Pole ID(s)" v={d.newPoleId} set={set('newPoleId')} />}
-      {(d.poleActivity==='New'||d.poleActivity==='Replaced') &&
-        <DateBoxInput label="New Pole Manufactured Date" value={d.manufacturedDate||''} onChange={set('manufacturedDate')} />}
-      <WCB label="Cross-arm Activity"
-        options={['New','Removed','Replaced']}
-        value={d.crossarmActivity} onChange={tog('crossarmActivity')} />
-      <WCB label="Pole Loading"
-        options={['Angle','In Line','Road Crossing','Take Off','Termination']}
-        value={d.poleLoading} onChange={tog('poleLoading')} />
-      <WCB label="Ownership" options={['Powerco','Private','Other']} value={d.ownership} onChange={tog('ownership')} />
-      {d.ownership==='Other' && <WF label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />}
-      <WCB label="Shared Use" options={['Fibre','Chorus','Other']} value={d.sharedUse} onChange={tog('sharedUse')} />
-      {d.sharedUse==='Other' && <WF label="Specify Shared Use" v={d.sharedUseOther} set={set('sharedUseOther')} />}
-      {(d.poleActivity==='Removed'||d.poleActivity==='Replaced') &&
-        <WTA label="Reason for Removal" v={d.reasonForRemoval} set={set('reasonForRemoval')} rows={2} />}
-    </div>,
-
-    // 2 — New Pole Details
-    <div key="2">
-      {!(d.poleActivity==='New'||d.poleActivity==='Replaced') ? (
-        <div style={{ background:'#f4f4f8', border:'1px solid #ddd', borderRadius:10, padding:'20px 18px', textAlign:'center', color:'#666', fontSize:14, lineHeight:1.6 }}>
-          <div style={{ fontSize:28, marginBottom:8 }}>🪵</div>
-          <strong>New Pole Details — not applicable</strong>
-          <p style={{ margin:'8px 0 0', fontSize:13, color:'#888' }}>
-            These fields only apply when the pole activity is <strong>New</strong> or <strong>Replaced</strong>.
-            {d.poleActivity ? <> You selected <strong>{d.poleActivity}</strong>.</> : <> Select an activity on the previous step.</>}
-          </p>
-          <p style={{ margin:'6px 0 0', fontSize:12, color:'#999' }}>Tap <strong>Next →</strong> to continue.</p>
+      case 1: return (
+        // 1 — Pole IDs & Activity
+        <div key="1">
+          <WF label="Powerco Old Pole ID" v={d.oldPoleId} set={set('oldPoleId')} />
+          <WCB label="Type of Pole Activity"
+            options={['New','Removed','Replaced','Relocation','Label Replaced']}
+            value={d.poleActivity} onChange={tog('poleActivity')} />
+          {(d.poleActivity==='New'||d.poleActivity==='Replaced'||d.poleActivity==='Label Replaced') &&
+            <WF label="Powerco New Pole ID(s)" v={d.newPoleId} set={set('newPoleId')} />}
+          {(d.poleActivity==='New'||d.poleActivity==='Replaced') &&
+            <DateBoxInput label="New Pole Manufactured Date" value={d.manufacturedDate||''} onChange={set('manufacturedDate')} />}
+          <WCB label="Cross-arm Activity"
+            options={['New','Removed','Replaced']}
+            value={d.crossarmActivity} onChange={tog('crossarmActivity')} />
+          <WCB label="Pole Loading"
+            options={['Angle','In Line','Road Crossing','Take Off','Termination']}
+            value={d.poleLoading} onChange={tog('poleLoading')} />
+          <WCB label="Ownership" options={['Powerco','Private','Other']} value={d.ownership} onChange={tog('ownership')} />
+          {d.ownership==='Other' && <WF label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />}
+          <WCB label="Shared Use" options={['Fibre','Chorus','Other']} value={d.sharedUse} onChange={tog('sharedUse')} />
+          {d.sharedUse==='Other' && <WF label="Specify Shared Use" v={d.sharedUseOther} set={set('sharedUseOther')} />}
+          {(d.poleActivity==='Removed'||d.poleActivity==='Replaced') &&
+            <WTA label="Reason for Removal" v={d.reasonForRemoval} set={set('reasonForRemoval')} rows={2} />}
         </div>
-      ) : (
-        <>
-          <WCB label="GPS Required" options={['Yes','No']} value={d.gpsRequired} onChange={tog('gpsRequired')} />
-          {d.gpsRequired==='Yes' && (
-            <div style={{ background:'#f5f5f5', borderRadius:10, padding:12, marginBottom:12 }}>
-              <div style={{ fontWeight:700, fontSize:11, marginBottom:8, color:'#555' }}>GPS CO-ORDINATES</div>
-              <WF label="North"                    v={d.gpsNorth}  set={set('gpsNorth')}  ph="e.g. 5812345" />
-              <WF label="East"                     v={d.gpsEast}   set={set('gpsEast')}   ph="e.g. 1832456" />
-              <WF label="Altitude above sea level" v={d.altitude}  set={set('altitude')}  ph="e.g. 45m" />
-            </div>
-          )}
-          <WCB label="Pole Condition" options={['New','Pre-Used']} value={d.poleCondition} onChange={tog('poleCondition')} />
+      )
 
+      case 2: return (
+        // 2 — New Pole Details
+        <div key="2">
+          {!(d.poleActivity==='New'||d.poleActivity==='Replaced') ? (
+            <div style={{ background:'#f4f4f8', border:'1px solid #ddd', borderRadius:10, padding:'20px 18px', textAlign:'center', color:'#666', fontSize:14, lineHeight:1.6 }}>
+              <div style={{ fontSize:28, marginBottom:8 }}>🪵</div>
+              <strong>New Pole Details — not applicable</strong>
+              <p style={{ margin:'8px 0 0', fontSize:13, color:'#888' }}>
+                These fields only apply when the pole activity is <strong>New</strong> or <strong>Replaced</strong>.
+                {d.poleActivity ? <> You selected <strong>{d.poleActivity}</strong>.</> : <> Select an activity on the previous step.</>}
+              </p>
+              <p style={{ margin:'6px 0 0', fontSize:12, color:'#999' }}>Tap <strong>Next →</strong> to continue.</p>
+            </div>
+          ) : (
+            <>
+              <WCB label="GPS Required" options={['Yes','No']} value={d.gpsRequired} onChange={tog('gpsRequired')} />
+              {d.gpsRequired==='Yes' && (
+                <div style={{ background:'#f5f5f5', borderRadius:10, padding:12, marginBottom:12 }}>
+                  <div style={{ fontWeight:700, fontSize:11, marginBottom:8, color:'#555' }}>GPS CO-ORDINATES</div>
+                  <WF label="North"                    v={d.gpsNorth}  set={set('gpsNorth')}  ph="e.g. 5812345" />
+                  <WF label="East"                     v={d.gpsEast}   set={set('gpsEast')}   ph="e.g. 1832456" />
+                  <WF label="Altitude above sea level" v={d.altitude}  set={set('altitude')}  ph="e.g. 45m" />
+                </div>
+              )}
+              <WCB label="Pole Condition" options={['New','Pre-Used']} value={d.poleCondition} onChange={tog('poleCondition')} />
+
+              <div style={{ marginBottom:14 }}>
+                <label style={wLbl}>New Pole Code & Manufacturer</label>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, marginTop:4 }}>
+                  {POLE_CODES.map(code => {
+                    const sel = d.poleCode === code
+                    return (
+                      <button key={code} onClick={() => tog('poleCode')(code)} style={{
+                        padding:'7px 9px', borderRadius:8,
+                        border:`2px solid ${sel?W_PURPLE:'#ddd'}`,
+                        background:sel?W_PURPLE:'#fff', color:sel?'#fff':'#333',
+                        fontFamily:'inherit', fontSize:11, cursor:'pointer',
+                        fontWeight:sel?700:400, textAlign:'left',
+                      }}>{code}</button>
+                    )
+                  })}
+                  {['DULHUNTY','IUP','OTHER'].map(code => {
+                    const sel = d.poleCode === code
+                    return (
+                      <button key={code} onClick={() => tog('poleCode')(code)} style={{
+                        padding:'7px 9px', borderRadius:8,
+                        border:`2px solid ${sel?W_PURPLE:'#ddd'}`,
+                        background:sel?W_PURPLE:'#fff', color:sel?'#fff':'#333',
+                        fontFamily:'inherit', fontSize:11, cursor:'pointer',
+                        fontWeight:sel?700:400, textAlign:'left',
+                      }}>{code}</button>
+                    )
+                  })}
+                </div>
+              </div>
+              {d.poleCode==='DULHUNTY' && <WF label="State Pole Code, kN & Length"       v={d.dulhuntyCode} set={set('dulhuntyCode')} ph="e.g. D300 8kN 12m" />}
+              {d.poleCode==='IUP'      && <WF label="State kN & Length (Steel)"           v={d.iupCode}      set={set('iupCode')}      ph="e.g. 12kN 11m" />}
+              {d.poleCode==='OTHER'    && <WF label="State Manufacturer, kN & Length"     v={d.otherCode}    set={set('otherCode')}    ph="e.g. Other Co 10kN 12m" />}
+              {d.poleCode && !d.poleCode.includes('Busck') &&
+                <WF label="Manufacturers Unique Pole ID" v={d.manufacturerPoleId} set={set('manufacturerPoleId')} ph="Required for Goldpine & Dulhunty" />}
+
+              <WCB label="New Pole Information (Type)" options={POLE_TYPES} value={d.poleType} onChange={tog('poleType')} />
+              {d.poleType==='Other' && <WF label="Specify Type" v={d.poleTypeOther} set={set('poleTypeOther')} />}
+            </>
+          )}
+        </div>
+      )
+
+      case 3: return (
+        // 3 — Equipment on Pole
+        <div key="3">
+          <div style={{ fontSize:13, color:'#777', marginBottom:10 }}>
+            Select equipment on pole and enter IDs where applicable.
+          </div>
           <div style={{ marginBottom:14 }}>
-            <label style={wLbl}>New Pole Code & Manufacturer</label>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, marginTop:4 }}>
-              {POLE_CODES.map(code => {
-                const sel = d.poleCode === code
+            <label style={wLbl}>Equipment on Pole</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
+              {[
+                ['ABS',                   'absId'             ],
+                ['Links',                 'linksId'           ],
+                ['Drop out Fuse',         'dropoutFuseId'     ],
+                ['Transformer',           'transformerId'     ],
+                ['Regulator',             'regulatorId'       ],
+                ['Sectionliser/Recloser', 'sectionliserId'   ],
+                ['Fault Indicator',       'faultIndicatorId' ],
+                ['Lightning Arrester',    'lightningArresterId'],
+              ].map(([label, k]) => {
+                const selected = d[k] !== undefined && d[k] !== null
                 return (
-                  <button key={code} onClick={() => tog('poleCode')(code)} style={{
-                    padding:'7px 9px', borderRadius:8,
-                    border:`2px solid ${sel?W_PURPLE:'#ddd'}`,
-                    background:sel?W_PURPLE:'#fff', color:sel?'#fff':'#333',
-                    fontFamily:'inherit', fontSize:11, cursor:'pointer',
-                    fontWeight:sel?700:400, textAlign:'left',
-                  }}>{code}</button>
-                )
-              })}
-              {['DULHUNTY','IUP','OTHER'].map(code => {
-                const sel = d.poleCode === code
-                return (
-                  <button key={code} onClick={() => tog('poleCode')(code)} style={{
-                    padding:'7px 9px', borderRadius:8,
-                    border:`2px solid ${sel?W_PURPLE:'#ddd'}`,
-                    background:sel?W_PURPLE:'#fff', color:sel?'#fff':'#333',
-                    fontFamily:'inherit', fontSize:11, cursor:'pointer',
-                    fontWeight:sel?700:400, textAlign:'left',
-                  }}>{code}</button>
+                  <button key={k}
+                    onClick={() => {
+                      if (selected) setD(p => { const n = {...p}; delete n[k]; return n })
+                      else setD(p => ({ ...p, [k]: '' }))
+                    }}
+                    style={{
+                      padding:'7px 12px', borderRadius:8,
+                      border:`2px solid ${selected?W_PURPLE:'#ddd'}`,
+                      background:selected?W_PURPLE:'#fff', color:selected?'#fff':'#333',
+                      fontFamily:'inherit', fontSize:13, cursor:'pointer', fontWeight:selected?700:400,
+                    }}>{label}</button>
                 )
               })}
             </div>
           </div>
-          {d.poleCode==='DULHUNTY' && <WF label="State Pole Code, kN & Length"       v={d.dulhuntyCode} set={set('dulhuntyCode')} ph="e.g. D300 8kN 12m" />}
-          {d.poleCode==='IUP'      && <WF label="State kN & Length (Steel)"           v={d.iupCode}      set={set('iupCode')}      ph="e.g. 12kN 11m" />}
-          {d.poleCode==='OTHER'    && <WF label="State Manufacturer, kN & Length"     v={d.otherCode}    set={set('otherCode')}    ph="e.g. Other Co 10kN 12m" />}
-          {d.poleCode && !d.poleCode.includes('Busck') &&
-            <WF label="Manufacturers Unique Pole ID" v={d.manufacturerPoleId} set={set('manufacturerPoleId')} ph="Required for Goldpine & Dulhunty" />}
-
-          <WCB label="New Pole Information (Type)" options={POLE_TYPES} value={d.poleType} onChange={tog('poleType')} />
-          {d.poleType==='Other' && <WF label="Specify Type" v={d.poleTypeOther} set={set('poleTypeOther')} />}
-        </>
-      )}
-    </div>,
-
-    // 3 — Equipment on Pole
-    <div key="3">
-      <div style={{ fontSize:13, color:'#777', marginBottom:10 }}>
-        Select equipment on pole and enter IDs where applicable.
-      </div>
-      <div style={{ marginBottom:14 }}>
-        <label style={wLbl}>Equipment on Pole</label>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
           {[
             ['ABS',                   'absId'             ],
             ['Links',                 'linksId'           ],
@@ -487,198 +518,185 @@ function PoleRecordWizard({ onClose }) {
             ['Sectionliser/Recloser', 'sectionliserId'   ],
             ['Fault Indicator',       'faultIndicatorId' ],
             ['Lightning Arrester',    'lightningArresterId'],
-          ].map(([label, k]) => {
-            const selected = d[k] !== undefined && d[k] !== null
-            return (
-              <button key={k}
+          ].map(([label, k]) =>
+            (d[k] !== undefined && d[k] !== null) &&
+            <WF key={k} label={`${label} – Equipment ID`} v={d[k]} set={set(k)} ph="Leave blank if N/A" />
+          )}
+          <div style={{ marginBottom:14, marginTop:14 }}>
+            <label style={wLbl}>Other Equipment</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
+              <button
                 onClick={() => {
-                  if (selected) setD(p => { const n = {...p}; delete n[k]; return n })
-                  else setD(p => ({ ...p, [k]: '' }))
-                }}
-                style={{
-                  padding:'7px 12px', borderRadius:8,
-                  border:`2px solid ${selected?W_PURPLE:'#ddd'}`,
-                  background:selected?W_PURPLE:'#fff', color:selected?'#fff':'#333',
-                  fontFamily:'inherit', fontSize:13, cursor:'pointer', fontWeight:selected?700:400,
-                }}>{label}</button>
-            )
-          })}
-        </div>
-      </div>
-      {[
-        ['ABS',                   'absId'             ],
-        ['Links',                 'linksId'           ],
-        ['Drop out Fuse',         'dropoutFuseId'     ],
-        ['Transformer',           'transformerId'     ],
-        ['Regulator',             'regulatorId'       ],
-        ['Sectionliser/Recloser', 'sectionliserId'   ],
-        ['Fault Indicator',       'faultIndicatorId' ],
-        ['Lightning Arrester',    'lightningArresterId'],
-      ].map(([label, k]) =>
-        (d[k] !== undefined && d[k] !== null) &&
-        <WF key={k} label={`${label} – Equipment ID`} v={d[k]} set={set(k)} ph="Leave blank if N/A" />
-      )}
-      <div style={{ marginBottom:14, marginTop:14 }}>
-        <label style={wLbl}>Other Equipment</label>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
-          <button
-            onClick={() => {
-              if (d.otherEquipType !== undefined && d.otherEquipType !== null) {
-                setD(p => { const n = {...p}; delete n.otherEquipType; delete n.otherEquipId; return n })
-              } else {
-                setD(p => ({ ...p, otherEquipType: '', otherEquipId: '' }))
-              }
-            }}
-            style={{
-              padding:'7px 12px', borderRadius:8,
-              border:`2px solid ${d.otherEquipType!==undefined&&d.otherEquipType!==null?W_PURPLE:'#ddd'}`,
-              background:d.otherEquipType!==undefined&&d.otherEquipType!==null?W_PURPLE:'#fff',
-              color:d.otherEquipType!==undefined&&d.otherEquipType!==null?'#fff':'#333',
-              fontFamily:'inherit', fontSize:13, cursor:'pointer',
-              fontWeight:d.otherEquipType!==undefined&&d.otherEquipType!==null?700:400,
-            }}>Other Equipment</button>
-        </div>
-      </div>
-      {d.otherEquipType !== undefined && d.otherEquipType !== null && (
-        <div>
-          <WF label="Equipment Type" v={d.otherEquipType} set={set('otherEquipType')} ph="Specify type" />
-          <WF label="Equipment ID"   v={d.otherEquipId}   set={set('otherEquipId')} />
-        </div>
-      )}
-    </div>,
-
-    // 4 — Accessories
-    <div key="4">
-      <WCB
-        label="Pole Accessories (select all that apply)"
-        options={['Possum Guard','Streetlight Fitting','Aerial Stay','Climbers','Ground Stay','Platform','HV Cable Riser','Bird Spikes']}
-        value={d.accessories} onChange={togAcc} multi />
-      <div style={{ marginBottom:14, marginTop:14 }}>
-        <label style={wLbl}>Control Box & Other Options</label>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
-          {['Control Box','Other'].map(item => {
-            const isCB     = item === 'Control Box'
-            const selected = isCB ? !!d.controlBoxPurpose : !!d.accessoriesOther
-            return (
-              <button key={item}
-                onClick={() => {
-                  if (!selected) {
-                    if (isCB) setD(p => ({ ...p, controlBoxPurpose: '' }))
-                    else      setD(p => ({ ...p, accessoriesOther:   '' }))
+                  if (d.otherEquipType !== undefined && d.otherEquipType !== null) {
+                    setD(p => { const n = {...p}; delete n.otherEquipType; delete n.otherEquipId; return n })
+                  } else {
+                    setD(p => ({ ...p, otherEquipType: '', otherEquipId: '' }))
                   }
                 }}
                 style={{
                   padding:'7px 12px', borderRadius:8,
-                  border:`2px solid ${selected?W_PURPLE:'#ddd'}`,
-                  background:selected?W_PURPLE:'#fff', color:selected?'#fff':'#333',
-                  fontFamily:'inherit', fontSize:13, cursor:'pointer', fontWeight:selected?700:400,
-                }}>{item}</button>
-            )
-          })}
+                  border:`2px solid ${d.otherEquipType!==undefined&&d.otherEquipType!==null?W_PURPLE:'#ddd'}`,
+                  background:d.otherEquipType!==undefined&&d.otherEquipType!==null?W_PURPLE:'#fff',
+                  color:d.otherEquipType!==undefined&&d.otherEquipType!==null?'#fff':'#333',
+                  fontFamily:'inherit', fontSize:13, cursor:'pointer',
+                  fontWeight:d.otherEquipType!==undefined&&d.otherEquipType!==null?700:400,
+                }}>Other Equipment</button>
+            </div>
+          </div>
+          {d.otherEquipType !== undefined && d.otherEquipType !== null && (
+            <div>
+              <WF label="Equipment Type" v={d.otherEquipType} set={set('otherEquipType')} ph="Specify type" />
+              <WF label="Equipment ID"   v={d.otherEquipId}   set={set('otherEquipId')} />
+            </div>
+          )}
         </div>
-      </div>
-      {d.controlBoxPurpose !== undefined && d.controlBoxPurpose !== null &&
-        <WF label="Control Box – Stipulate Purpose" v={d.controlBoxPurpose} set={set('controlBoxPurpose')} ph="Leave blank if N/A" />}
-      {d.accessoriesOther !== undefined && d.accessoriesOther !== null &&
-        <WF label="Other Accessories (specify)" v={d.accessoriesOther} set={set('accessoriesOther')} />}
-    </div>,
+      )
 
-    // 5 — Conductors
-    <div key="5">
-      <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set('serviceConnections')} ph="e.g. 2" />
-      {parseInt(d.serviceConnections||0,10)>=1 &&
-        <WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set('serviceAddresses')} ph="List addresses" />}
-      <div style={{ fontWeight:700, fontSize:14, marginBottom:8, color:'#333' }}>Conductors</div>
-      {(() => {
-        const firstEmptyIdx = d.conductors.findIndex(c => !(c.level||c.existing||c.size||c.material||c.insulation))
-        return d.conductors.map((c, i) => {
-          const hasData    = c.level||c.existing||c.size||c.material||c.insulation||c.picker
-          const isFirstEmpty = i === firstEmptyIdx
-          const isLastRow    = i === d.conductors.length - 1
-          return (hasData || isFirstEmpty) ? (
-            <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
-              <button
-                onClick={() => setD(p => ({ ...p, conductors: p.conductors.filter((_,idx) => idx!==i) }))}
-                style={{ position:'absolute', top:8, right:8, background:'none', border:'none', fontSize:18, color:'#999', cursor:'pointer', padding:0 }}>×</button>
-              <div style={{ fontWeight:600, fontSize:12, marginBottom:8, color:W_PURPLE }}>Row {i+1}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                <WSel label="Level"          value={c.level}    onChange={v => setCond(i,'level',v)}    options={LEVEL_OPTS} />
-                <WSel label="Existing / New" value={c.existing} onChange={v => setCond(i,'existing',v)} options={EN_OPTS} />
-              </div>
-              <ConductorPicker c={c} i={i} setCond={setCond} setMultiCond={setMultiCond} />
-              {isLastRow && d.conductors.length<7 && (
-                <button
-                  onClick={() => setD(p => ({ ...p, conductors: [...p.conductors, { level:String(p.conductors.length+1), existing:'', size:'', material:'', insulation:'', picker:null }]}))}
-                  style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                  + Add Another Row
-                </button>
-              )}
+      case 4: return (
+        // 4 — Accessories
+        <div key="4">
+          <WCB
+            label="Pole Accessories (select all that apply)"
+            options={['Possum Guard','Streetlight Fitting','Aerial Stay','Climbers','Ground Stay','Platform','HV Cable Riser','Bird Spikes']}
+            value={d.accessories} onChange={togAcc} multi />
+          <div style={{ marginBottom:14, marginTop:14 }}>
+            <label style={wLbl}>Control Box & Other Options</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:4 }}>
+              {['Control Box','Other'].map(item => {
+                const isCB     = item === 'Control Box'
+                const selected = isCB ? !!d.controlBoxPurpose : !!d.accessoriesOther
+                return (
+                  <button key={item}
+                    onClick={() => {
+                      if (!selected) {
+                        if (isCB) setD(p => ({ ...p, controlBoxPurpose: '' }))
+                        else      setD(p => ({ ...p, accessoriesOther:   '' }))
+                      }
+                    }}
+                    style={{
+                      padding:'7px 12px', borderRadius:8,
+                      border:`2px solid ${selected?W_PURPLE:'#ddd'}`,
+                      background:selected?W_PURPLE:'#fff', color:selected?'#fff':'#333',
+                      fontFamily:'inherit', fontSize:13, cursor:'pointer', fontWeight:selected?700:400,
+                    }}>{item}</button>
+                )
+              })}
             </div>
-          ) : null
-        })
-      })()}
-    </div>,
+          </div>
+          {d.controlBoxPurpose !== undefined && d.controlBoxPurpose !== null &&
+            <WF label="Control Box – Stipulate Purpose" v={d.controlBoxPurpose} set={set('controlBoxPurpose')} ph="Leave blank if N/A" />}
+          {d.accessoriesOther !== undefined && d.accessoriesOther !== null &&
+            <WF label="Other Accessories (specify)" v={d.accessoriesOther} set={set('accessoriesOther')} />}
+        </div>
+      )
 
-    // 6 — Crossarms
-    <div key="6">
-      <div style={{ background:'#fffff0', border:'1px solid #e0e000', borderRadius:8, padding:9, marginBottom:12, fontSize:11, color:'#555' }}>
-        <b>Length:</b> enter in code format, e.g. 20=2m, 23=2.3m<br/>
-        <b>Insulators:</b> PN=Pin(LV), PS=Post(HV), TT=Term-Term, DP=Delta Post, EDO
-      </div>
-      <div style={{ fontWeight:700, fontSize:14, marginBottom:8, color:'#333' }}>Crossarms</div>
-      {(() => {
-        const firstEmptyIdx = d.crossarms.findIndex(c => !(c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires))
-        return d.crossarms.map((c, i) => {
-          const hasData      = c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires
-          const isFirstEmpty = i === firstEmptyIdx
-          const isLastRow    = i === d.crossarms.length - 1
-          return (hasData || isFirstEmpty) ? (
-            <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
-              <button
-                onClick={() => setD(p => ({ ...p, crossarms: p.crossarms.filter((_,idx) => idx!==i) }))}
-                style={{ position:'absolute', top:8, right:8, background:'none', border:'none', fontSize:18, color:'#999', cursor:'pointer', padding:0 }}>×</button>
-              <div style={{ fontWeight:600, fontSize:12, marginBottom:8, color:W_PURPLE }}>Crossarm {i+1}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                <WSel label="Level"          value={c.level}    onChange={v => setCA(i,'level',v)}    options={LEVEL_OPTS} />
-                <WSel label="Existing / New" value={c.existing} onChange={v => setCA(i,'existing',v)} options={EN_OPTS} />
-              </div>
-              <WSel label="Rated Voltage" value={c.voltage} onChange={v => setCA(i,'voltage',v)} options={VOLTAGE_OPTS} />
-              <div style={{ height:1, background:'#e5e7eb', margin:'8px 0' }} />
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                <WSel label="End Size"    value={c.endSize}     onChange={v => setCA(i,'endSize',v)}     options={END_SIZE_OPTS} />
-                <WF   label="Length"      v={c.length}          set={v => setCA(i,'length', v.replace(/\D/g,''))}  ph="e.g. 20" type="number" />
-                <WSel label="Arms"        value={c.arms}        onChange={v => setCA(i,'arms',v)}        options={ARMS_OPTS} />
-                <WSel label="Arm Material"value={c.armMaterial} onChange={v => setCA(i,'armMaterial',v)} options={MATERIAL_OPTS} />
-              </div>
-              <div style={{ height:1, background:'#e5e7eb', margin:'8px 0' }} />
-              <WF label="Insulator Type" v={c.insulatorType} set={v => setCA(i,'insulatorType',v)} ph="PN / PS / TT / DP / EDO" />
-              <WF label="# Wires"        v={c.wires}         set={v => setCA(i,'wires', v.replace(/\D/g,''))} ph="e.g. 3" type="number" />
-              {isLastRow && d.crossarms.length<7 && (
-                <button
-                  onClick={() => setD(p => ({ ...p, crossarms: [...p.crossarms, { level:String(p.crossarms.length+1), existing:'', voltage:'', endSize:'', length:'', arms:'', insulatorType:'', armMaterial:'', wires:'' }]}))}
-                  style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                  + Add Another Row
-                </button>
-              )}
-            </div>
-          ) : null
-        })
-      })()}
-    </div>,
+      case 5: return (
+        // 5 — Conductors
+        <div key="5">
+          <WF label="Number of Pole Service Connections" v={d.serviceConnections} set={set('serviceConnections')} ph="e.g. 2" />
+          {parseInt(d.serviceConnections||0,10)>=1 &&
+            <WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set('serviceAddresses')} ph="List addresses" />}
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:8, color:'#333' }}>Conductors</div>
+          {(() => {
+            const firstEmptyIdx = d.conductors.findIndex(c => !(c.level||c.existing||c.size||c.material||c.insulation))
+            return d.conductors.map((c, i) => {
+              const hasData    = c.level||c.existing||c.size||c.material||c.insulation||c.picker
+              const isFirstEmpty = i === firstEmptyIdx
+              const isLastRow    = i === d.conductors.length - 1
+              return (hasData || isFirstEmpty) ? (
+                <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
+                  <button
+                    onClick={() => setD(p => ({ ...p, conductors: p.conductors.filter((_,idx) => idx!==i) }))}
+                    style={{ position:'absolute', top:8, right:8, background:'none', border:'none', fontSize:18, color:'#999', cursor:'pointer', padding:0 }}>×</button>
+                  <div style={{ fontWeight:600, fontSize:12, marginBottom:8, color:W_PURPLE }}>Row {i+1}</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <WSel label="Level"          value={c.level}    onChange={v => setCond(i,'level',v)}    options={LEVEL_OPTS} />
+                    <WSel label="Existing / New" value={c.existing} onChange={v => setCond(i,'existing',v)} options={EN_OPTS} />
+                  </div>
+                  <ConductorPicker c={c} i={i} setCond={setCond} setMultiCond={setMultiCond} />
+                  {isLastRow && d.conductors.length<7 && (
+                    <button
+                      onClick={() => setD(p => ({ ...p, conductors: [...p.conductors, { level:String(p.conductors.length+1), existing:'', size:'', material:'', insulation:'', picker:null }]}))}
+                      style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                      + Add Another Row
+                    </button>
+                  )}
+                </div>
+              ) : null
+            })
+          })()}
+        </div>
+      )
 
-    // 7 — Work Description
-    <div key="7">
-      <div style={{ fontSize:13, color:'#777', marginBottom:10 }}>
-        Illustrate asset location if the pole is new or has been moved more than 1 metre. Show any LV break positions.
-      </div>
-      <WTA label="Describe the work performed" v={d.workDescription} set={set('workDescription')} rows={12} ph="Describe all work performed..." />
-    </div>,
+      case 6: return (
+        // 6 — Crossarms
+        <div key="6">
+          <div style={{ background:'#fffff0', border:'1px solid #e0e000', borderRadius:8, padding:9, marginBottom:12, fontSize:11, color:'#555' }}>
+            <b>Length:</b> enter in code format, e.g. 20=2m, 23=2.3m<br/>
+            <b>Insulators:</b> PN=Pin(LV), PS=Post(HV), TT=Term-Term, DP=Delta Post, EDO
+          </div>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:8, color:'#333' }}>Crossarms</div>
+          {(() => {
+            const firstEmptyIdx = d.crossarms.findIndex(c => !(c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires))
+            return d.crossarms.map((c, i) => {
+              const hasData      = c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires
+              const isFirstEmpty = i === firstEmptyIdx
+              const isLastRow    = i === d.crossarms.length - 1
+              return (hasData || isFirstEmpty) ? (
+                <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
+                  <button
+                    onClick={() => setD(p => ({ ...p, crossarms: p.crossarms.filter((_,idx) => idx!==i) }))}
+                    style={{ position:'absolute', top:8, right:8, background:'none', border:'none', fontSize:18, color:'#999', cursor:'pointer', padding:0 }}>×</button>
+                  <div style={{ fontWeight:600, fontSize:12, marginBottom:8, color:W_PURPLE }}>Crossarm {i+1}</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <WSel label="Level"          value={c.level}    onChange={v => setCA(i,'level',v)}    options={LEVEL_OPTS} />
+                    <WSel label="Existing / New" value={c.existing} onChange={v => setCA(i,'existing',v)} options={EN_OPTS} />
+                  </div>
+                  <WSel label="Rated Voltage" value={c.voltage} onChange={v => setCA(i,'voltage',v)} options={VOLTAGE_OPTS} />
+                  <div style={{ height:1, background:'#e5e7eb', margin:'8px 0' }} />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <WSel label="End Size"    value={c.endSize}     onChange={v => setCA(i,'endSize',v)}     options={END_SIZE_OPTS} />
+                    <WF   label="Length"      v={c.length}          set={v => setCA(i,'length', v.replace(/\D/g,''))}  ph="e.g. 20" type="number" />
+                    <WSel label="Arms"        value={c.arms}        onChange={v => setCA(i,'arms',v)}        options={ARMS_OPTS} />
+                    <WSel label="Arm Material"value={c.armMaterial} onChange={v => setCA(i,'armMaterial',v)} options={MATERIAL_OPTS} />
+                  </div>
+                  <div style={{ height:1, background:'#e5e7eb', margin:'8px 0' }} />
+                  <WF label="Insulator Type" v={c.insulatorType} set={v => setCA(i,'insulatorType',v)} ph="PN / PS / TT / DP / EDO" />
+                  <WF label="# Wires"        v={c.wires}         set={v => setCA(i,'wires', v.replace(/\D/g,''))} ph="e.g. 3" type="number" />
+                  {isLastRow && d.crossarms.length<7 && (
+                    <button
+                      onClick={() => setD(p => ({ ...p, crossarms: [...p.crossarms, { level:String(p.crossarms.length+1), existing:'', voltage:'', endSize:'', length:'', arms:'', insulatorType:'', armMaterial:'', wires:'' }]}))}
+                      style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                      + Add Another Row
+                    </button>
+                  )}
+                </div>
+              ) : null
+            })
+          })()}
+        </div>
+      )
 
-    // 8 — Photos
-    <div key="8">
-      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
-    </div>,
-  ]
+      case 7: return (
+        // 7 — Work Description
+        <div key="7">
+          <div style={{ fontSize:13, color:'#777', marginBottom:10 }}>
+            Illustrate asset location if the pole is new or has been moved more than 1 metre. Show any LV break positions.
+          </div>
+          <WTA label="Describe the work performed" v={d.workDescription} set={set('workDescription')} rows={12} ph="Describe all work performed..." />
+        </div>
+      )
+
+      case 8: return (
+        // 8 — Photos
+        <div key="8">
+          <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
+        </div>
+      )
+
+      default: return null
+    }
+  }
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), W_PURPLE)
 
@@ -695,22 +713,24 @@ function PoleRecordWizard({ onClose }) {
         onBack={() => setStep(s => s - 1)}
         onSaveDraft={openSave}
         onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/360S014EC.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 3 : undefined}
         onNext={() => {
           const n = step + 1
           setStep(n)
           if (n === W_STEPS.length - 1) triggerGenerate(d, photos)
         }}
         accent={W_PURPLE}
-        bg="#f4f4f8"
-        mid="#fff"
-        border="#eee"
+        bg={WIZARD_COLORS.bg}
+        mid={WIZARD_COLORS.mid}
+        border={WIZARD_COLORS.border}
         isPreview={isPreview}
         onShare={handleShare}
         onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
         missingFields={missingFields}
         previewContent={previewContent}
       >
-        {formSteps[step]}
+        {renderCurrentStep()}
       </WizardShell>
 
       <DraftPicker {...draftPickerProps} />

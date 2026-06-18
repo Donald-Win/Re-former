@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Search, FileText, CheckCircle2, Circle, ExternalLink, Download,
-  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, Settings } from 'lucide-react'
+  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, UserCog } from 'lucide-react'
 
 import PoleRecordWizard from './wizards/PoleWizard'
 import TransformerWizardApp from './wizards/TransformerWizard'
@@ -16,8 +16,9 @@ import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
+import { useAllowZoom } from './shared/useAllowZoom'
 
-const APP_VERSION = '2.12.1'
+const APP_VERSION = '2.13.1'
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
@@ -303,6 +304,11 @@ const AsBuiltFormSelector = () => {
     blobUrl: null,
   })
 
+  // Allow pinch-to-zoom while the blank-form PDF viewer is open — locked the
+  // rest of the time so it can't be triggered accidentally while filling out
+  // a form (see useAllowZoom for details).
+  useAllowZoom(pdfViewer.open)
+
   const [activeWizard, setActiveWizard] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -575,7 +581,7 @@ const AsBuiltFormSelector = () => {
                 flexShrink: 0, position: 'relative',
               }}
             >
-              <Settings size={22} color={settingsReady ? '#4f46e5' : '#d97706'} />
+              <UserCog size={22} color={settingsReady ? '#4f46e5' : '#d97706'} />
               {!settingsReady && (
                 <span style={{
                   position: 'absolute', top: -4, right: -4,
