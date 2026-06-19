@@ -13,15 +13,33 @@
 
 export const CHANGELOGS = [
   {
-    version: '2.13.1',
+    version: '2.16.0',
     changes: [
       {
-        heading: 'Pinch-to-zoom works in PDF previews',
-        detail: 'Pinch-to-zoom was switched off everywhere in 2.13.0 to stop accidental zooming while filling out a form. It now switches back on automatically whenever you\'re viewing a PDF — both the blank form viewer and the filled-form preview before sharing — so you can zoom in to check fine detail. It switches off again the moment you close the preview, so the rest of the app is unaffected.',
+        heading: 'Tap the version number to see the full changelog',
+        detail: 'The small "v2.x.x" label in the bottom-right corner is now tappable and opens the complete history of every update, not just the latest one — handy for checking what changed a few versions back.',
+      },
+    ],
+  },
+  {
+    version: '2.15.0',
+    changes: [
+      {
+        heading: 'Browse All Forms — collapsible categories',
+        detail: 'Pre-Work, Test & Verification, As-Built Forms, and Commissioning & Test Certificates now collapse under tappable headers and start closed, so the page is much shorter to scroll through. Searching by name or ID automatically opens any category with matching results.',
+      },
+    ],
+  },
+  {
+    version: '2.14.0',
+    changes: [
+      {
+        heading: 'Signature now visible in My Details',
+        detail: 'Opening My Details (⚙️) previously showed an empty box even after you\'d already saved a signature. Your saved signature now displays there properly, so you can check it at a glance and only need to draw a new one if you want to change it.',
       },
       {
-        heading: '"My Details" icon updated',
-        detail: 'The header button for your contractor, name, ISN ID and signature now shows a person icon instead of a generic gear, so it reads as your personal details rather than an app-wide settings screen.',
+        heading: 'Choose your default screen',
+        detail: 'My Details (⚙️) now has a "Default View on Open" option, so you can choose whether the app starts on "By Work Type" or "Browse All Forms" each time you open it.',
       },
     ],
   },

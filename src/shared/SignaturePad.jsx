@@ -16,6 +16,15 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const lastTime  = useRef(null)
   const lastWidth = useRef(2.5)
 
+  // Set just before this component calls onChange() itself (after drawing a
+  // stroke, or clearing). Lets the value-sync effect below distinguish a
+  // self-triggered update — where the canvas pixels are already correct, so
+  // reloading from the data URL would just overwrite freshly-drawn ink with
+  // a flattened, re-scaled copy of itself — from an externally-supplied
+  // value such as a signature loaded from saved user details, which DOES
+  // need to be painted onto the canvas since it starts out blank.
+  const skipNextSync = useRef(false)
+
   // ── Size canvas to physical pixels; re-size on orientation change ───
   useEffect(() => {
     const canvas = canvasRef.current
@@ -50,12 +59,49 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     return () => ro.disconnect()
   }, [])
 
-  // ── Clear when value is reset externally ──────────────────
+  // ── Sync canvas with an externally-supplied value ──────────────────────
+  // Runs whenever `value` changes:
+  //   • falsy value   → clear the canvas (e.g. "Clear All Saved Details", or
+  //                      a wizard resetting after a successful submission).
+  //   • truthy value  → paint the stored signature onto the canvas. This is
+  //                      the fix for the saved signature not appearing in
+  //                      My Details: previously this effect only ever
+  //                      cleared the canvas and never drew an incoming
+  //                      value, so a signature loaded from user prefs was
+  //                      invisible until the user re-signed.
+  // Skipped when the change originated from this component's own onChange
+  // call (see skipNextSync above) so a freshly-drawn stroke isn't
+  // immediately replaced by a flattened, re-scaled reload of itself.
   useEffect(() => {
+    if (skipNextSync.current) {
+      skipNextSync.current = false
+      return
+    }
+
     const canvas = canvasRef.current
-    if (!canvas || value) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+    if (!canvas) return
+
+    const cssW = canvas.clientWidth  || 750
+    const cssH = canvas.clientHeight || 160
+    const ctx  = canvas.getContext('2d')
+
+    if (!value) {
+      ctx.clearRect(0, 0, cssW, cssH)
+      return
+    }
+
+    const img = new Image()
+    img.onload = () => {
+      ctx.clearRect(0, 0, cssW, cssH)
+      // Scale-to-fit within the pad, preserving aspect ratio and centring —
+      // mirrors the logic used when this signature is later drawn onto a
+      // PDF (see drawSignature in pdfDrawUtils.js).
+      const scale = Math.min(cssW / img.width, cssH / img.height, 1)
+      const w = img.width  * scale
+      const h = img.height * scale
+      ctx.drawImage(img, (cssW - w) / 2, (cssH - h) / 2, w, h)
+    }
+    img.src = value
   }, [value])
 
   // ── Pointer helpers ───────────────────────────────────────
@@ -237,7 +283,10 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       minX - pad, minY - pad, tc.width, tc.height,
       0, 0, tc.width, tc.height
     )
-    // Export as PNG to preserve transparency — signature overlays a printed line
+    // Export as PNG to preserve transparency — signature overlays a printed line.
+    // Flag this as a self-triggered update so the value-sync effect above
+    // doesn't immediately reload and re-scale the image we just drew.
+    skipNextSync.current = true
     onChange(tc.toDataURL('image/png'))
   }
 
@@ -246,6 +295,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     if (!canvas) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+    skipNextSync.current = true
     onChange('')
   }
 

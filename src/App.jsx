@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Search, FileText, CheckCircle2, Circle, ExternalLink, Download,
-  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, UserCog } from 'lucide-react'
+  ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, Settings } from 'lucide-react'
 
 import PoleRecordWizard from './wizards/PoleWizard'
 import TransformerWizardApp from './wizards/TransformerWizard'
@@ -16,9 +16,8 @@ import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
-import { useAllowZoom } from './shared/useAllowZoom'
 
-const APP_VERSION = '2.13.1'
+const APP_VERSION = '2.16.0'
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
@@ -274,13 +273,64 @@ function WizardChoiceModal({ formId, onFillOut, onViewPdf, onClose }) {
   )
 }
 
+// ── CollapsibleCard ────────────────────────────────────────────────────────────
+// Reusable accordion card used for each category on the "Browse All Forms" page.
+function CollapsibleCard({ icon, title, count, expanded, onToggle, children }) {
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 text-left"
+      >
+        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+          {icon}{title}{count !== undefined && ` (${count})`}
+        </h2>
+        {expanded
+          ? <ChevronUp className="text-gray-400 flex-shrink-0" size={22} />
+          : <ChevronDown className="text-gray-400 flex-shrink-0" size={22} />}
+      </button>
+      {expanded && (
+        <div className="mt-4 animate-fadeIn">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork]     = useState('')
   const [searchTerm, setSearchTerm]         = useState('')
   const [showCommissioning, setShowCommissioning] = useState(false)
-  const [viewMode, setViewMode]             = useState('workType')
+  const [viewMode, setViewMode]             = useState(() => {
+    const v = getUserPrefs().defaultView
+    return v === 'allForms' ? 'allForms' : 'workType'
+  })
   const [formSearchTerm, setFormSearchTerm] = useState('')
+
+  // ── Browse All Forms — collapsible categories ─────────────────────────────
+  // All four categories (Pre-Work, Test & Verification, As-Built, Commissioning)
+  // start collapsed. While the user is actively searching (formSearchTerm
+  // non-empty), categories auto-expand so matching results aren't hidden
+  // behind a closed accordion. The bulk expand/collapse only fires once, on
+  // the empty↔non-empty transition (tracked via wasSearchingRef), so manually
+  // collapsing a category mid-search isn't immediately re-opened by the next
+  // keystroke.
+  const [expandedSections, setExpandedSections] = useState({
+    tailgate: false, testSheets: false, asBuilt: false, commissioning: false,
+  })
+  const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
+  const wasSearchingRef = useRef(false)
+  useEffect(() => {
+    const isSearching = formSearchTerm.trim() !== ''
+    if (isSearching && !wasSearchingRef.current) {
+      setExpandedSections({ tailgate: true, testSheets: true, asBuilt: true, commissioning: true })
+    } else if (!isSearching && wasSearchingRef.current) {
+      setExpandedSections({ tailgate: false, testSheets: false, asBuilt: false, commissioning: false })
+    }
+    wasSearchingRef.current = isSearching
+  }, [formSearchTerm])
 
   // ── Online / offline status ───────────────────────────────────────────────
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -304,11 +354,6 @@ const AsBuiltFormSelector = () => {
     blobUrl: null,
   })
 
-  // Allow pinch-to-zoom while the blank-form PDF viewer is open — locked the
-  // rest of the time so it can't be triggered accidentally while filling out
-  // a form (see useAllowZoom for details).
-  useAllowZoom(pdfViewer.open)
-
   const [activeWizard, setActiveWizard] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -326,6 +371,7 @@ const AsBuiltFormSelector = () => {
   const [installDismissed, setInstallDismissed] = useState(false)
   const [changelogQueue, setChangelogQueue] = useState([])
   const [changelogIdx, setChangelogIdx]     = useState(0)
+  const [showFullChangelog, setShowFullChangelog] = useState(false)
   const [updateReady, setUpdateReady]       = useState(false)
 
   const fetchRequestIdRef = useRef(0)
@@ -581,7 +627,7 @@ const AsBuiltFormSelector = () => {
                 flexShrink: 0, position: 'relative',
               }}
             >
-              <UserCog size={22} color={settingsReady ? '#4f46e5' : '#d97706'} />
+              <Settings size={22} color={settingsReady ? '#4f46e5' : '#d97706'} />
               {!settingsReady && (
                 <span style={{
                   position: 'absolute', top: -4, right: -4,
@@ -765,10 +811,12 @@ const AsBuiltFormSelector = () => {
             </div>
 
             {showTailgate && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FileText className="text-orange-600" size={24} />Pre-Work Risk Assessment
-                </h2>
+              <CollapsibleCard
+                icon={<FileText className="text-orange-600" size={24} />}
+                title="Pre-Work Risk Assessment"
+                expanded={expandedSections.tailgate}
+                onToggle={() => toggleSection('tailgate')}
+              >
                 <div onClick={() => handleFormClick(`forms/${tailgateForm.fileName}`, tailgateForm.name)}
                   className="p-4 border-2 border-orange-200 bg-orange-50 rounded-lg cursor-pointer hover:bg-orange-100 hover:border-orange-300 active:bg-orange-200 transition-all">
                   <div className="flex items-start gap-3">
@@ -782,14 +830,17 @@ const AsBuiltFormSelector = () => {
                     <ExternalLink className="flex-shrink-0 text-orange-600" size={18} />
                   </div>
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
 
             {filteredTestSheets.length > 0 && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FileText className="text-purple-600" size={24} />Test & Verification Sheets ({filteredTestSheets.length})
-                </h2>
+              <CollapsibleCard
+                icon={<FileText className="text-purple-600" size={24} />}
+                title="Test & Verification Sheets"
+                count={filteredTestSheets.length}
+                expanded={expandedSections.testSheets}
+                onToggle={() => toggleSection('testSheets')}
+              >
                 <div className="grid md:grid-cols-2 gap-3">
                   {filteredTestSheets.map(([id, sheet]) => (
                     <div key={id} onClick={() => handleFormClick(`forms/${sheet.fileName}`, sheet.name)}
@@ -807,13 +858,16 @@ const AsBuiltFormSelector = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
 
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="text-indigo-600" size={24} />As-Built Forms ({allAsBuiltForms.length})
-              </h2>
+            <CollapsibleCard
+              icon={<FileText className="text-indigo-600" size={24} />}
+              title="As-Built Forms"
+              count={allAsBuiltForms.length}
+              expanded={expandedSections.asBuilt}
+              onToggle={() => toggleSection('asBuilt')}
+            >
               <div className="grid md:grid-cols-2 gap-3">
                 {allAsBuiltForms.map(form => (
                   <div key={form.id} onClick={() => form.hasLink && handleFormClick(form.url, form.name, form.id)}
@@ -837,12 +891,15 @@ const AsBuiltFormSelector = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
 
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="text-green-600" size={24} />Commissioning & Test Certificates ({allCommissioningForms.length})
-              </h2>
+            <CollapsibleCard
+              icon={<FileText className="text-green-600" size={24} />}
+              title="Commissioning & Test Certificates"
+              count={allCommissioningForms.length}
+              expanded={expandedSections.commissioning}
+              onToggle={() => toggleSection('commissioning')}
+            >
               <div className="grid md:grid-cols-2 gap-3">
                 {allCommissioningForms.map(cert => (
                   <div key={cert.id} onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name, cert.id)}
@@ -860,7 +917,7 @@ const AsBuiltFormSelector = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
           </>
         )}
       </div>
@@ -986,6 +1043,76 @@ const AsBuiltFormSelector = () => {
         )
       })()}
 
+      {/* ── Full Changelog Modal (opened by tapping the version number) ────── */}
+      {/* Unlike the "What's New" modal above, this shows every released      */}
+      {/* version at once and has no effect on the "seen" tracking — it's a   */}
+      {/* read-only reference, not tied to the unseen-updates queue.          */}
+      {showFullChangelog && (
+        <div
+          onClick={() => setShowFullChangelog(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1.5rem',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white', borderRadius: 20, padding: '1.75rem',
+              maxWidth: 480, width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              maxHeight: '80dvh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: '1.25rem', flexShrink: 0,
+            }}>
+              <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>Changelog</h2>
+              <button onClick={() => setShowFullChangelog(false)} style={{
+                background: '#f3f4f6', border: 'none', borderRadius: 8,
+                padding: 6, cursor: 'pointer', display: 'flex',
+              }}>
+                <X size={18} color="#666" />
+              </button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+              {CHANGELOGS.map((batch, bi) => (
+                <div
+                  key={batch.version}
+                  style={{
+                    marginTop: bi === 0 ? 0 : '1.5rem',
+                    paddingTop: bi === 0 ? 0 : '1.25rem',
+                    borderTop: bi === 0 ? 'none' : '1px solid #f0f0f0',
+                  }}
+                >
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    background: '#eef2ff', color: '#4f46e5',
+                    fontWeight: 800, fontSize: '0.75rem',
+                    borderRadius: 20, padding: '3px 11px',
+                    marginBottom: '0.75rem',
+                  }}>
+                    v{batch.version}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {batch.changes.map((item, i) => (
+                      <div key={i} style={{ borderLeft: '3px solid #4f46e5', paddingLeft: '0.875rem' }}>
+                        <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>{item.heading}</div>
+                        {item.detail && <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>{item.detail}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Update available banner ───────────────────────────────────────── */}
       {updateReady && (
         <div style={{
@@ -1076,16 +1203,21 @@ const AsBuiltFormSelector = () => {
       )}
 
       {/* ── Version Number ────────────────────────────────────────────────── */}
-      <div style={{
-        position: 'fixed', bottom: '12px', right: '12px',
-        fontSize: '11px', color: '#6b7280',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: '4px 8px', borderRadius: '6px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        userSelect: 'none', zIndex: 1000,
-      }}>
+      <button
+        onClick={() => setShowFullChangelog(true)}
+        title="View changelog"
+        style={{
+          position: 'fixed', bottom: '12px', right: '12px',
+          fontSize: '11px', color: '#6b7280',
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: '4px 8px', borderRadius: '6px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          userSelect: 'none', zIndex: 1000,
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
         v{APP_VERSION}
-      </div>
+      </button>
     </div>
   )
 }
