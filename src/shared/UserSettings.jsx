@@ -1,12 +1,12 @@
 /**
  * UserSettings — dedicated settings page for persistent user details.
  *
- * Stores: contractor name, printed name, signature.
+ * Stores: contractor name, printed name, ISN ID, competency cert no, signature.
  * These are loaded silently into every wizard and written to the PDF
  * without the user being asked each time.
  */
 import { useState, useEffect } from 'react'
-import { CheckCircle2, User, Building2, PenLine, Trash2, FileText } from 'lucide-react'
+import { CheckCircle2, User, Building2, PenLine, Trash2, FileText, Hash, Settings, Briefcase, List } from 'lucide-react'
 import { getUserPrefs, saveUserPref } from './userPrefs'
 import { SignaturePad } from './SignaturePad'
 import { APP_ACCENT } from './constants'
@@ -14,8 +14,10 @@ import { APP_ACCENT } from './constants'
 export function UserSettings({ onClose }) {
   const [contractor, setContractor] = useState('')
   const [namePrint,  setNamePrint]  = useState('')
+  const [isnId,      setIsnId]      = useState('')
   const [certNo,     setCertNo]     = useState('')
   const [signed,     setSigned]     = useState('')
+  const [defaultView, setDefaultView] = useState('workType')
   const [saved,      setSaved]      = useState(false)
 
   // Load existing prefs on mount
@@ -23,15 +25,19 @@ export function UserSettings({ onClose }) {
     const prefs = getUserPrefs()
     setContractor(prefs.contractor || '')
     setNamePrint(prefs.namePrint   || '')
+    setIsnId(prefs.isnId           || '')
     setCertNo(prefs.certNo         || '')
     setSigned(prefs.signed         || '')
+    setDefaultView(prefs.defaultView || 'workType')
   }, [])
 
   const handleSave = () => {
-    saveUserPref('contractor', contractor)
-    saveUserPref('namePrint',  namePrint)
-    saveUserPref('certNo',     certNo)
-    saveUserPref('signed',     signed)
+    saveUserPref('contractor',  contractor)
+    saveUserPref('namePrint',   namePrint)
+    saveUserPref('isnId',       isnId)
+    saveUserPref('certNo',      certNo)
+    saveUserPref('signed',      signed)
+    saveUserPref('defaultView', defaultView)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -40,10 +46,12 @@ export function UserSettings({ onClose }) {
     if (!window.confirm('Clear all saved user details?')) return
     saveUserPref('contractor', '')
     saveUserPref('namePrint',  '')
+    saveUserPref('isnId',      '')
     saveUserPref('certNo',     '')
     saveUserPref('signed',     '')
     setContractor('')
     setNamePrint('')
+    setIsnId('')
     setCertNo('')
     setSigned('')
   }
@@ -114,7 +122,7 @@ export function UserSettings({ onClose }) {
         }}>
           <strong>ℹ️ How this works</strong><br />
           Save your details here once. Every form wizard will automatically
-          fill in your contractor, name, and signature — you won't be asked again.
+          fill in your contractor, name, ISN ID, and signature — you won't be asked again.
         </div>
 
         {/* Contractor */}
@@ -151,6 +159,23 @@ export function UserSettings({ onClose }) {
           />
         </div>
 
+        {/* ISN ID */}
+        <div style={section}>
+          <label style={lbl}>
+            <Hash size={14} />
+            ISN ID Number
+          </label>
+          <input
+            type="text"
+            value={isnId}
+            onChange={e => setIsnId(e.target.value)}
+            placeholder="e.g. ISN12345"
+            style={inp}
+            onFocus={e => e.target.style.borderColor = APP_ACCENT}
+            onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}
+          />
+        </div>
+
         {/* Competency Cert No */}
         <div style={section}>
           <label style={lbl}>
@@ -180,6 +205,44 @@ export function UserSettings({ onClose }) {
             color: '#9ca3af', textAlign: 'center',
           }}>
             {signed ? '✓ Signature saved' : 'Draw your signature above'}
+          </div>
+        </div>
+
+        {/* Default View */}
+        <div style={section}>
+          <label style={lbl}>
+            <Settings size={14} />
+            Default View on Open
+          </label>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10, lineHeight: 1.4 }}>
+            Choose which screen the app shows first when you open it.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { val: 'workType', label: 'By Work Type',     icon: Briefcase },
+              { val: 'allForms', label: 'Browse All Forms', icon: List },
+            ].map(({ val, label, icon: Icon }) => {
+              const sel = defaultView === val
+              return (
+                <button
+                  key={val}
+                  onClick={() => setDefaultView(val)}
+                  style={{
+                    flex: 1, padding: '12px 8px', borderRadius: 10,
+                    border: `2px solid ${sel ? APP_ACCENT : '#e5e7eb'}`,
+                    background: sel ? APP_ACCENT : '#fff',
+                    color: sel ? '#fff' : '#374151',
+                    fontFamily: 'inherit', fontSize: 13,
+                    fontWeight: sel ? 700 : 600, cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <Icon size={18} />
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </div>
 

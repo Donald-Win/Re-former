@@ -1,53 +1,86 @@
 /**
- * projectStore — lightweight localStorage store for saved projects.
+ * projectStore — saved project storage for re-former.
  *
- * A "project" is the set of job identifier fields that stay the same
- * across multiple forms for the same job:
- *   projectName, npJobNumber, pcoWONo, ciwrNo
+ * Storage backend: IndexedDB via idb-keyval.
+ * Projects contain no large blobs, but using IndexedDB keeps the storage
+ * layer consistent and avoids localStorage quota pressure from other stores.
  *
- * Projects are saved explicitly by the user (unlike job history which
- * auto-saves on step advance). Up to MAX_PROJECTS can be stored.
+ * All public functions are async (return Promises).
+ *
+ * A "project" stores:
+ *   id, projectName, npJobNumber, pcoWONo, ciwrNo, savedAt
  */
 
-const STORAGE_KEY  = 're-former-projects'
+import { createStore, get, set, del, keys } from 'idb-keyval'
+
+const projectIdb = createStore('re-former-projects', 'projects')
+
 const MAX_PROJECTS = 20
 
-export const PROJECT_FIELDS = ['projectName', 'npJobNumber', 'pcoWONo', 'ciwrNo']
+// ── One-time migration from old localStorage projects ─────────────────────────
+// Uses a Promise rather than a boolean flag so concurrent callers all await the
+// same in-flight migration rather than each believing it's already done.
+// Without this, two simultaneous callers (e.g. ProjectPicker opening while a
+// wizard is already mounted) could both pass the boolean check, then interleave
+// their writes against the half-migrated IndexedDB store.
+let _migrationPromise = null
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function load() {
+async function _runMigration() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  } catch {
-    return []
+    const OLD_KEY = 're-former-projects'
+    const raw = localStorage.getItem(OLD_KEY)
+    if (!raw) return
+    const old = JSON.parse(raw)
+    if (!Array.isArray(old) || old.length === 0) { localStorage.removeItem(OLD_KEY); return }
+
+    const existingKeys = await keys(projectIdb)
+    for (const project of old) {
+      if (!project.id) continue
+      if (existingKeys.includes(project.id)) continue
+      await set(project.id, project, projectIdb)
+    }
+    localStorage.removeItem(OLD_KEY)
+    console.log(`[projectStore] Migrated ${old.length} legacy project(s) to IndexedDB`)
+  } catch (err) {
+    console.warn('[projectStore] Migration failed (non-critical):', err)
   }
 }
 
-function save(projects) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-  } catch { /* storage full */ }
+function migrateFromLocalStorage() {
+  if (!_migrationPromise) {
+    _migrationPromise = _runMigration()
+  }
+  return _migrationPromise
 }
+
+migrateFromLocalStorage()
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeId() {
   return 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Public API — all async ────────────────────────────────────────────────────
 
-/** Returns all saved projects, newest first. */
-export function listProjects() {
-  return load()
+/**
+ * Returns all saved projects, newest first.
+ */
+export async function listProjects() {
+  await migrateFromLocalStorage()
+  const allKeys = await keys(projectIdb)
+  const projects = await Promise.all(allKeys.map(k => get(k, projectIdb)))
+  return projects
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt))
 }
 
 /**
  * Saves a new project or updates an existing one (matched by id).
  * Returns the saved project object.
  */
-export function saveProject({ id, projectName, npJobNumber, pcoWONo, ciwrNo }) {
-  const projects = load()
-  const existing = id ? projects.findIndex(p => p.id === id) : -1
+export async function saveProject({ id, projectName, npJobNumber, pcoWONo, ciwrNo }) {
+  await migrateFromLocalStorage()
 
   const entry = {
     id:          id || makeId(),
@@ -58,28 +91,36 @@ export function saveProject({ id, projectName, npJobNumber, pcoWONo, ciwrNo }) {
     savedAt:     new Date().toISOString(),
   }
 
-  if (existing >= 0) {
-    projects[existing] = entry
-  } else {
-    projects.unshift(entry)
+  await set(entry.id, entry, projectIdb)
+
+  // Enforce MAX_PROJECTS limit (oldest removed first)
+  const allKeys = await keys(projectIdb)
+  if (allKeys.length > MAX_PROJECTS) {
+    const all = await Promise.all(allKeys.map(k => get(k, projectIdb)))
+    const sorted = all
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.savedAt) - new Date(b.savedAt))
+    const toDelete = sorted.slice(0, all.length - MAX_PROJECTS)
+    await Promise.all(toDelete.map(p => del(p.id, projectIdb)))
   }
 
-  save(projects.slice(0, MAX_PROJECTS))
   return entry
 }
 
-/** Deletes a project by id. */
-export function deleteProject(id) {
-  save(load().filter(p => p.id !== id))
+/**
+ * Deletes a project by id.
+ */
+export async function deleteProject(id) {
+  await del(id, projectIdb)
 }
 
-/** Returns a display label for a project. */
+// ── Display helpers (sync — operate on already-fetched project objects) ───────
+
 export function projectLabel(p) {
   const parts = [p.npJobNumber, p.projectName].filter(Boolean)
   return parts.join(' — ') || 'Unnamed project'
 }
 
-/** Returns a subtitle line for a project. */
 export function projectSub(p) {
   const parts = [p.pcoWONo && `W/O ${p.pcoWONo}`, p.ciwrNo && `CIWR ${p.ciwrNo}`].filter(Boolean)
   return parts.join(' · ')

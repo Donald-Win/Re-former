@@ -16,6 +16,15 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
   const lastTime  = useRef(null)
   const lastWidth = useRef(2.5)
 
+  // Set just before this component calls onChange() itself (after drawing a
+  // stroke, or clearing). Lets the value-sync effect below distinguish a
+  // self-triggered update — where the canvas pixels are already correct, so
+  // reloading from the data URL would just overwrite freshly-drawn ink with
+  // a flattened, re-scaled copy of itself — from an externally-supplied
+  // value such as a signature loaded from saved user details, which DOES
+  // need to be painted onto the canvas since it starts out blank.
+  const skipNextSync = useRef(false)
+
   // ── Size canvas to physical pixels; re-size on orientation change ───
   useEffect(() => {
     const canvas = canvasRef.current
@@ -50,12 +59,49 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     return () => ro.disconnect()
   }, [])
 
-  // ── Clear when value is reset externally ──────────────────
+  // ── Sync canvas with an externally-supplied value ──────────────────────
+  // Runs whenever `value` changes:
+  //   • falsy value   → clear the canvas (e.g. "Clear All Saved Details", or
+  //                      a wizard resetting after a successful submission).
+  //   • truthy value  → paint the stored signature onto the canvas. This is
+  //                      the fix for the saved signature not appearing in
+  //                      My Details: previously this effect only ever
+  //                      cleared the canvas and never drew an incoming
+  //                      value, so a signature loaded from user prefs was
+  //                      invisible until the user re-signed.
+  // Skipped when the change originated from this component's own onChange
+  // call (see skipNextSync above) so a freshly-drawn stroke isn't
+  // immediately replaced by a flattened, re-scaled reload of itself.
   useEffect(() => {
+    if (skipNextSync.current) {
+      skipNextSync.current = false
+      return
+    }
+
     const canvas = canvasRef.current
-    if (!canvas || value) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+    if (!canvas) return
+
+    const cssW = canvas.clientWidth  || 750
+    const cssH = canvas.clientHeight || 160
+    const ctx  = canvas.getContext('2d')
+
+    if (!value) {
+      ctx.clearRect(0, 0, cssW, cssH)
+      return
+    }
+
+    const img = new Image()
+    img.onload = () => {
+      ctx.clearRect(0, 0, cssW, cssH)
+      // Scale-to-fit within the pad, preserving aspect ratio and centring —
+      // mirrors the logic used when this signature is later drawn onto a
+      // PDF (see drawSignature in pdfDrawUtils.js).
+      const scale = Math.min(cssW / img.width, cssH / img.height, 1)
+      const w = img.width  * scale
+      const h = img.height * scale
+      ctx.drawImage(img, (cssW - w) / 2, (cssH - h) / 2, w, h)
+    }
+    img.src = value
   }, [value])
 
   // ── Pointer helpers ───────────────────────────────────────
@@ -148,8 +194,8 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
       ctx.fill()
     }
 
-    lastPos.current = null
-    lastMid.current = null
+    lastPos.current  = null
+    lastMid.current  = null
     hasMoved.current = false
 
     const dpr  = Math.min(window.devicePixelRatio || 1, 2)
@@ -157,32 +203,91 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     const H    = canvas.height
     const data = canvas.getContext('2d').getImageData(0, 0, W, H).data
 
-    // Tight bounding box crop
-    let minX = W, minY = H, maxX = 0, maxY = 0
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (data[(y * W + x) * 4 + 3] > 0) {
-          if (x < minX) minX = x
-          if (x > maxX) maxX = x
-          if (y < minY) minY = y
-          if (y > maxY) maxY = y
-        }
+    // ── Optimised tight bounding-box crop ─────────────────────────────────────
+    //
+    // PROBLEM WITH THE ORIGINAL:
+    // The original nested loop iterated every pixel (W × H) in a single pass,
+    // checking all four bounds simultaneously. On a 2× retina canvas this means
+    // scanning up to ~240,000 pixels (750 × 320 physical) on every stroke-end,
+    // entirely on the main thread, causing micro-stutters during signing.
+    //
+    // FIX — four directional sweeps, each with early exit:
+    //   1. Top→Bottom to find minY — stops at the first non-empty row.
+    //   2. Bottom→Top to find maxY — stops at the first non-empty row.
+    //   3. Left→Right within [minY, maxY] to find minX — narrows on each row.
+    //   4. Right→Left within [minY, maxY] to find maxX — narrows on each row.
+    //
+    // Each sweep steps through the raw ImageData buffer in increments of 4
+    // (one pixel), reading only the alpha byte (index +3). This avoids the
+    // `(y * W + x) * 4 + 3` multiply per pixel in favour of a single add.
+    //
+    // For a typical signature covering the centre third of the canvas the
+    // top/bottom sweeps terminate after ~10–20 rows; the left/right sweeps
+    // only scan the Y-band containing ink, skipping the blank margins entirely.
+
+    // ── 1. Find top edge (minY) ───────────────────────────────────────────────
+    // Outer label lets us break both loops at once when the first ink pixel is found.
+    let minY = -1
+    top: for (let y = 0; y < H; y++) {
+      // Start at the alpha byte of the first pixel on this row; step by 4
+      // (one pixel) to visit only alpha bytes across the full row width.
+      const rowAlphaStart = y * W * 4 + 3
+      const rowAlphaEnd   = rowAlphaStart + W * 4   // exclusive upper bound
+      for (let i = rowAlphaStart; i < rowAlphaEnd; i += 4) {
+        if (data[i] > 0) { minY = y; break top }
       }
     }
 
-    if (minX <= maxX && minY <= maxY) {
-      const pad = Math.round(4 * dpr)
-      const tc  = document.createElement('canvas')
-      tc.width  = maxX - minX + pad * 2
-      tc.height = maxY - minY + pad * 2
-      tc.getContext('2d').drawImage(
-        canvas,
-        minX - pad, minY - pad, tc.width, tc.height,
-        0, 0, tc.width, tc.height
-      )
-      // Export as PNG to preserve transparency — signature overlays a printed line
-      onChange(tc.toDataURL('image/png'))
+    // Canvas is completely blank — nothing to export
+    if (minY === -1) return
+
+    // ── 2. Find bottom edge (maxY) ────────────────────────────────────────────
+    let maxY = minY
+    bottom: for (let y = H - 1; y > minY; y--) {
+      const rowAlphaStart = y * W * 4 + 3
+      const rowAlphaEnd   = rowAlphaStart + W * 4
+      for (let i = rowAlphaStart; i < rowAlphaEnd; i += 4) {
+        if (data[i] > 0) { maxY = y; break bottom }
+      }
     }
+
+    // ── 3. Find left edge (minX) — only within the discovered Y band ──────────
+    // Inner loop terminates as soon as it beats the current best minX for
+    // this row, so the search window shrinks with each tighter candidate found.
+    let minX = W
+    for (let y = minY; y <= maxY; y++) {
+      const rowBase = y * W * 4
+      for (let x = 0; x < minX; x++) {
+        if (data[rowBase + x * 4 + 3] > 0) { minX = x; break }
+      }
+    }
+
+    // ── 4. Find right edge (maxX) — only within the discovered Y band ─────────
+    let maxX = 0
+    for (let y = minY; y <= maxY; y++) {
+      const rowBase = y * W * 4
+      for (let x = W - 1; x > maxX; x--) {
+        if (data[rowBase + x * 4 + 3] > 0) { maxX = x; break }
+      }
+    }
+
+    // Sanity check (should always pass given minY !== -1, but guard anyway)
+    if (minX > maxX || minY > maxY) return
+
+    const pad = Math.round(4 * dpr)
+    const tc  = document.createElement('canvas')
+    tc.width  = maxX - minX + pad * 2
+    tc.height = maxY - minY + pad * 2
+    tc.getContext('2d').drawImage(
+      canvas,
+      minX - pad, minY - pad, tc.width, tc.height,
+      0, 0, tc.width, tc.height
+    )
+    // Export as PNG to preserve transparency — signature overlays a printed line.
+    // Flag this as a self-triggered update so the value-sync effect above
+    // doesn't immediately reload and re-scale the image we just drew.
+    skipNextSync.current = true
+    onChange(tc.toDataURL('image/png'))
   }
 
   const handleClear = () => {
@@ -190,6 +295,7 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     if (!canvas) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.getContext('2d').clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+    skipNextSync.current = true
     onChange('')
   }
 

@@ -1,11 +1,19 @@
 /**
  * sharePdf — shared share/save handler for all wizards.
+ * buildPdfFilename — sanitised filename builder.
  *
- * Shows an on-screen debug overlay when share fails so errors are
+ * In development the debug overlay is shown when share fails so errors are
  * visible on iPad without a connected Mac console.
+ * In production the overlay is suppressed — field users should never see
+ * raw stack traces.
  */
 
 function showDebug(lines) {
+  // Only expose the debug overlay during local development.
+  // import.meta.env.DEV is replaced with a boolean literal at build time,
+  // so this entire branch is dead-code-eliminated in production bundles.
+  if (!import.meta.env.DEV) return
+
   const existing = document.getElementById('__sharePdfDebug')
   if (existing) existing.remove()
   const el = document.createElement('div')
@@ -23,6 +31,21 @@ function showDebug(lines) {
   btn.onclick = () => el.remove()
   el.appendChild(btn)
   document.body.appendChild(el)
+}
+
+/**
+ * Build a sanitised PDF filename from the supplied parts.
+ *
+ * Each part has characters that are invalid in filenames stripped and is
+ * trimmed. Falsy or empty parts are filtered out before joining with ' - '.
+ * A '.pdf' extension is appended automatically.
+ *
+ * @param {...string} parts  e.g. (d.projectName, d.npJobNumber, d.oldPoleId, 'Pole Record')
+ * @returns {string}         e.g. "Pyes Pa Blitz - TC1234567 - Pole Record.pdf"
+ */
+export function buildPdfFilename(...parts) {
+  const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+  return parts.map(sanitise).filter(Boolean).join(' - ') + '.pdf'
 }
 
 export async function sharePdf(pdfBytes, filename, blobUrl, onSuccess) {
@@ -72,6 +95,6 @@ export async function sharePdf(pdfBytes, filename, blobUrl, onSuccess) {
   const url = blobUrl ?? URL.createObjectURL(blob)
   window.open(url, '_blank')
 
-  // Show debug overlay so we can see what happened
+  // Show debug overlay (dev only — no-op in production)
   showDebug(log)
 }

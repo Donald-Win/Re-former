@@ -1,6 +1,9 @@
 [build]
-  command = "cp manifest.netlify.json manifest.json && cp index.netlify.html index.html && npm run build -- --config vite.config.netlify.js"
+  # BASE_PATH=/ tells the merged vite.config.js to use base: '/' for Netlify.
+  # vite.config.netlify.js is no longer needed and can be deleted.
+  command = "cp manifest.netlify.json manifest.json && cp index.netlify.html index.html && BASE_PATH=/ npm run build"
   publish = "dist"
+  ignore = "[ \"$BRANCH\" = \"dev\" ]"
 
 [[redirects]]
   from = "/*"

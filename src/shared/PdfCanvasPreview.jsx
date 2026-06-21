@@ -2,35 +2,25 @@
  * PdfCanvasPreview
  *
  * Renders every page of a PDF (supplied as Uint8Array) onto stacked <canvas>
- * elements using pdf.js loaded from CDN.
+ * elements using pdfjs-dist, bundled locally via npm so the service worker
+ * can cache it for offline use.
  *
- * Fixes vs previous version:
- *   - No page cap — all pages rendered regardless of count
- *   - Container cleared before every new render; no canvas accumulation
- *   - In-flight renders cancelled when pdfBytes changes or component unmounts
- *   - Single pdf.js load — cached on window.pdfjsLib after first use
+ * Layout-shift fix
+ * ────────────────
+ * The original code set `width: 100%` on each canvas but left height
+ * unspecified. Before pdf.js rendered the page content, the canvas had zero
+ * intrinsic height, so the scroll container collapsed and then snapped to
+ * its full height when rendering completed — a jarring layout shift on every
+ * page, particularly visible on multi-page forms.
+ *
+ * The fix sets `aspect-ratio: <width> / <height>` on each canvas element
+ * immediately after the viewport is computed, before rendering begins.
+ * The browser can then reserve the correct vertical space as soon as the
+ * canvas is appended, so the container height is stable for the entire
+ * render duration regardless of how long each page takes to paint.
  */
 import { useEffect, useRef, useState } from 'react'
-
-const PDFJS_VERSION = '3.11.174'
-const PDFJS_CDN     = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`
-
-/** Load pdf.js once; subsequent calls return immediately. */
-function ensurePdfJs() {
-  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib)
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = `${PDFJS_CDN}/pdf.min.js`
-    script.onload = () => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `${PDFJS_CDN}/pdf.worker.min.js`
-      resolve(window.pdfjsLib)
-    }
-    script.onerror = () => reject(new Error('Failed to load pdf.js'))
-    document.head.appendChild(script)
-  })
-}
+import { pdfjsLib } from './pdfjsInit'
 
 export function PdfCanvasPreview({ pdfBytes }) {
   const containerRef  = useRef(null)
@@ -49,9 +39,6 @@ export function PdfCanvasPreview({ pdfBytes }) {
 
     ;(async () => {
       try {
-        const pdfjsLib = await ensurePdfJs()
-        if (cancelled) return
-
         // Pass a copy so pdf.js can't accidentally transfer/mutate our bytes
         const task = pdfjsLib.getDocument({ data: pdfBytes.slice() })
         pdfDoc = await task.promise
@@ -62,19 +49,31 @@ export function PdfCanvasPreview({ pdfBytes }) {
         for (let pageNum = 1; pageNum <= total; pageNum++) {
           if (cancelled) break
 
-          const page     = await pdfDoc.getPage(pageNum)
+          const page = await pdfDoc.getPage(pageNum)
           if (cancelled) { page.cleanup(); break }
 
           // Scale so the canvas width fills the container at ~1x on retina;
           // 1.5 gives a good balance of sharpness vs memory.
           const viewport = page.getViewport({ scale: 1.5 })
-          const canvas   = document.createElement('canvas')
-          canvas.width   = viewport.width
-          canvas.height  = viewport.height
 
-          // Fluid width; height scales proportionally via aspect-ratio trick
+          const canvas  = document.createElement('canvas')
+          canvas.width  = viewport.width
+          canvas.height = viewport.height
+
+          // ── Aspect-ratio reservation ──────────────────────────────────────
+          // Set aspect-ratio BEFORE appending to the DOM so the browser
+          // reserves the correct height immediately. Without this the canvas
+          // has zero intrinsic height until pdf.js finishes painting — causing
+          // the scroll container to collapse and snap on each page, producing
+          // a visible layout shift on multi-page documents.
+          //
+          // width: 100% makes the canvas fluid; aspect-ratio then drives the
+          // height proportionally. The explicit canvas.width / canvas.height
+          // values are the physical pixel dimensions (already scaled by 1.5),
+          // so the ratio is always exact regardless of the PDF page size.
           canvas.style.cssText = [
             'width: 100%',
+            `aspect-ratio: ${viewport.width} / ${viewport.height}`,
             'display: block',
             'margin-bottom: 8px',
             'border-radius: 4px',
@@ -113,7 +112,6 @@ export function PdfCanvasPreview({ pdfBytes }) {
         try { pdfDoc.destroy() } catch (_) {}
         pdfDoc = null
       }
-      // Wipe any partially-rendered canvases so the next render starts clean
       container.innerHTML = ''
     }
   }, [pdfBytes])

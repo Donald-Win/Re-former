@@ -13,10 +13,21 @@ export const wLbl = {
 
 export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
   const [focused, setFocused] = useState(false)
+  const isNumeric = type === 'number'
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
-      <input type={type} value={v || ''} onChange={e => set(e.target.value)}
+      <input
+        type={isNumeric ? 'text' : type}
+        inputMode={isNumeric ? 'numeric' : undefined}
+        pattern={isNumeric ? '[0-9]*' : undefined}
+        value={v || ''}
+        onChange={e => {
+          const raw = e.target.value
+          // Strip non-digits on desktop for numeric fields.
+          // Mobile keyboards are already constrained via inputMode/pattern.
+          set(isNumeric ? raw.replace(/[^0-9]/g, '') : raw)
+        }}
         placeholder={ph}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -70,7 +81,7 @@ export function WCB({ label, options, value, onChange, multi, accent = APP_ACCEN
   )
 }
 
-// Generic section header — pass accent to override colour (e.g. green for TX issued)
+// Generic section header — pass accent to override colour
 export function SectionHead({ label, sub, accent = APP_ACCENT }) {
   return (
     <div style={{ marginBottom: 10, marginTop: 4, paddingBottom: 5, borderBottom: `2px solid ${accent}30` }}>
