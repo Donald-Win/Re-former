@@ -17,7 +17,7 @@ export const APP_ID = 'reformer'
 
 const DEVICE_ID_KEY  = 'dcw-device-id'
 const AUTH_CACHE_KEY = 're-former-auth-cache'
-const POLL_MS        = 43_200_000 // 12 jours
+const POLL_MS        = 43_200_000 // 12 hours
 const CHECK_COOLDOWN = 120_000  // 2 minutes — minimum gap between visibility/online checks
 
 let _lastCheckedAt = 0  // timestamp of most recent check attempt (success OR failure)
@@ -229,3 +229,4 @@ window.__reformerAuth = {
     console.log('[re-former auth] Device ID and cache cleared. Reload to generate new ID.')
   },
 }
+

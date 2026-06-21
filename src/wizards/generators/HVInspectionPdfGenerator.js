@@ -15,24 +15,8 @@
  *
  * LAYOUT coordinates
  * ──────────────────
- * All Y values are top-origin (CSS / screen style), same as every other
- * re-former generator. The createPageDrawer helpers convert to pdf-lib
- * bottom-origin internally.
- *
- * Derivation formulae (from original pdf-lib bottom-origin coords):
- *
- *   Tick x   =  orig_col_centre_x − 5
- *               (shifts left-edge of stroke to align within the cell)
- *
- *   Tick Y   =  834 − orig_bottom_y
- *               (compensates for the +6 / −2 offsets in the old tick helper
- *               vs the ck() geometry in pdfDrawUtils)
- *
- *   Text Y   =  842 − orig_bottom_y − fontSize
- *               (standard bottom-origin → top-origin conversion for text)
- *
- *   Sig  Y   =  842 − (pdfY_bottom + imgHeight)
- *               (cssY is the TOP of the image in top-origin coords)
+ * Top-origin (CSS / screen style), same as every other re-former generator.
+ * See the derivation formulae next to the LAYOUT object below.
  *
  * Usage:
  *   import { generateHvPdf } from './generators/HVInspectionPdfGenerator'
@@ -65,7 +49,6 @@ import {
 // ── Template URL ──────────────────────────────────────────────────────────────
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/220F028A.pdf`
-
 
 // Maps Other-row index → the form-state key holding the user-typed label text.
 const OTHER_LABEL_KEYS = ['other1', 'other2', 'other3']
@@ -261,3 +244,4 @@ export async function generateHvPdf(d, photos = []) {
 
   return new Uint8Array(await pdfDoc.save())
 }
+

@@ -26,32 +26,14 @@
  * (zero declared parameters).  All project generators declare at least one
  * parameter (`d`), so the heuristic is reliable for this codebase.
  *
- * Web Worker — Comlink scaffold
- * ──────────────────────────────
- * appendPhotosToPdf now uses OffscreenCanvas/createImageBitmap when running
- * inside a worker, so the full generation pipeline is worker-safe.
- *
- * To offload generation off the main thread:
- *   1. npm i comlink
- *   2. Use src/workers/pdfGen.worker.js (ready-to-use scaffold).
- *   3. In the wizard, wrap the worker call in a thunk and pass it here:
- *
- *       import PdfGenWorker from '../workers/pdfGen.worker.js?worker'
- *       import * as Comlink from 'comlink'
- *
- *       // Create once at module scope:
- *       const _w  = new PdfGenWorker()
- *       const api = Comlink.wrap(_w)
- *
- *       // Thunk passed to the hook (d and photos come from triggerGenerate):
- *       const genThunk = (d, photos) =>
- *         api.generate('ElecEquipPdfGenerator', 'generateEEPdf', d, photos)
- *
- *       usePdfGenerate(genThunk)
- *
- *   Note: when routing through a worker the function receives (d, photos)
- *   directly (length > 0), so the hook treats it as a direct generator and
- *   calls it normally — no changes needed below.
+ * Web Worker — off-main-thread generation (optional, currently unused)
+ * ──────────────────────────────────────────────────────────────────────
+ * appendPhotosToPdf already supports running inside a worker (it falls back
+ * to OffscreenCanvas/createImageBitmap when `document` is undefined), so the
+ * generation pipeline is worker-safe whenever it's needed. See
+ * src/workers/pdfGen.worker.js for the ready-to-use Comlink scaffold and its
+ * usage example — the worker-backed thunk takes (d, photos) directly, so the
+ * hook treats it as pattern (a) above (a direct generator), not (b).
  *
  * Race-condition guard
  * ────────────────────
@@ -208,3 +190,4 @@ export function usePdfGenerate(generatorFn) {
     buildPreviewContent,
   }
 }
+

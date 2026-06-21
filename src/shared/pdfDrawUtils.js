@@ -21,10 +21,20 @@
  * ───────────────
  *  t           — plain text at (x, y)
  *  tc          — horizontally centred text within a field
+ *  tr          — right-aligned text, ending flush at a given x position
  *  ck          — two-line checkmark / tick (matches the hand-drawn ink style)
  *  wrapText    — break a string into lines that fit within maxWidth pts
  *  tWrap       — draw multi-line wrapped text starting at (x, y)
  *  drawSignature — embed a base64 PNG/JPEG signature image, auto-scaled
+ *
+ * Coordinate convention
+ * ──────────────────────
+ * Every `cssY` parameter below is TOP-ORIGIN (like CSS / screen coords),
+ * converted internally to pdf-lib's bottom-origin space using `pageHeight`.
+ * This is also the exact convention produced by the CoordOverlay calibration
+ * tool (src/shared/CoordOverlay.jsx) — coordinates read from that tool can be
+ * pasted directly into a LAYOUT object's `y` / `cssY` field with no further
+ * conversion.
  */
 
 import { rgb } from 'pdf-lib'
@@ -174,6 +184,48 @@ export function tc(
   const str = String(text)
   const w = font.widthOfTextAtSize(str, size)
   const x = fieldLeft + fieldWidth / 2 - w / 2
+  page.drawText(str, {
+    x,
+    y: pageHeight - cssY - size,
+    size,
+    font,
+    color,
+  })
+}
+
+/**
+ * Draw text right-aligned, ending flush against `fieldRight`.
+ *
+ * Use this for values that should line up against a right-hand edge — e.g.
+ * a column of numbers, or a label that must finish just before a fixed
+ * position on the form. Pairs with `t` (left) and `tc` (centred) so any
+ * field found while calibrating can use whichever alignment matches the
+ * printed form — the CoordOverlay tool's "Right" mode produces a snippet
+ * ready to paste directly into the `fieldRight` / `y` shape this expects.
+ *
+ * @param {PDFPage}  page
+ * @param {number}   fieldRight - Right edge the text should finish flush against
+ * @param {number}   cssY
+ * @param {*}        text
+ * @param {number}   [size=8.5]
+ * @param {PDFFont}  font
+ * @param {RGB}      [color]
+ * @param {number}   [pageHeight=A4_HEIGHT]
+ */
+export function tr(
+  page,
+  fieldRight,
+  cssY,
+  text,
+  size = 8.5,
+  font,
+  color = DEFAULT_INK,
+  pageHeight = A4_HEIGHT,
+) {
+  if (text === null || text === undefined || text === '') return
+  const str = String(text)
+  const w = font.widthOfTextAtSize(str, size)
+  const x = fieldRight - w
   page.drawText(str, {
     x,
     y: pageHeight - cssY - size,
@@ -427,6 +479,8 @@ export async function drawSignature(
  * Usage:
  *   const draw = createPageDrawer(page, font, BLUE, 842)
  *   draw.t(50, 100, 'Hello')
+ *   draw.tc(50, 200, 100, 'Centred')
+ *   draw.tr(550, 100, 'Right-aligned')
  *   draw.ck(135, 220, isChecked)
  *   draw.tWrap(50, 300, longComment, 400)
  *
@@ -434,7 +488,7 @@ export async function drawSignature(
  * @param {PDFFont}  font
  * @param {RGB}      [color=DEFAULT_INK]
  * @param {number}   [pageHeight=A4_HEIGHT]
- * @returns {{ t, tc, ck, circ, tWrap, wrapText }}
+ * @returns {{ t, tc, tr, ck, circ, tWrap, wrapText }}
  */
 export function createPageDrawer(page, font, color = DEFAULT_INK, pageHeight = A4_HEIGHT) {
   return {
@@ -445,6 +499,10 @@ export function createPageDrawer(page, font, color = DEFAULT_INK, pageHeight = A
     /** Draw horizontally centred text */
     tc: (fieldLeft, fieldWidth, cssY, text, size = 8.5) =>
       tc(page, fieldLeft, fieldWidth, cssY, text, size, font, color, pageHeight),
+
+    /** Draw right-aligned text, ending flush at fieldRight */
+    tr: (fieldRight, cssY, text, size = 8.5) =>
+      tr(page, fieldRight, cssY, text, size, font, color, pageHeight),
 
     /** Draw a checkmark */
     ck: (x, cssY, show, thickness = 1.5) =>
