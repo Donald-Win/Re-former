@@ -12,25 +12,34 @@
  *   onSelect  fn({ projectName, npJobNumber, pcoWONo, ciwrNo })
  *   accent    string
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, FolderOpen, Trash2, X, ChevronRight, Check, Pencil } from 'lucide-react'
 import { listProjects, saveProject, deleteProject, projectLabel, projectSub } from './projectStore'
 import { APP_ACCENT } from './constants'
 import { wInp, wLbl } from './WizardInputs'
 
-// Sheet chrome — extracted as a top-level constant so it never re-mounts on re-render
-const sheetBackdrop = (onClose) => ({
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400,
-  onClick: onClose,
-})
-
 export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) {
-  const [mode, setMode]         = useState('menu')
-  const [projects, setProjects] = useState([])
-  const [form, setForm]         = useState({ projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '' })
-  const [saved, setSaved]       = useState(false)
+  const [mode, setMode]             = useState('menu')
+  const [projects, setProjects]     = useState([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [form, setForm]             = useState({ projectName: '', npJobNumber: '', pcoWONo: '', ciwrNo: '' })
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [editingProject, setEditingProject] = useState(null) // project being edited
+  const [editingProject, setEditingProject] = useState(null)
+
+  const refreshProjects = useCallback(async () => {
+    setProjectsLoading(true)
+    try {
+      const all = await listProjects()
+      setProjects(all)
+    } catch (err) {
+      console.error('[ProjectPicker] Failed to load projects:', err)
+      setProjects([])
+    } finally {
+      setProjectsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -39,23 +48,29 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
       setSaved(false)
       setConfirmDelete(null)
       setEditingProject(null)
-      setProjects(listProjects())
+      refreshProjects()
     }
-  }, [open])
+  }, [open, refreshProjects])
 
   if (!open) return null
 
   const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
 
-  const handleSaveAndLoad = () => {
-    const entry = saveProject({ ...form, id: editingProject?.id })
-    setProjects(listProjects())
-    if (!editingProject) {
-      // New project - load it into the form
-      onSelect({ projectName: entry.projectName, npJobNumber: entry.npJobNumber, pcoWONo: entry.pcoWONo, ciwrNo: entry.ciwrNo })
+  const handleSaveAndLoad = async () => {
+    setSaving(true)
+    try {
+      const entry = await saveProject({ ...form, id: editingProject?.id })
+      await refreshProjects()
+      if (!editingProject) {
+        onSelect({ projectName: entry.projectName, npJobNumber: entry.npJobNumber, pcoWONo: entry.pcoWONo, ciwrNo: entry.ciwrNo })
+      }
+      setSaved(true)
+      setTimeout(() => { setSaved(false); setEditingProject(null); setMode('list') }, 900)
+    } catch (err) {
+      console.error('[ProjectPicker] Save failed:', err)
+    } finally {
+      setSaving(false)
     }
-    setSaved(true)
-    setTimeout(() => { setSaved(false); setEditingProject(null); setMode('list') }, 900)
   }
 
   const handleLoad = (project) => {
@@ -63,18 +78,21 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
     onClose()
   }
 
-  const handleDelete = (id) => {
-    deleteProject(id)
-    setProjects(listProjects())
+  const handleDelete = async (id) => {
+    try {
+      await deleteProject(id)
+      await refreshProjects()
+    } catch (err) {
+      console.error('[ProjectPicker] Delete failed:', err)
+    }
     setConfirmDelete(null)
   }
 
   const hasContent = form.projectName || form.npJobNumber || form.pcoWONo || form.ciwrNo
-  const npValid = !form.npJobNumber || /^(TC|WF|WA)\d{7}$/.test(form.npJobNumber)
-  const woValid = !form.pcoWONo || /^50\d{6}$/.test(form.pcoWONo)
-  const formValid = hasContent && npValid && woValid
+  const npValid    = !form.npJobNumber || /^(TC|WF|WA)\d{7}$/.test(form.npJobNumber)
+  const woValid    = !form.pcoWONo     || /^50\d{6}$/.test(form.pcoWONo)
+  const formValid  = hasContent && npValid && woValid
 
-  // Shared sheet layout — NOT a nested component (avoids unmount/remount on re-render)
   const sheetContainer = {
     position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 401,
     background: '#fff', borderRadius: '20px 20px 0 0',
@@ -136,7 +154,11 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
             <div>
               <div style={{ fontWeight: 700, fontSize: 15, color: '#374151' }}>Load Existing Project</div>
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                {projects.length === 0 ? 'No saved projects yet' : `${projects.length} saved project${projects.length !== 1 ? 's' : ''}`}
+                {projectsLoading
+                  ? 'Loading…'
+                  : projects.length === 0
+                    ? 'No saved projects yet'
+                    : `${projects.length} saved project${projects.length !== 1 ? 's' : ''}`}
               </div>
             </div>
           </button>
@@ -165,10 +187,10 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
               />
             </div>
 
-            {/* NP Job Number — TC/WF/WA + 7 digits */}
+            {/* NP Job Number */}
             {(() => {
-              const val = form.npJobNumber
-              const valid = /^(TC|WF|WA)\d{7}$/.test(val)
+              const val     = form.npJobNumber
+              const valid   = /^(TC|WF|WA)\d{7}$/.test(val)
               const invalid = val.length > 0 && !valid
               return (
                 <div style={{ marginBottom: 14 }}>
@@ -177,13 +199,8 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                     type="text"
                     value={val}
                     onChange={e => {
-                      // Auto-uppercase prefix, strip non-alphanumeric
                       let v = e.target.value.toUpperCase()
-                      // After 2 chars, only allow digits
-                      if (v.length > 2) {
-                        v = v.slice(0, 2) + v.slice(2).replace(/\D/g, '')
-                      }
-                      // Max 9 chars (2 prefix + 7 digits)
+                      if (v.length > 2) v = v.slice(0, 2) + v.slice(2).replace(/\D/g, '')
                       v = v.slice(0, 9)
                       setForm(p => ({ ...p, npJobNumber: v }))
                     }}
@@ -193,25 +210,19 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                     style={{
                       ...wInp,
                       borderColor: valid ? '#16a34a' : invalid ? '#dc2626' : '#ddd',
-                      background: valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
+                      background:  valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
                     }}
                   />
-                  {invalid && (
-                    <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
-                      Must be TC, WF or WA followed by 7 digits — e.g. TC1234567
-                    </div>
-                  )}
-                  {valid && (
-                    <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>
-                  )}
+                  {invalid && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Must be TC, WF or WA followed by 7 digits — e.g. TC1234567</div>}
+                  {valid   && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>}
                 </div>
               )
             })()}
 
-            {/* PCo W/O No. — 8 digits starting with 50 */}
+            {/* PCo W/O No. */}
             {(() => {
-              const val = form.pcoWONo
-              const valid = /^50\d{6}$/.test(val)
+              const val     = form.pcoWONo
+              const valid   = /^50\d{6}$/.test(val)
               const invalid = val.length > 0 && !valid
               return (
                 <div style={{ marginBottom: 14 }}>
@@ -221,7 +232,6 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                     inputMode="numeric"
                     value={val}
                     onChange={e => {
-                      // Digits only, max 8 chars
                       const v = e.target.value.replace(/\D/g, '').slice(0, 8)
                       setForm(p => ({ ...p, pcoWONo: v }))
                     }}
@@ -229,17 +239,11 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
                     style={{
                       ...wInp,
                       borderColor: valid ? '#16a34a' : invalid ? '#dc2626' : '#ddd',
-                      background: valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
+                      background:  valid ? '#f0fdf4' : invalid ? '#fef2f2' : '#fafafa',
                     }}
                   />
-                  {invalid && (
-                    <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
-                      Must be 8 digits starting with 50 — e.g. 50512345
-                    </div>
-                  )}
-                  {valid && (
-                    <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>
-                  )}
+                  {invalid && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Must be 8 digits starting with 50 — e.g. 50512345</div>}
+                  {valid   && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ Valid</div>}
                 </div>
               )
             })()}
@@ -258,17 +262,19 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
 
             <button
               onClick={handleSaveAndLoad}
-              disabled={!formValid}
+              disabled={!formValid || saving}
               style={{
                 width: '100%', padding: '15px', borderRadius: 14, border: 'none',
                 background: saved ? '#16a34a' : formValid ? accent : '#d1d5db',
                 color: '#fff', fontFamily: 'inherit', fontSize: 16,
-                fontWeight: 700, cursor: formValid ? 'pointer' : 'default',
+                fontWeight: 700, cursor: formValid && !saving ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 transition: 'background 0.2s',
               }}
             >
-              {saved ? <><Check size={20} /> {editingProject ? 'Saved!' : 'Saved & Loaded!'}</> : editingProject ? 'Save Changes' : 'Save & Load Project'}
+              {saved   ? <><Check size={20} /> {editingProject ? 'Saved!' : 'Saved & Loaded!'}</>
+               : saving ? 'Saving…'
+               : editingProject ? 'Save Changes' : 'Save & Load Project'}
             </button>
           </div>
         </div>
@@ -283,7 +289,9 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
       <div style={sheetContainer}>
         {renderHeader('Saved Projects', () => setMode('menu'))}
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 18px 32px' }}>
-          {projects.length === 0 ? (
+          {projectsLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 14 }}>Loading…</div>
+          ) : projects.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
               <FolderOpen size={40} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
               <div style={{ fontSize: 14 }}>No saved projects yet.</div>

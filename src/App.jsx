@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Search, FileText, CheckCircle2, Circle, ExternalLink, Download,
   ChevronDown, ChevronUp, List, Briefcase, X, Share2, PenLine, Settings } from 'lucide-react'
 
@@ -10,15 +10,16 @@ import ElecDistributionWizard from './wizards/ElecDistributionWizard'
 import LvBoxWizard from './wizards/LvBoxWizard'
 import ZoneSubWizard from './wizards/ZoneSubWizard'
 import HVInspectionWizard from './wizards/HVInspectionWizard'
+import DistributionTransformerWizard from './wizards/DistributionTransformerWizard'
 import { AuthGate } from './auth/AuthGate'
 import { UserSettings } from './shared/UserSettings'
 import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.12.1'
+const APP_VERSION = '2.16.0'
 
-// ── Wizard config ─────────────────────────────────────────────────────────────
+// ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
   '360S014EC': {
     label:     '360S014EC – As-built Pole Record',
@@ -69,6 +70,13 @@ const WIZARD_CONFIG = {
     accent:    '#4f46e5',
     Component: HVInspectionWizard,
   },
+  '220F028B': {
+    label:     '220F028B – Distribution Transformer Commissioning Certificate',
+    pdfName:   'Distribution Transformer Commissioning Certificate',
+    fileName:  '220F028B.pdf',
+    accent:    '#4f46e5',
+    Component: DistributionTransformerWizard,
+  },
   '360S014EF': {
     label:     '360S014EF – As-built Zone Substation Equipment Record',
     pdfName:   'As-built Zone Substation Equipment Record',
@@ -76,6 +84,121 @@ const WIZARD_CONFIG = {
     accent:    '#4f46e5',
     Component: ZoneSubWizard,
   },
+}
+
+// ── Static data (module-level — these never change at runtime) ─────────────────
+const formDefinitions = {
+  '360S014EA': { name: 'As-built Low Voltage Connection Record',                          fileName: '360S014EA.pdf' },
+  '360S014EB': { name: 'As-built Electrical Distribution Record',                         fileName: '360S014EB.pdf' },
+  '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
+  '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
+  '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
+  '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
+  '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
+  '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
+  '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record',   fileName: '360S014EI.pdf' },
+  '360S014EJ': { name: 'As-built Earth Installation and Test Record',                     fileName: '360S014EJ.pdf' },
+  '360S014EK': { name: 'As-built Streetlight Alteration/Installation Record',             fileName: '360S014EK.pdf' },
+  '360S014EL': { name: 'As-built Cable Test Report',                                      fileName: '360S014EL.pdf' },
+  '360S014EM': { name: 'As-built Requirements Checklist - Zone Substation',               fileName: '360S014EM.pdf' },
+  '360S014EO': { name: 'As-built Transformer ICP Change Form',                            fileName: '360S014EO.pdf' },
+  '360S014EP': { name: 'As-built Protection Relay Record',                                fileName: '360S014EP.pdf' },
+  '360S014EQ': { name: 'Commissioning Conductor Tension Method & Results/Run Form',       fileName: '360S014EQ.pdf' },
+  '360S014ER': { name: 'As-built Line Fault Indicator Record LM2SAT',                     fileName: '360S014ER.pdf' },
+  '360S014ES': { name: 'As-built Line Fault Indicator Record PM3SAT',                     fileName: '360S014ES.pdf' },
+  '360S014ET': { name: 'As-built Line Fault Indicator Record PM6SAT',                     fileName: '360S014ET.pdf' },
+  '360S014EU': { name: 'As-built Line Fault Indicator Record PM9SAT',                     fileName: '360S014EU.pdf' },
+  '360S014EV': { name: 'As-built Network Communications Equipment Record',                fileName: '360S014EV.pdf' },
+  '360S014EW': { name: 'As-built Remote Terminal Unit Equipment Record',                  fileName: '360S014EW.pdf' },
+  '360F019CA': { name: 'Drawing Approval Form',                                           fileName: '360F019CA.pdf' },
+  'MFG_CERT':  { name: 'Manufacturer Test Certificates',                                  fileName: null },
+}
+
+const commissioningCerts = {
+  '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works',                    fileName: '220F028A.pdf' },
+  '220F028B': { name: 'Distribution Transformer Commissioning Certificate',                           fileName: '220F028B.pdf' },
+  '220F028C': { name: 'LV Service Boxes, Cabinets and Subterranean Vaults Commissioning Certificate', fileName: '220F028C.pdf' },
+  '220F028D': { name: 'LV Link Boxes and Link Cabinets Test Certificate',                             fileName: '220F028D.pdf' },
+  '220F028E': { name: 'LV Customer Connection and Polarity Checks Test Certificate',                  fileName: '220F028E.pdf' },
+  '220F028F': { name: 'Overhead LV Distribution Circuit Test Certificate',                            fileName: '220F028F.pdf' },
+  '220F028G': { name: 'Underground LV Distribution Circuit Test Certificate',                         fileName: '220F028G.pdf' },
+}
+
+const tailgateForm = {
+  id:       'TAILGATE',
+  name:     'Pre-Work Risk Assessment (Tailgate) Form',
+  fileName: 'Tailgate.pdf',
+}
+
+const testSheets = {
+  'TSTSHT-0051-1': { name: 'LV Connection Testing Verification Sheet',                    fileName: '51-1_Test_Sheet.PDF' },
+  'DIST-TX-TEST':  { name: 'Distribution Transformer Test Verification Sheet',            fileName: 'Distribution_Transformer_Test_Verification_Check_Sheet.PDF' },
+  'HV-CABLE-TEST': { name: 'HV Cables Test Sheet',                                        fileName: 'HV_Cables_Test_Check_Sheet.PDF' },
+}
+
+const workTypeMapping = {
+  'LV Service Connection - OH and UG': {
+    forms: ['360S014EA'],
+    notes: 'New or Altered Connections',
+    commissioningCerts: ['220F028E'],
+  },
+  'LV Distribution Network': {
+    forms: ['360S014EB', '360S014EC', '360S014EL'],
+    notes: 'For UG Distribution Network (360S014EL)',
+    commissioningCerts: ['220F028F', '220F028G', '220F028C'],
+  },
+  'HV Distribution Network': {
+    forms: ['360S014EB', '360S014EC', '360S014EE', '360S014EL'],
+    notes: 'For UG Distribution Network (360S014EL)',
+    commissioningCerts: ['220F028A', '220F028F', '220F028G'],
+  },
+  'Poles': {
+    forms: ['360S014EC', '360S014EE'],
+    notes: 'Either As-Built Pole Record Form or Network Asset Design Register can be used',
+    commissioningCerts: [],
+  },
+  'Crossarms': { forms: ['360S014EC'], commissioningCerts: [] },
+  'Equipment (installation/changes)': {
+    forms: ['360S014EE', '360S014EH', '360S014EJ', 'MFG_CERT'],
+    notes: 'EE: Any equipment not specified elsewhere; EH: For Critical Spares; EJ: Where an Earth Test has been taken',
+    commissioningCerts: ['220F028A'],
+  },
+  'Zone Substations': {
+    forms: ['360S014EF', '360S014EE', '360S014EH', '360F019CA'],
+    notes: 'For any Engineering as-built drawings (360F019CA)',
+    commissioningCerts: ['220F028A'],
+  },
+  'Transformers - Overhead': {
+    forms: ['360S014EC', '360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
+    notes: 'Equip Record Card or Form (EG or EH)',
+    commissioningCerts: ['220F028A', '220F028B'],
+  },
+  'Transformers - Ground mount': {
+    forms: ['360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
+    notes: 'Equip Record Card or Form (EG or EH)',
+    commissioningCerts: ['220F028A', '220F028B'],
+  },
+  'LV Service Box': {
+    forms: ['360S014ED'],
+    notes: 'For boxes containing service fuses only',
+    commissioningCerts: ['220F028C'],
+  },
+  'LV Distribution Box': {
+    forms: ['360S014EC', '360S014ED', '360S014EJ'],
+    notes: 'For vertical disconnects (Pillar) use ED; For horizontal disconnects (Link) use ED',
+    commissioningCerts: ['220F028C', '220F028D'],
+  },
+  'Earth Test / Alterations':          { forms: ['360S014EJ'], commissioningCerts: [] },
+  'Streetlights':                      { forms: ['360S014EK'], commissioningCerts: [] },
+  'Protection Relays':                 { forms: ['360S014EP'], commissioningCerts: ['220F028A'] },
+  'Conductor Tension Works':           { forms: ['360S014EQ'], commissioningCerts: [] },
+  'Line Fault Indicators': {
+    forms: ['360S014ER', '360S014ES', '360S014ET', '360S014EU'],
+    notes: 'Select appropriate form based on indicator model',
+    commissioningCerts: [],
+  },
+  'Network Communications Equipment': { forms: ['360S014EV'], commissioningCerts: [] },
+  'Remote Terminal Unit (RTU)':        { forms: ['360S014EW'], commissioningCerts: [] },
 }
 
 // ── WizardChoiceModal ─────────────────────────────────────────────────────────
@@ -150,21 +273,89 @@ function WizardChoiceModal({ formId, onFillOut, onViewPdf, onClose }) {
   )
 }
 
+// ── CollapsibleCard ────────────────────────────────────────────────────────────
+// Reusable accordion card used for each category on the "Browse All Forms" page.
+function CollapsibleCard({ icon, title, count, expanded, onToggle, children }) {
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 text-left"
+      >
+        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+          {icon}{title}{count !== undefined && ` (${count})`}
+        </h2>
+        {expanded
+          ? <ChevronUp className="text-gray-400 flex-shrink-0" size={22} />
+          : <ChevronDown className="text-gray-400 flex-shrink-0" size={22} />}
+      </button>
+      {expanded && (
+        <div className="mt-4 animate-fadeIn">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 const AsBuiltFormSelector = () => {
   const [selectedWork, setSelectedWork]     = useState('')
   const [searchTerm, setSearchTerm]         = useState('')
   const [showCommissioning, setShowCommissioning] = useState(false)
-  const [viewMode, setViewMode]             = useState('workType')
+  const [viewMode, setViewMode]             = useState(() => {
+    const v = getUserPrefs().defaultView
+    return v === 'allForms' ? 'allForms' : 'workType'
+  })
   const [formSearchTerm, setFormSearchTerm] = useState('')
-  const [pdfViewerOpen, setPdfViewerOpen]   = useState(false)
-  const [currentPdfUrl, setCurrentPdfUrl]   = useState('')
-  const [currentPdfName, setCurrentPdfName] = useState('')
-  const [pdfBytes, setPdfBytes]             = useState(null)
-  const [pdfBlobUrl, setPdfBlobUrl]         = useState(null)
+
+  // ── Browse All Forms — collapsible categories ─────────────────────────────
+  // All four categories (Pre-Work, Test & Verification, As-Built, Commissioning)
+  // start collapsed. While the user is actively searching (formSearchTerm
+  // non-empty), categories auto-expand so matching results aren't hidden
+  // behind a closed accordion. The bulk expand/collapse only fires once, on
+  // the empty↔non-empty transition (tracked via wasSearchingRef), so manually
+  // collapsing a category mid-search isn't immediately re-opened by the next
+  // keystroke.
+  const [expandedSections, setExpandedSections] = useState({
+    tailgate: false, testSheets: false, asBuilt: false, commissioning: false,
+  })
+  const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
+  const wasSearchingRef = useRef(false)
+  useEffect(() => {
+    const isSearching = formSearchTerm.trim() !== ''
+    if (isSearching && !wasSearchingRef.current) {
+      setExpandedSections({ tailgate: true, testSheets: true, asBuilt: true, commissioning: true })
+    } else if (!isSearching && wasSearchingRef.current) {
+      setExpandedSections({ tailgate: false, testSheets: false, asBuilt: false, commissioning: false })
+    }
+    wasSearchingRef.current = isSearching
+  }, [formSearchTerm])
+
+  // ── Online / offline status ───────────────────────────────────────────────
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true)
+    const goOffline = () => setIsOnline(false)
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
+
+  // ── PDF viewer state — grouped into one object ────────────────────────────
+  const [pdfViewer, setPdfViewer] = useState({
+    open:    false,
+    url:     '',
+    name:    '',
+    bytes:   null,
+    blobUrl: null,
+  })
 
   const [activeWizard, setActiveWizard] = useState(null)
-  const [showSettings, setShowSettings]   = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   const [settingsReady, setSettingsReady] = useState(() => {
     const prefs = getUserPrefs()
@@ -180,7 +371,10 @@ const AsBuiltFormSelector = () => {
   const [installDismissed, setInstallDismissed] = useState(false)
   const [changelogQueue, setChangelogQueue] = useState([])
   const [changelogIdx, setChangelogIdx]     = useState(0)
+  const [showFullChangelog, setShowFullChangelog] = useState(false)
   const [updateReady, setUpdateReady]       = useState(false)
+
+  const fetchRequestIdRef = useRef(0)
 
   // ── Service worker update detection ──────────────────────────────────────
   useEffect(() => {
@@ -253,235 +447,155 @@ const AsBuiltFormSelector = () => {
     }
   }
 
-  const handleInstall = async () => {
+  const handleInstall = useCallback(async () => {
     if (!installPrompt) return
     installPrompt.prompt()
     const { outcome } = await installPrompt.userChoice
     if (outcome === 'accepted') setInstallPrompt(null)
     else setInstallDismissed(true)
-  }
+  }, [installPrompt])
 
-  // ── Form definitions ──────────────────────────────────────────────────────
-  const formDefinitions = {
-    '360S014EA': { name: 'As-built Low Voltage Connection Record',                          fileName: '360S014EA.pdf' },
-    '360S014EB': { name: 'As-built Electrical Distribution Record',                         fileName: '360S014EB.pdf' },
-    '360S014EC': { name: 'As-built Pole Record',                                            fileName: '360S014EC.pdf' },
-    '360S014ED': { name: 'As-built LV Box Record',                                          fileName: '360S014ED.pdf' },
-    '360S014EE': { name: 'As-built Electrical Equipment Record',                            fileName: '360S014EE.pdf' },
-    '360S014EF': { name: 'As-built Zone Substation Equipment Record',                       fileName: '360S014EF.pdf' },
-    '360S014EG': { name: 'As-built Transformer Record',                                     fileName: '360S014EG.pdf' },
-    '360S014EH': { name: 'As-built Equipment Record Cards',                                 fileName: '360S014EH.pdf' },
-    '360S014EI': { name: 'As-built Underground Network Distribution Panel Layout Record',   fileName: '360S014EI.pdf' },
-    '360S014EJ': { name: 'As-built Earth Installation and Test Record',                     fileName: '360S014EJ.pdf' },
-    '360S014EK': { name: 'As-built Streetlight Alteration/Installation Record',             fileName: '360S014EK.pdf' },
-    '360S014EL': { name: 'As-built Cable Test Report',                                      fileName: '360S014EL.pdf' },
-    '360S014EM': { name: 'As-built Requirements Checklist - Zone Substation',               fileName: '360S014EM.pdf' },
-    '360S014EO': { name: 'As-built Transformer ICP Change Form',                            fileName: '360S014EO.pdf' },
-    '360S014EP': { name: 'As-built Protection Relay Record',                                fileName: '360S014EP.pdf' },
-    '360S014EQ': { name: 'Commissioning Conductor Tension Method & Results/Run Form',       fileName: '360S014EQ.pdf' },
-    '360S014ER': { name: 'As-built Line Fault Indicator Record LM2SAT',                     fileName: '360S014ER.pdf' },
-    '360S014ES': { name: 'As-built Line Fault Indicator Record PM3SAT',                     fileName: '360S014ES.pdf' },
-    '360S014ET': { name: 'As-built Line Fault Indicator Record PM6SAT',                     fileName: '360S014ET.pdf' },
-    '360S014EU': { name: 'As-built Line Fault Indicator Record PM9SAT',                     fileName: '360S014EU.pdf' },
-    '360S014EV': { name: 'As-built Network Communications Equipment Record',                fileName: '360S014EV.pdf' },
-    '360S014EW': { name: 'As-built Remote Terminal Unit Equipment Record',                  fileName: '360S014EW.pdf' },
-    '360F019CA': { name: 'Drawing Approval Form',                                           fileName: '360F019CA.pdf' },
-    'MFG_CERT':  { name: 'Manufacturer Test Certificates',                                  fileName: null },
-  }
-
-  const commissioningCerts = {
-    '220F028A': { name: 'Pre-Commissioning HV Inspection Certificate – Minor Works',                    fileName: '220F028A.pdf' },
-    '220F028B': { name: 'Distribution Transformer Commissioning Certificate',                           fileName: '220F028B.pdf' },
-    '220F028C': { name: 'LV Service Boxes, Cabinets and Subterranean Vaults Commissioning Certificate', fileName: '220F028C.pdf' },
-    '220F028D': { name: 'LV Link Boxes and Link Cabinets Test Certificate',                             fileName: '220F028D.pdf' },
-    '220F028E': { name: 'LV Customer Connection and Polarity Checks Test Certificate',                  fileName: '220F028E.pdf' },
-    '220F028F': { name: 'Overhead LV Distribution Circuit Test Certificate',                            fileName: '220F028F.pdf' },
-    '220F028G': { name: 'Underground LV Distribution Circuit Test Certificate',                         fileName: '220F028G.pdf' },
-  }
-
-  const tailgateForm = {
-    id: 'TAILGATE',
-    name: 'Pre-Work Risk Assessment (Tailgate) Form',
-    fileName: 'Tailgate.pdf',
-  }
-
-  const testSheets = {
-    'TSTSHT-0051-1': { name: 'LV Connection Testing Verification Sheet',                    fileName: '51-1_Test_Sheet.PDF' },
-    'DIST-TX-TEST':  { name: 'Distribution Transformer Test Verification Sheet',            fileName: 'Distribution_Transformer_Test_Verification_Check_Sheet.PDF' },
-    'HV-CABLE-TEST': { name: 'HV Cables Test Sheet',                                        fileName: 'HV_Cables_Test_Check_Sheet.PDF' },
-  }
-
-  const workTypeMapping = {
-    'LV Service Connection - OH and UG': {
-      forms: ['360S014EA'],
-      notes: 'New or Altered Connections',
-      commissioningCerts: ['220F028E'],
-    },
-    'LV Distribution Network': {
-      forms: ['360S014EB', '360S014EC', '360S014EL'],
-      notes: 'For UG Distribution Network (360S014EL)',
-      commissioningCerts: ['220F028F', '220F028G', '220F028C'],
-    },
-    'HV Distribution Network': {
-      forms: ['360S014EB', '360S014EC', '360S014EE', '360S014EL'],
-      notes: 'For UG Distribution Network (360S014EL)',
-      commissioningCerts: ['220F028A', '220F028F', '220F028G'],
-    },
-    'Poles': {
-      forms: ['360S014EC', '360S014EE'],
-      notes: 'Either As-Built Pole Record Form or Network Asset Design Register can be used',
-      commissioningCerts: [],
-    },
-    'Crossarms': { forms: ['360S014EC'], commissioningCerts: [] },
-    'Equipment (installation/changes)': {
-      forms: ['360S014EE', '360S014EH', '360S014EJ', 'MFG_CERT'],
-      notes: 'EE: Any equipment not specified elsewhere; EH: For Critical Spares; EJ: Where an Earth Test has been taken',
-      commissioningCerts: ['220F028A'],
-    },
-    'Zone Substations': {
-      forms: ['360S014EF', '360S014EE', '360S014EH', '360F019CA'],
-      notes: 'For any Engineering as-built drawings (360F019CA)',
-      commissioningCerts: ['220F028A'],
-    },
-    'Transformers - Overhead': {
-      forms: ['360S014EC', '360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
-      notes: 'Equip Record Card or Form (EG or EH)',
-      commissioningCerts: ['220F028A', '220F028B'],
-    },
-    'Transformers - Ground mount': {
-      forms: ['360S014EG', '360S014EH', '360S014EE', '360S014EJ', 'MFG_CERT'],
-      notes: 'Equip Record Card or Form (EG or EH)',
-      commissioningCerts: ['220F028A', '220F028B'],
-    },
-    'LV Service Box': {
-      forms: ['360S014ED'],
-      notes: 'For boxes containing service fuses only',
-      commissioningCerts: ['220F028C'],
-    },
-    'LV Distribution Box': {
-      forms: ['360S014EC', '360S014ED', '360S014EJ'],
-      notes: 'For vertical disconnects (Pillar) use ED; For horizontal disconnects (Link) use ED',
-      commissioningCerts: ['220F028C', '220F028D'],
-    },
-    'Earth Test / Alterations':          { forms: ['360S014EJ'], commissioningCerts: [] },
-    'Streetlights':                      { forms: ['360S014EK'], commissioningCerts: [] },
-    'Protection Relays':                 { forms: ['360S014EP'], commissioningCerts: ['220F028A'] },
-    'Conductor Tension Works':           { forms: ['360S014EQ'], commissioningCerts: [] },
-    'Line Fault Indicators': {
-      forms: ['360S014ER', '360S014ES', '360S014ET', '360S014EU'],
-      notes: 'Select appropriate form based on indicator model',
-      commissioningCerts: [],
-    },
-    'Network Communications Equipment': { forms: ['360S014EV'], commissioningCerts: [] },
-    'Remote Terminal Unit (RTU)':        { forms: ['360S014EW'], commissioningCerts: [] },
-  }
-
-  // ── PDF viewer ────────────────────────────────────────────────────────────
-  const handleFormClick = (url, name, formId) => {
+  // ── PDF viewer handlers ───────────────────────────────────────────────────
+  const handleFormClick = useCallback((url, name, formId) => {
     if (formId && WIZARD_CONFIG[formId]) {
       setActiveWizard({ formId, mode: 'choice' })
       return
     }
-    const rawName = name || url.split('/').pop()
+
+    const requestId = ++fetchRequestIdRef.current
+    const rawName     = name || url.split('/').pop()
     const displayName = rawName.endsWith('.pdf') ? rawName : rawName + '.pdf'
-    setCurrentPdfUrl(url)
-    setCurrentPdfName(displayName)
-    setPdfBytes(null)
-    setPdfBlobUrl(null)
-    setPdfViewerOpen(true)
+
+    setPdfViewer(prev => {
+      if (prev.blobUrl) URL.revokeObjectURL(prev.blobUrl)
+      return { open: true, url, name: displayName, bytes: null, blobUrl: null }
+    })
+
     fetch(url)
-      .then(r => r.arrayBuffer())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.arrayBuffer()
+      })
       .then(buf => {
-        const bytes = new Uint8Array(buf)
-        setPdfBytes(bytes)
-        const blob = new Blob([bytes], { type: 'application/pdf' })
-        setPdfBlobUrl(URL.createObjectURL(blob))
+        if (requestId !== fetchRequestIdRef.current) return
+        const bytes   = new Uint8Array(buf)
+        const blob    = new Blob([bytes], { type: 'application/pdf' })
+        const blobUrl = URL.createObjectURL(blob)
+        setPdfViewer(prev => {
+          if (!prev.open) {
+            URL.revokeObjectURL(blobUrl)
+            return prev
+          }
+          return { ...prev, bytes, blobUrl }
+        })
       })
       .catch(() => {
-        setPdfViewerOpen(false)
+        if (requestId !== fetchRequestIdRef.current) return
+        setPdfViewer(prev => {
+          if (prev.blobUrl) URL.revokeObjectURL(prev.blobUrl)
+          return { open: false, url: '', name: '', bytes: null, blobUrl: null }
+        })
         window.open(url, '_blank', 'noopener,noreferrer')
       })
-  }
+  }, [])
 
-  const handleClosePdf = () => {
-    setPdfViewerOpen(false)
-    setCurrentPdfUrl('')
-    setCurrentPdfName('')
-    setPdfBytes(null)
-    if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null) }
-  }
+  const handleClosePdf = useCallback(() => {
+    setPdfViewer(prev => {
+      if (prev.blobUrl) URL.revokeObjectURL(prev.blobUrl)
+      return { open: false, url: '', name: '', bytes: null, blobUrl: null }
+    })
+  }, [])
 
   const handleShare = async () => {
-    if (!pdfBlobUrl) return
+    if (!pdfViewer.bytes) return
     try {
-      const blob = await fetch(pdfBlobUrl).then(r => r.blob())
-      const file = new File([blob], currentPdfName, { type: 'application/pdf' })
+      const blob = new Blob([pdfViewer.bytes], { type: 'application/pdf' })
+      const file = new File([blob], pdfViewer.name, { type: 'application/pdf' })
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file] })
-      } else {
-        window.open(pdfBlobUrl, '_blank')
+      } else if (pdfViewer.blobUrl) {
+        window.open(pdfViewer.blobUrl, '_blank')
       }
-    } catch (err) { if (err.name !== 'AbortError') console.error('Share failed:', err) }
+    } catch (err) {
+      if (err.name !== 'AbortError') console.error('Share failed:', err)
+    }
   }
 
-  // ── Derived lists ─────────────────────────────────────────────────────────
-  const filteredWorkTypes = Object.keys(workTypeMapping).filter(work =>
-    work.toLowerCase().includes(searchTerm.toLowerCase())
+  // ── Derived lists — memoised ──────────────────────────────────────────────
+  const filteredWorkTypes = useMemo(
+    () => Object.keys(workTypeMapping).filter(work =>
+      work.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [searchTerm],
   )
 
-  const requiredForms = selectedWork && workTypeMapping[selectedWork]
-    ? workTypeMapping[selectedWork].forms.map(formId => ({
-        id: formId,
-        name: formDefinitions[formId]?.name || 'Unknown Form',
-        url: formDefinitions[formId]?.fileName ? `forms/${formDefinitions[formId].fileName}` : null,
-        alternateUrl: formDefinitions[formId]?.alternateFileName ? `forms/${formDefinitions[formId].alternateFileName}` : null,
-        hasLink: !!formDefinitions[formId]?.fileName,
-      }))
-    : []
-
-  const requiredCerts = selectedWork && workTypeMapping[selectedWork]
-    ? workTypeMapping[selectedWork].commissioningCerts.map(certId => ({
-        id: certId,
-        name: commissioningCerts[certId]?.name || 'Unknown Certificate',
-        url: commissioningCerts[certId]?.fileName ? `forms/${commissioningCerts[certId].fileName}` : null,
-        hasLink: !!commissioningCerts[certId]?.fileName,
-      }))
-    : []
-
-  const allAsBuiltForms = Object.entries(formDefinitions)
-    .filter(([id]) => id !== 'MFG_CERT')
-    .map(([id, form]) => ({
-      id,
-      name: form.name,
-      url: form.fileName ? `forms/${form.fileName}` : null,
-      alternateUrl: form.alternateFileName ? `forms/${form.alternateFileName}` : null,
-      hasLink: !!form.fileName,
+  const requiredForms = useMemo(() => {
+    if (!selectedWork || !workTypeMapping[selectedWork]) return []
+    return workTypeMapping[selectedWork].forms.map(formId => ({
+      id:           formId,
+      name:         formDefinitions[formId]?.name || 'Unknown Form',
+      url:          formDefinitions[formId]?.fileName ? `forms/${formDefinitions[formId].fileName}` : null,
+      alternateUrl: formDefinitions[formId]?.alternateFileName ? `forms/${formDefinitions[formId].alternateFileName}` : null,
+      hasLink:      !!formDefinitions[formId]?.fileName,
     }))
-    .filter(form =>
-      form.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
-      form.name.toLowerCase().includes(formSearchTerm.toLowerCase())
-    )
+  }, [selectedWork])
 
-  const allCommissioningForms = Object.entries(commissioningCerts)
-    .map(([id, cert]) => ({
-      id,
-      name: cert.name,
-      url: cert.fileName ? `forms/${cert.fileName}` : null,
-      hasLink: !!cert.fileName,
+  const requiredCerts = useMemo(() => {
+    if (!selectedWork || !workTypeMapping[selectedWork]) return []
+    return workTypeMapping[selectedWork].commissioningCerts.map(certId => ({
+      id:      certId,
+      name:    commissioningCerts[certId]?.name || 'Unknown Certificate',
+      url:     commissioningCerts[certId]?.fileName ? `forms/${commissioningCerts[certId].fileName}` : null,
+      hasLink: !!commissioningCerts[certId]?.fileName,
     }))
-    .filter(cert =>
-      cert.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
-      cert.name.toLowerCase().includes(formSearchTerm.toLowerCase())
-    )
+  }, [selectedWork])
 
-  const showTailgate = formSearchTerm === '' ||
-    tailgateForm.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
-    tailgateForm.name.toLowerCase().includes(formSearchTerm.toLowerCase())
+  const allAsBuiltForms = useMemo(() =>
+    Object.entries(formDefinitions)
+      .filter(([id]) => id !== 'MFG_CERT')
+      .map(([id, form]) => ({
+        id,
+        name:         form.name,
+        url:          form.fileName ? `forms/${form.fileName}` : null,
+        alternateUrl: form.alternateFileName ? `forms/${form.alternateFileName}` : null,
+        hasLink:      !!form.fileName,
+      }))
+      .filter(form =>
+        form.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
+        form.name.toLowerCase().includes(formSearchTerm.toLowerCase())
+      ),
+    [formSearchTerm],
+  )
 
-  const filteredTestSheets = Object.entries(testSheets).filter(([id, sheet]) =>
+  const allCommissioningForms = useMemo(() =>
+    Object.entries(commissioningCerts)
+      .map(([id, cert]) => ({
+        id,
+        name:    cert.name,
+        url:     cert.fileName ? `forms/${cert.fileName}` : null,
+        hasLink: !!cert.fileName,
+      }))
+      .filter(cert =>
+        cert.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
+        cert.name.toLowerCase().includes(formSearchTerm.toLowerCase())
+      ),
+    [formSearchTerm],
+  )
+
+  const showTailgate = useMemo(() =>
     formSearchTerm === '' ||
-    id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
-    sheet.name.toLowerCase().includes(formSearchTerm.toLowerCase())
+    tailgateForm.id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
+    tailgateForm.name.toLowerCase().includes(formSearchTerm.toLowerCase()),
+    [formSearchTerm],
+  )
+
+  const filteredTestSheets = useMemo(() =>
+    Object.entries(testSheets).filter(([id, sheet]) =>
+      formSearchTerm === '' ||
+      id.toLowerCase().includes(formSearchTerm.toLowerCase()) ||
+      sheet.name.toLowerCase().includes(formSearchTerm.toLowerCase())
+    ),
+    [formSearchTerm],
   )
 
   // ── Active wizard component ───────────────────────────────────────────────
@@ -697,10 +811,12 @@ const AsBuiltFormSelector = () => {
             </div>
 
             {showTailgate && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FileText className="text-orange-600" size={24} />Pre-Work Risk Assessment
-                </h2>
+              <CollapsibleCard
+                icon={<FileText className="text-orange-600" size={24} />}
+                title="Pre-Work Risk Assessment"
+                expanded={expandedSections.tailgate}
+                onToggle={() => toggleSection('tailgate')}
+              >
                 <div onClick={() => handleFormClick(`forms/${tailgateForm.fileName}`, tailgateForm.name)}
                   className="p-4 border-2 border-orange-200 bg-orange-50 rounded-lg cursor-pointer hover:bg-orange-100 hover:border-orange-300 active:bg-orange-200 transition-all">
                   <div className="flex items-start gap-3">
@@ -714,14 +830,17 @@ const AsBuiltFormSelector = () => {
                     <ExternalLink className="flex-shrink-0 text-orange-600" size={18} />
                   </div>
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
 
             {filteredTestSheets.length > 0 && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FileText className="text-purple-600" size={24} />Test & Verification Sheets ({filteredTestSheets.length})
-                </h2>
+              <CollapsibleCard
+                icon={<FileText className="text-purple-600" size={24} />}
+                title="Test & Verification Sheets"
+                count={filteredTestSheets.length}
+                expanded={expandedSections.testSheets}
+                onToggle={() => toggleSection('testSheets')}
+              >
                 <div className="grid md:grid-cols-2 gap-3">
                   {filteredTestSheets.map(([id, sheet]) => (
                     <div key={id} onClick={() => handleFormClick(`forms/${sheet.fileName}`, sheet.name)}
@@ -739,13 +858,16 @@ const AsBuiltFormSelector = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
 
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="text-indigo-600" size={24} />As-Built Forms ({allAsBuiltForms.length})
-              </h2>
+            <CollapsibleCard
+              icon={<FileText className="text-indigo-600" size={24} />}
+              title="As-Built Forms"
+              count={allAsBuiltForms.length}
+              expanded={expandedSections.asBuilt}
+              onToggle={() => toggleSection('asBuilt')}
+            >
               <div className="grid md:grid-cols-2 gap-3">
                 {allAsBuiltForms.map(form => (
                   <div key={form.id} onClick={() => form.hasLink && handleFormClick(form.url, form.name, form.id)}
@@ -769,12 +891,15 @@ const AsBuiltFormSelector = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
 
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="text-green-600" size={24} />Commissioning & Test Certificates ({allCommissioningForms.length})
-              </h2>
+            <CollapsibleCard
+              icon={<FileText className="text-green-600" size={24} />}
+              title="Commissioning & Test Certificates"
+              count={allCommissioningForms.length}
+              expanded={expandedSections.commissioning}
+              onToggle={() => toggleSection('commissioning')}
+            >
               <div className="grid md:grid-cols-2 gap-3">
                 {allCommissioningForms.map(cert => (
                   <div key={cert.id} onClick={() => cert.hasLink && handleFormClick(cert.url, cert.name, cert.id)}
@@ -792,13 +917,13 @@ const AsBuiltFormSelector = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
           </>
         )}
       </div>
 
       {/* ── PDF Viewer Modal ──────────────────────────────────────────────── */}
-      {pdfViewerOpen && (
+      {pdfViewer.open && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 50,
           display: 'flex', flexDirection: 'column',
@@ -813,22 +938,22 @@ const AsBuiltFormSelector = () => {
               <span style={{
                 fontWeight: 600, fontSize: 15, color: '#111',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{currentPdfName}</span>
+              }}>{pdfViewer.name}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
               <button
                 onClick={handleShare}
-                disabled={!pdfBlobUrl}
+                disabled={!pdfViewer.blobUrl}
                 style={{
                   padding: '8px 14px', border: 'none',
-                  background: pdfBlobUrl ? '#4f46e5' : '#9ca3af',
-                  color: '#fff', cursor: pdfBlobUrl ? 'pointer' : 'default',
+                  background: pdfViewer.blobUrl ? '#4f46e5' : '#9ca3af',
+                  color: '#fff', cursor: pdfViewer.blobUrl ? 'pointer' : 'default',
                   borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
                 }}
               >
                 <Share2 size={16} color="#fff" />
-                {pdfBlobUrl ? 'Print / Save / Share' : 'Loading…'}
+                {pdfViewer.blobUrl ? 'Print / Save / Share' : 'Loading…'}
               </button>
               <button onClick={handleClosePdf} style={{
                 padding: 8, border: 'none', background: 'none',
@@ -840,8 +965,8 @@ const AsBuiltFormSelector = () => {
             </div>
           </div>
           <div style={{ flex: 1, background: '#111827', overflowY: 'auto', padding: 16 }}>
-            {pdfBytes ? (
-              <PdfCanvasPreview pdfBytes={pdfBytes} />
+            {pdfViewer.bytes ? (
+              <PdfCanvasPreview pdfBytes={pdfViewer.bytes} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <div style={{ textAlign: 'center', color: '#fff' }}>
@@ -918,6 +1043,76 @@ const AsBuiltFormSelector = () => {
         )
       })()}
 
+      {/* ── Full Changelog Modal (opened by tapping the version number) ────── */}
+      {/* Unlike the "What's New" modal above, this shows every released      */}
+      {/* version at once and has no effect on the "seen" tracking — it's a   */}
+      {/* read-only reference, not tied to the unseen-updates queue.          */}
+      {showFullChangelog && (
+        <div
+          onClick={() => setShowFullChangelog(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1.5rem',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white', borderRadius: 20, padding: '1.75rem',
+              maxWidth: 480, width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              maxHeight: '80dvh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: '1.25rem', flexShrink: 0,
+            }}>
+              <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>Changelog</h2>
+              <button onClick={() => setShowFullChangelog(false)} style={{
+                background: '#f3f4f6', border: 'none', borderRadius: 8,
+                padding: 6, cursor: 'pointer', display: 'flex',
+              }}>
+                <X size={18} color="#666" />
+              </button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+              {CHANGELOGS.map((batch, bi) => (
+                <div
+                  key={batch.version}
+                  style={{
+                    marginTop: bi === 0 ? 0 : '1.5rem',
+                    paddingTop: bi === 0 ? 0 : '1.25rem',
+                    borderTop: bi === 0 ? 'none' : '1px solid #f0f0f0',
+                  }}
+                >
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    background: '#eef2ff', color: '#4f46e5',
+                    fontWeight: 800, fontSize: '0.75rem',
+                    borderRadius: 20, padding: '3px 11px',
+                    marginBottom: '0.75rem',
+                  }}>
+                    v{batch.version}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {batch.changes.map((item, i) => (
+                      <div key={i} style={{ borderLeft: '3px solid #4f46e5', paddingLeft: '0.875rem' }}>
+                        <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: 3, fontSize: '0.95rem' }}>{item.heading}</div>
+                        {item.detail && <div style={{ fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>{item.detail}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Update available banner ───────────────────────────────────────── */}
       {updateReady && (
         <div style={{
@@ -963,6 +1158,26 @@ const AsBuiltFormSelector = () => {
         </div>
       )}
 
+      {/* ── Offline indicator ─────────────────────────────────────────────── */}
+      {!isOnline && (
+        <div style={{
+          position: 'fixed',
+          bottom: 44,
+          left: 0, right: 0,
+          zIndex: 999,
+          background: '#1f2937',
+          color: '#f9fafb',
+          padding: '9px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 13, fontWeight: 600,
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.25)',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}>
+          <span>📵</span>
+          <span>You're offline — forms and drafts work, but sharing requires a connection</span>
+        </div>
+      )}
+
       {/* ── Install App Button ────────────────────────────────────────────── */}
       {installPrompt && !installDismissed && (
         <div style={{
@@ -988,16 +1203,21 @@ const AsBuiltFormSelector = () => {
       )}
 
       {/* ── Version Number ────────────────────────────────────────────────── */}
-      <div style={{
-        position: 'fixed', bottom: '12px', right: '12px',
-        fontSize: '11px', color: '#6b7280',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: '4px 8px', borderRadius: '6px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        userSelect: 'none', zIndex: 1000,
-      }}>
+      <button
+        onClick={() => setShowFullChangelog(true)}
+        title="View changelog"
+        style={{
+          position: 'fixed', bottom: '12px', right: '12px',
+          fontSize: '11px', color: '#6b7280',
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: '4px 8px', borderRadius: '6px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          userSelect: 'none', zIndex: 1000,
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
         v{APP_VERSION}
-      </div>
+      </button>
     </div>
   )
 }

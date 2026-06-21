@@ -22,35 +22,11 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/re-former/sw.js')
       .then(reg => {
         reg.update()
-
-        // When a new SW installs, skip waiting immediately — don't ask the user
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: 'SKIP_WAITING' })
-            }
-          })
-        })
-
-        // iOS PWA: when app is reopened from home screen, visibilitychange fires.
-        // Actively check for updates and skip any waiting SW so the reload happens.
-        document.addEventListener('visibilitychange', async () => {
-          if (document.visibilityState !== 'visible') return
-          try {
-            await reg.update()
-            // Small delay to let the update check complete
-            setTimeout(() => {
-              if (reg.waiting) {
-                reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-              }
-            }, 500)
-          } catch { /* ignore */ }
-        })
+        // Update banner logic (including SKIP_WAITING) is handled inside App.jsx.
       })
       .catch(err => console.warn('SW registration failed:', err))
 
-    // When SW controller changes (new SW activated), reload the page
+    // When SW controller changes (new SW activated by user choice), reload the page
     let refreshing = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {

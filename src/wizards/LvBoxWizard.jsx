@@ -1,26 +1,27 @@
-import { useState, useEffect } from 'react'
-import { APP_ACCENT } from '../shared/constants'
-import { PDFDocument, rgb } from 'pdf-lib'
+
+import { useState } from 'react'
+import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { Box } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
-import { CoordOverlay } from '../shared/CoordOverlay'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { useDraftPicker } from '../shared/useDraftPicker'
 
-const ED_SHOW_OVERLAY = false
+// ── Lazy generator import ─────────────────────────────────────────────────────
+const loadEdGenerator = () =>
+  import('./generators/LvBoxPdfGenerator').then(m => m.generateEdPdf)
 
 const ED_GREEN  = APP_ACCENT
-const ED_BG     = '#eef2ff'
-const ED_MID    = '#e0e7ff'
-const ED_BORDER = '#c7d2fe'
+const ED_BG     = WIZARD_COLORS.bg
+const ED_MID    = WIZARD_COLORS.mid
+const ED_BORDER = WIZARD_COLORS.border
 
 const ED_STEPS = [
   'Job Details',
@@ -92,135 +93,38 @@ function BoxRow({ row, idx, setRow, onRemove, canRemove }) {
   )
 }
 
-function wrapText(text, font, size, maxPts) {
-  const words = String(text).split(' ')
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? current + ' ' + word : word
-    if (font.widthOfTextAtSize(candidate, size) <= maxPts) {
-      current = candidate
-    } else {
-      if (current) lines.push(current)
-      if (font.widthOfTextAtSize(word, size) > maxPts) {
-        let part = ''
-        for (const char of word) {
-          const next = part + char
-          if (font.widthOfTextAtSize(next, size) <= maxPts) { part = next } else { if (part) lines.push(part); part = char }
-        }
-        current = part
-      } else { current = word }
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-async function generateEdPdf(d, photos = []) {
-  const bytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014ED.pdf').then(r => r.arrayBuffer())
-  const srcDoc = await PDFDocument.load(bytes)
-  const pdfDoc = await PDFDocument.create()
-  const [copiedPage] = await pdfDoc.copyPages(srcDoc, [0])
-  pdfDoc.addPage(copiedPage)
-  const p1   = pdfDoc.getPages()[0]
-  const font = await pdfDoc.embedFont('Helvetica')
-  const PAGE_H = p1.getHeight()
-  const BLUE   = rgb(0/255, 20/255, 160/255)
-
-  const t = (x, cssY, str, size = 7) => {
-    if (!str) return
-    p1.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
-  }
-  const tWrap = (x, cssY, str, maxPts, lineH = 9, maxLines = 3, size = 7) => {
-    if (!str) return
-    wrapText(str, font, size, maxPts).slice(0, maxLines).forEach((line, i) => t(x, cssY + i * lineH, line, size))
-  }
-
-  t(120, 150, d.streetRoad)
-  t(120, 160, [d.cityTown, d.district].filter(Boolean).join(', '))
-  t(120, 170, d.pcoWONo)
-  t(120, 180, d.ciwrNo)
-  t(460, 150, d.contractor)
-  t(460, 160, d.dateWorkCompleted)
-  t(460, 170, d.npJobNumber)
-
-  if (d.signed) {
-    try {
-      const sigMime = d.signed.split(',')[0].includes('jpeg') ? 'jpeg' : 'png'
-      const sigBytes = Uint8Array.from(atob(d.signed.split(',')[1]), c => c.charCodeAt(0))
-      const sigImg   = sigMime === 'jpeg' ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-      p1.drawImage(sigImg, { x: 460, y: PAGE_H - 190, width: 90, height: 15, opacity: 1 })
-    } catch (_) {}
-  }
-
-  const ROW_START_Y = 249
-  const ROW_H       = 9.8
-  d.boxRows.slice(0, 20).forEach((row, i) => {
-    const y = ROW_START_Y + i * ROW_H
-    t(59,  y, row.equipIdNew,          6.5)
-    t(115, y, row.equipIdOld,          6.5)
-    t(169, y, row.address,             6.5)
-    t(290, y, row.manufacturer,        6.5)
-    t(347, y, row.model,               6.5)
-    if (row.serviceOrDist === 'Service')      t(452, y, 'Service', 6.5)
-    if (row.serviceOrDist === 'Distribution') t(452, y, 'Distribution', 6.5)
-    t(498, y, row.numberOfDisconnects, 6.5)
-    t(520, y, row.fuseHolders,         6.5)
-    t(595, y, row.typeOfChange,        6.5)
-    t(640, y, row.reasonForRemoval,    6.5)
-    t(695, y, row.owner,               6.5)
-  })
-
-  tWrap(45, 455, d.comments, 700, 10, 5, 7)
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-  return await pdfDoc.save()
-}
-
 export default function LvBoxWizard({ onClose }) {
-  const [step, setStep] = useState(0)
-
-  const { contractor: _contractor, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-  const [d, setD] = useState({
-    npJobNumber: '', projectName: '', streetRoad: '', cityTown: '', district: '',
-    pcoWONo: '', ciwrNo: '', contractor: _contractor, dateWorkCompleted: _date, signed: _signed,
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
     boxRows: [EMPTY_BOX_ROW()],
     comments: '',
-  })
+  }))
+  const [photos, setPhotos] = useState([])
 
   const isPreview = step === ED_STEPS.length - 1
-  const [overlayTab,    setOverlayTab]    = useState('form')
-  const [overlayBytes,  setOverlayBytes]  = useState(null)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos,        setPhotos]        = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generateEdPdf)
 
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014ED', formLabel: 'LV Box Record',
+    d, step, photos, accent: ED_GREEN,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadEdGenerator)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
     return { ...prev, boxRows: rows }
   })
-
-
-  useEffect(() => {
-    if (ED_SHOW_OVERLAY && overlayTab === 'calibrate' && !overlayBytes) {
-      fetch(import.meta.env.BASE_URL + 'forms/360S014ED.pdf')
-        .then(r => r.arrayBuffer())
-        .then(buf => setOverlayBytes(new Uint8Array(buf)))
-        .catch(() => {})
-    }
-  }, [overlayTab, overlayBytes])
-
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
     const siteId = d.boxRows?.[0]?.equipIdNew || d.boxRows?.[0]?.equipIdOld || ''
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(siteId), 'LV Box Record'].filter(Boolean)
-    const filename = parts.join(' - ') + '.pdf'
-    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, siteId, 'LV Box Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
-
-
 
   const missingFields = [
     !d.pcoWONo     && 'Powerco WO No.',
@@ -229,66 +133,54 @@ export default function LvBoxWizard({ onClose }) {
     !d.signed      && 'Signature',
   ].filter(Boolean)
 
-  const { loadJobHistory, set } = useWizardSetup(d, setD, step, '360S014ED')
-    const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014ED')
+  const { clearDraft: clearFormDraft } = useDraft('360S014ED', d, step, photos)
 
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
+  const renderCurrentStep = () => {
+    switch (step) {
+      case 0: return (
+        <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} onOpenDrafts={openLoad} />
+      )
+
+      case 1: return (
+        <div key="s1">
+          <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
+          {d.boxRows.map((row, i) => (
+            <BoxRow key={i} row={row} idx={i} setRow={setRow} canRemove={d.boxRows.length > 1}
+              onRemove={() => setD(prev => ({ ...prev, boxRows: prev.boxRows.filter((_, ri) => ri !== i) }))} />
+          ))}
+          {d.boxRows.length < 20 && (
+            <button onClick={() => setD(prev => ({ ...prev, boxRows: [...prev.boxRows, EMPTY_BOX_ROW()] }))}
+              style={{ width: '100%', padding: '10px 0', marginTop: 2, borderRadius: 8, border: `2px dashed ${ED_GREEN}`, background: ED_BG, color: ED_GREEN, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Add Box Entry
+            </button>
+          )}
+        </div>
+      )
+
+      case 2: return (
+        <div key="s2">
+          <SectionHead label="Additional Comments" accent={ED_GREEN} />
+          <WTA label="Comments" v={d.comments} set={v => set('comments', v)} accent={ED_GREEN} rows={5} />
+        </div>
+      )
+
+      case 3: return (
+        <div key="s3">
+          <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ED_GREEN} />
+        </div>
+      )
+
+      case 4: return null
+
+      default: return null
+    }
   }
-
-  const formSteps = [
-
-    <JobDetailsStep key="s0" d={d} setD={setD} accent={ED_GREEN} onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }} />,
-
-    <div key="s1">
-      <SectionHead label="LV Box Entries (up to 20)" accent={ED_GREEN} />
-      {d.boxRows.map((row, i) => (
-        <BoxRow key={i} row={row} idx={i} setRow={setRow} canRemove={d.boxRows.length > 1}
-          onRemove={() => setD(prev => ({ ...prev, boxRows: prev.boxRows.filter((_, ri) => ri !== i) }))} />
-      ))}
-      {d.boxRows.length < 20 && (
-        <button onClick={() => setD(prev => ({ ...prev, boxRows: [...prev.boxRows, EMPTY_BOX_ROW()] }))}
-          style={{ width: '100%', padding: '10px 0', marginTop: 2, borderRadius: 8, border: `2px dashed ${ED_GREEN}`, background: ED_BG, color: ED_GREEN, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-          + Add Box Entry
-        </button>
-      )}
-    </div>,
-
-    <div key="s2">
-      <SectionHead label="Additional Comments" accent={ED_GREEN} />
-      <WTA label="Comments" v={d.comments} set={v => set('comments', v)} accent={ED_GREEN} rows={5} />
-    </div>,
-
-    <div key="s3">
-      <PhotoAttachStep photos={photos} onChange={setPhotos} accent={ED_GREEN} />
-    </div>,
-
-    <div key="s4" />,
-  ]
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), ED_GREEN)
 
   return (
     <>
-      {ED_SHOW_OVERLAY && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 44, background: '#1e1e2e', display: 'flex', alignItems: 'center', zIndex: 9999, padding: '0 16px', gap: 8 }}>
-          {['form', 'calibrate'].map(tab => (
-            <button key={tab} onClick={() => setOverlayTab(tab)} style={{ padding: '4px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, background: overlayTab === tab ? ED_GREEN : 'transparent', color: overlayTab === tab ? '#fff' : '#888' }}>
-              {tab === 'form' ? 'Form' : 'Calibrate'}
-            </button>
-          ))}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555', letterSpacing: 1 }}>CALIBRATION MODE — ED_SHOW_OVERLAY = true</span>
-        </div>
-      )}
-
-      {ED_SHOW_OVERLAY && overlayTab === 'calibrate' ? (
-        <div style={{ position: 'fixed', inset: 0, top: 44, background: '#111', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflow: 'auto' }}>
-          {overlayBytes ? <CoordOverlay pdfBytes={overlayBytes} page={1} /> : <div style={{ color: '#888', marginTop: 40 }}>Loading PDF…</div>}
-        </div>
-      ) : (
         <WizardShell
           title="AS-Built LV Box Record"
           formNumber="360S014ED"
@@ -298,35 +190,25 @@ export default function LvBoxWizard({ onClose }) {
           onStepClick={i => { setStep(i); if (i === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           onClose={onClose}
           onBack={() => setStep(s => s - 1)}
-          onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
-        onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
+          onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/360S014ED.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 1 : undefined}
+          onNext={() => { const n = step + 1; setStep(n); if (n === ED_STEPS.length - 1) triggerGenerate(d, photos) }}
           accent={ED_GREEN}
           bg={ED_BG}
           mid={ED_MID}
           border={ED_BORDER}
-          devPaddingTop={ED_SHOW_OVERLAY ? 44 : 0}
           isPreview={isPreview}
           onShare={handleShare}
           onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
           missingFields={missingFields}
           previewContent={previewContent}
         >
-          {formSteps[step]}
+          {renderCurrentStep()}
         </WizardShell>
-      )}
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014ED"
-        formLabel="LV Box Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={ED_GREEN}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }

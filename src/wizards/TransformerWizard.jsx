@@ -1,23 +1,28 @@
+
 // 360S014EG — AS-Built Transformer Record
 import React, { useState } from 'react'
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
+import { useDraftPicker } from '../shared/useDraftPicker'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
-import { appendPhotosToPdf } from '../shared/appendPhotosToPdf'
-import { sharePdf } from '../shared/sharePdf'
-import { getUserPrefs } from '../shared/userPrefs'
+import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
+import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
+
+// ── Lazy generator import ─────────────────────────────────────────────────────
+const loadTransformerGenerator = () =>
+  import('./generators/TransformerPdfGenerator').then(m => m.generateTransformerPdf)
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
 
+// ── Step colour schemes ───────────────────────────────────────────────────────
 const W_GREEN        = '#15803d'
 const W_GREEN_BG     = '#f0fdf4'
 const W_GREEN_MID    = '#dcfce7'
@@ -40,6 +45,7 @@ function schemeColors(scheme) {
   return { bg: '#f4f4f8', mid: '#eee', border: '#ddd', accent: W_PURPLE, label: '' }
 }
 
+// ── Step list ─────────────────────────────────────────────────────────────────
 const T_STEPS = [
   'Job Details',
   'Site Details',
@@ -58,213 +64,22 @@ const T_STEPS = [
   'Preview & Print',
 ]
 
-async function generatePdf(d, photos = []) {
-  const PAGE_H = 842
-  const BLUE = rgb(0/255, 20/255, 160/255)
+// ── Option lists ──────────────────────────────────────────────────────────────
+const ENC_OPTIONS  = ['Pole Mount','Plastic','Fibreglass','Building','Fenced','Metal Cover','Customer Premise']
+const CONN_HV      = ['Bushing','Cable Box','Dead Break','Pitch Box']
+const CONN_LV      = ['Bushing','Cable Box','Dead Break','Resin']
+const PHASES       = ['Three','One','SWER']
+const TX_TYPE      = ['Bearer','Grnd Mount','Hanger','Pedestal']
+const REMOVAL_OPTS = [
+  'Relocation','Vegetation','Site Dismantled','Reconstruction',
+  'Vehicle Accident','End of Life','Capacity Change','Faulty',
+  'Adverse Weather','Vandalism',
+]
 
-  const existingPdfBytes = await fetch(import.meta.env.BASE_URL + 'forms/360S014EG.pdf').then(r => r.arrayBuffer())
-  const pdfDoc = await PDFDocument.load(existingPdfBytes)
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const [p1, p2] = pdfDoc.getPages()
-
-  const t = (page, x, cssY, str, size = 8.5) => {
-    if (!str) return
-    page.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
-  }
-  const tc = (page, fieldLeft, fieldWidth, cssY, str, size = 8.5) => {
-    if (!str) return
-    const w = font.widthOfTextAtSize(String(str), size)
-    const x = fieldLeft + (fieldWidth / 2) - (w / 2)
-    page.drawText(String(str), { x, y: PAGE_H - cssY - size, size, font, color: BLUE })
-  }
-  const ck = (page, x, cssY, show) => {
-    if (!show) return
-    const by = PAGE_H - cssY - 2
-    page.drawLine({ start: { x, y: by - 6 }, end: { x: x + 3, y: by - 9 }, thickness: 1.5, color: BLUE, opacity: 1 })
-    page.drawLine({ start: { x: x + 3, y: by - 9 }, end: { x: x + 9, y: by - 1 }, thickness: 1.5, color: BLUE, opacity: 1 })
-  }
-  const circ = (page, cx, cssYCentre, rx, ry, show) => {
-    if (!show) return
-    page.drawEllipse({ x: cx, y: PAGE_H - cssYCentre, xScale: rx, yScale: ry, borderColor: BLUE, borderWidth: 1.2, color: rgb(0, 0, 0), opacity: 0, borderOpacity: 1 })
-  }
-
-  const i = d.issued
-  const r = d.removed
-
-  t(p1, 115,  88, d.streetRoad)
-  t(p1, 440,  88, d.contractor)
-  t(p1, 115, 106, d.cityTown)
-  t(p1, 250, 106, d.district)
-  t(p1, 440, 106, d.dateWorkCompleted)
-  t(p1, 115, 123, d.pcoWONo)
-  t(p1, 250, 123, d.ciwrNo)
-  if (d.signed && d.signed.startsWith("data:image")) {
-    const sigMime = d.signed.split(",")[0].includes("jpeg") ? "jpeg" : "png"
-    const sigBytes = Uint8Array.from(atob(d.signed.split(",")[1]), c => c.charCodeAt(0))
-    const sigImg = sigMime === "jpeg" ? await pdfDoc.embedJpg(sigBytes) : await pdfDoc.embedPng(sigBytes)
-    const sigDimsTx = sigImg.scale(1)
-    const sigMaxHTx = 20
-    const sigWTx = (sigMaxHTx / sigDimsTx.height) * sigDimsTx.width
-    p1.drawImage(sigImg, { x: 438, y: PAGE_H - 136, width: sigWTx, height: sigMaxHTx, opacity: 1 })
-  }
-  t(p1, 160, 140, d.npJobNumber)
-  t(p1, 440, 141, d.namePrint)
-
-  tc(p1,  33, 128, 195, d.transformerSiteId)
-  tc(p1, 162, 128, 195, d.poleId)
-  tc(p1, 296, 128, 195, d.zoneSubstation)
-  tc(p1, 439, 126, 195, d.feederId)
-
-  ck(p1, 144, 222, d.installationType === 'New')
-  ck(p1, 218, 222, d.installationType === 'Refurbished')
-  ck(p1, 317, 222, d.installationType === 'Emergency / Stock')
-  ck(p1, 446, 222, d.installationType === 'Removal Only')
-
-  ck(p1, 144, 243, d.ownership === 'Powerco')
-  ck(p1, 218, 243, d.ownership === 'Customer')
-  ck(p1, 317, 243, d.ownership === 'Other')
-  if (d.ownership === 'Other') t(p1, 360, 219, d.ownershipOther)
-
-  tc(p1, 150,  85, 311, i.voltageHV)
-  tc(p1, 250,  85, 311, i.voltageLV)
-  tc(p1, 360,  95, 311, r.voltageHV)
-  tc(p1, 480,  70, 311, r.voltageLV)
-
-  ck(p1, 148, 327, i.connectionTypeHV === 'Bushing')
-  ck(p1, 148, 344, i.connectionTypeHV === 'Cable Box')
-  ck(p1, 148, 361, i.connectionTypeHV === 'Dead Break')
-  ck(p1, 148, 378, i.connectionTypeHV === 'Pitch Box')
-
-  ck(p1, 247, 327, i.connectionTypeLV === 'Bushing')
-  ck(p1, 247, 344, i.connectionTypeLV === 'Cable Box')
-  ck(p1, 247, 361, i.connectionTypeLV === 'Dead Break')
-  ck(p1, 247, 378, i.connectionTypeLV === 'Resin')
-
-  ck(p1, 361, 327, r.connectionTypeHV === 'Bushing')
-  ck(p1, 361, 344, r.connectionTypeHV === 'Cable Box')
-  ck(p1, 361, 361, r.connectionTypeHV === 'Dead Break')
-  ck(p1, 361, 378, r.connectionTypeHV === 'Pitch Box')
-
-  ck(p1, 467, 327, r.connectionTypeLV === 'Bushing')
-  ck(p1, 467, 344, r.connectionTypeLV === 'Cable Box')
-  ck(p1, 466, 361, r.connectionTypeLV === 'Dead Break')
-  ck(p1, 467, 378, r.connectionTypeLV === 'Resin')
-
-  tc(p1, 155, 170, 400, i.capacityKVA)
-  tc(p1, 330, 260, 400, r.capacityKVA)
-
-  circ(p1, 216, 428, 16, 7, i.phases === 'Three')
-  circ(p1, 240, 428, 11, 7, i.phases === 'One')
-  circ(p1, 265, 428, 14, 7, i.phases === 'SWER')
-  circ(p1, 434, 428, 16, 7, r.phases === 'Three')
-  circ(p1, 458, 428, 11, 7, r.phases === 'One')
-  circ(p1, 483, 428, 14, 7, r.phases === 'SWER')
-
-  tc(p1, 155, 170, 445, i.serialNumber)
-  tc(p1, 330, 260, 445, r.serialNumber)
-
-  ck(p1, 148, 464, i.enclosureType === 'Pole Mount')
-  ck(p1, 247, 464, i.enclosureType === 'Plastic')
-  ck(p1, 148, 481, i.enclosureType === 'Fibreglass')
-  ck(p1, 247, 481, i.enclosureType === 'Building')
-  ck(p1, 148, 498, i.enclosureType === 'Fenced')
-  ck(p1, 247, 498, i.enclosureType === 'Metal Cover')
-  ck(p1, 148, 515, i.enclosureType === 'Customer Premise')
-
-  ck(p1, 361, 464, r.enclosureType === 'Pole Mount')
-  ck(p1, 467, 464, r.enclosureType === 'Plastic')
-  ck(p1, 361, 481, r.enclosureType === 'Fibreglass')
-  ck(p1, 467, 481, r.enclosureType === 'Building')
-  ck(p1, 361, 498, r.enclosureType === 'Fenced')
-  ck(p1, 467, 498, r.enclosureType === 'Metal Cover')
-  ck(p1, 361, 515, r.enclosureType === 'Customer Premise')
-
-  tc(p1, 155, 170, 536, i.enclosureModel)
-  tc(p1, 330, 260, 536, r.enclosureModel)
-
-  circ(p1, 172, 565, 16, 8, i.transformerType === 'Bearer')
-  circ(p1, 219, 565, 26, 8, i.transformerType === 'Grnd Mount')
-  circ(p1, 265, 565, 17, 8, i.transformerType === 'Hanger')
-  circ(p1, 305, 565, 20, 8, i.transformerType === 'Pedestal')
-  circ(p1, 390, 565, 16, 8, r.transformerType === 'Bearer')
-  circ(p1, 436, 565, 26, 8, r.transformerType === 'Grnd Mount')
-  circ(p1, 483, 565, 17, 8, r.transformerType === 'Hanger')
-  circ(p1, 523, 565, 20, 8, r.transformerType === 'Pedestal')
-
-  tc(p1, 155, 170, 581, i.make)
-  tc(p1, 330, 260, 581, r.make)
-  tc(p1, 155, 170, 604, i.model)
-  tc(p1, 330, 260, 604, r.model)
-
-  tc(p1, 155, 170, 628, i.voltTest)
-
-  ck(p1, 361, 647, r.reasonForRemoval.includes('Relocation'))
-  ck(p1, 467, 647, r.reasonForRemoval.includes('Vegetation'))
-  ck(p1, 361, 664, r.reasonForRemoval.includes('Site Dismantled'))
-  ck(p1, 467, 664, r.reasonForRemoval.includes('Reconstruction'))
-  ck(p1, 361, 681, r.reasonForRemoval.includes('Vehicle Accident'))
-  ck(p1, 467, 681, r.reasonForRemoval.includes('End of Life'))
-  ck(p1, 361, 697, r.reasonForRemoval.includes('Capacity Change'))
-  ck(p1, 467, 697, r.reasonForRemoval.includes('Faulty'))
-  ck(p1, 361, 725, r.reasonForRemoval.includes('Adverse Weather'))
-  ck(p1, 467, 725, r.reasonForRemoval.includes('Vandalism'))
-
-  const TAP_CIRCS = [
-    { val: '-10',  cx: 164, rx: 10 },
-    { val: '-7.5', cx: 191, rx: 10 },
-    { val: '-5',   cx: 217, rx: 10 },
-    { val: '-2.5', cx: 242, rx: 10 },
-    { val: '0',    cx: 266, rx: 10 },
-    { val: '+2.5', cx: 292, rx: 11 },
-    { val: '+5',   cx: 319, rx: 10 },
-  ]
-  TAP_CIRCS.forEach(({ val, cx, rx }) => circ(p1, cx, 654, rx, 6, i.tapSetting === val))
-
-  ck(p1, 148, 663, i.mdiFitted === 'YES')
-  ck(p1, 247, 663, i.mdiFitted === 'NO')
-
-  tc(p1, 155, 170, 682, i.ctRatio)
-
-  t(p1, 160, 699, i.earthTest1)
-  t(p1, 221, 699, i.earthTest2)
-  t(p1, 300, 699, i.totalMEN)
-
-  t(p1, 175, 717, i.fuseSizeHV)
-  t(p1, 275, 717, i.fuseSizeLV)
-
-  t(p1, 175, 737, i.lvDisconnectorMake)
-  t(p1, 275, 737, i.lvDisconnectorModel)
-
-  t(p1, 178, 755, d.removedToStore)
-
-  const commentLines = (d.comments || '').split('\n')
-  const COMMENT_Y = [90, 104, 118, 132, 146, 160, 174]
-  commentLines.slice(0, 7).forEach((line, idx) => t(p2, 60, COMMENT_Y[idx], line))
-
-  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
-  return new Uint8Array(await pdfDoc.save())
-}
-
+// ── Component ─────────────────────────────────────────────────────────────────
 function TransformerWizardApp({ onClose }) {
-  const [step, setStep] = useState(0)
-  const [draftPickerOpen, setDraftPickerOpen] = useState(false)
-  const [draftPickerMode, setDraftPickerMode] = useState('menu')
-  const [photos, setPhotos] = useState([])
-  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } = usePdfGenerate(generatePdf)
-
-  const ENC_OPTIONS = ['Pole Mount', 'Plastic', 'Fibreglass', 'Building', 'Fenced', 'Metal Cover', 'Customer Premise']
-  const CONN_HV = ['Bushing', 'Cable Box', 'Dead Break', 'Pitch Box']
-  const CONN_LV = ['Bushing', 'Cable Box', 'Dead Break', 'Resin']
-  const PHASES  = ['Three', 'One', 'SWER']
-  const TX_TYPE = ['Bearer', 'Grnd Mount', 'Hanger', 'Pedestal']
-
-  const { contractor: _contractor, namePrint: _namePrint, signed: _signed, dateWorkCompleted: _date } = getUserPrefs()
-  const [d, setD] = useState({
-    streetRoad: '', cityTown: '', district: '',
-    contractor: _contractor, namePrint: _namePrint,
-    npJobNumber: '', projectName: '',
-    pcoWONo: '', ciwrNo: '',
-    dateWorkCompleted: _date, signed: _signed,
+  const [step, setStep]     = useState(0)
+  const [d, setD]           = useState(() => getBaseFormState({
     transformerSiteId: '', poleId: '',
     zoneSubstation: '', feederId: '',
     installationType: '', ownership: '', ownershipOther: '',
@@ -289,13 +104,24 @@ function TransformerWizardApp({ onClose }) {
     },
     removedToStore: '',
     comments: '',
-  })
+  }))
+  const [photos, setPhotos] = useState([])
 
   const isPreview = step === T_STEPS.length - 1
-  const scheme = schemeColors(STEP_SCHEME[step])
-  const G = scheme.accent
+  const scheme    = schemeColors(STEP_SCHEME[step])
+  const G         = scheme.accent
 
-  const tog  = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
+  const { draftPickerProps, openSave, openLoad } = useDraftPicker({
+    setD, setPhotos, setStep,
+    formKey: '360S014EG', formLabel: 'Transformer Record',
+    d, step, photos, accent: G,
+  })
+
+  const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
+    usePdfGenerate(loadTransformerGenerator)
+
+  // ── State helpers ─────────────────────────────────────────────────────────
+  const tog  = k => v => setD(p => ({ ...p,          [k]: p[k]          === v ? '' : v }))
   const setI = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: v } }))
   const togI = k => v => setD(p => ({ ...p, issued:  { ...p.issued,  [k]: p.issued[k]  === v ? '' : v } }))
   const setR = k => v => setD(p => ({ ...p, removed: { ...p.removed, [k]: v } }))
@@ -305,41 +131,40 @@ function TransformerWizardApp({ onClose }) {
     return { ...p, removed: { ...p.removed, [k]: a.includes(v) ? a.filter(x => x !== v) : [...a, v] } }
   })
 
+  // ── PDF share ─────────────────────────────────────────────────────────────
   const handleShare = () => {
-    const sanitise = s => (s || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-    const parts = [sanitise(d.projectName), sanitise(d.npJobNumber), sanitise(d.transformerSiteId), 'Transformer Record'].filter(Boolean)
-    const filename = parts.join(' - ') + '.pdf'
-    sharePdf(pdfBytes, filename, pdfBlobUrl, clearFormDraft)
+    sharePdf(
+      pdfBytes,
+      buildPdfFilename(d.projectName, d.npJobNumber, d.transformerSiteId, 'Transformer Record'),
+      pdfBlobUrl,
+      clearFormDraft,
+    )
   }
 
-  const { set } = useWizardSetup(d, setD, step, '360S014EG')
+  // ── Shared hooks ──────────────────────────────────────────────────────────
+  const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EG')
   const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
 
-  const handleDraftLoad = (draft) => {
-    const { photos: draftPhotos, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
-    if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
-    setStep(draft.step || 0)
-  }
+  const missingFields = [
+    !d.pcoWONo    && 'PCo W/O No.',
+    !d.streetRoad && 'Street/Road',
+    !d.contractor && 'Contractor',
+    !d.namePrint  && 'Name (Print)',
+  ].filter(Boolean)
 
-  // ── Only render the current step's JSX ───────────────────────────────────
-  // This prevents the keyboard from being dismissed on iOS — building all 15
-  // step trees on every keystroke caused enough layout work that iOS would
-  // collapse the keyboard mid-typing.
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP CONTENT
+  // ─────────────────────────────────────────────────────────────────────────
   const renderCurrentStep = () => {
     if (isPreview) return null
 
     switch (step) {
-      // 0 — Job Details
+
       case 0:
         return (
-          <JobDetailsStep
-            d={d} setD={setD} accent={G}
-            onOpenDrafts={() => { setDraftPickerMode('list'); setDraftPickerOpen(true) }}
-          />
+          <JobDetailsStep d={d} setD={setD} accent={G} onOpenDrafts={openLoad} />
         )
 
-      // 1 — Site Details
       case 1:
         return (
           <div>
@@ -351,10 +176,10 @@ function TransformerWizardApp({ onClose }) {
             </div>
             <div style={{ height: 1, background: '#eee', margin: '12px 0' }} />
             <WCB accent={G} label="Installation Type"
-              options={['New', 'Refurbished', 'Emergency / Stock', 'Removal Only']}
+              options={['New','Refurbished','Emergency / Stock','Removal Only']}
               value={d.installationType} onChange={tog('installationType')} />
             <WCB accent={G} label="Ownership"
-              options={['Powerco', 'Customer', 'Other']}
+              options={['Powerco','Customer','Other']}
               value={d.ownership} onChange={tog('ownership')} />
             {d.ownership === 'Other' && (
               <WF accent={G} label="Specify Ownership" v={d.ownershipOther} set={set('ownershipOther')} />
@@ -362,7 +187,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 2 — Issued: Voltage & Connection
       case 2:
         return (
           <div>
@@ -378,7 +202,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 3 — Issued: Capacity & Phases
       case 3:
         return (
           <div>
@@ -391,7 +214,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 4 — Issued: Enclosure & Type
       case 4:
         return (
           <div>
@@ -404,7 +226,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 5 — Issued: Make, Model & Volt Test
       case 5:
         return (
           <div>
@@ -417,17 +238,16 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 6 — Issued: Technical
       case 6:
         return (
           <div>
             <SectionHead accent={G} label="Tap Setting %" />
-            <WCB accent={G} options={['-10', '-7.5', '-5', '-2.5', '0', '+2.5', '+5']}
+            <WCB accent={G} options={['-10','-7.5','-5','-2.5','0','+2.5','+5']}
               value={d.issued.tapSetting} onChange={togI('tapSetting')} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div>
                 <SectionHead accent={G} label="MDI Fitted" />
-                <WCB accent={G} options={['YES', 'NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
+                <WCB accent={G} options={['YES','NO']} value={d.issued.mdiFitted} onChange={togI('mdiFitted')} />
               </div>
               <WF accent={G} label="CT Ratio" v={d.issued.ctRatio} set={setI('ctRatio')} />
             </div>
@@ -450,7 +270,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 7 — Removed: Voltage & Connection
       case 7:
         return (
           <div>
@@ -466,7 +285,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 8 — Removed: Capacity & Phases
       case 8:
         return (
           <div>
@@ -479,7 +297,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 9 — Removed: Enclosure & Type
       case 9:
         return (
           <div>
@@ -492,7 +309,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 10 — Removed: Make & Model
       case 10:
         return (
           <div>
@@ -503,22 +319,17 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 11 — Removal Details
       case 11:
         return (
           <div>
             <SectionHead accent={G} label="Reason for Removal" />
-            <WCB accent={G} multi
-              options={['Relocation', 'Vegetation', 'Site Dismantled', 'Reconstruction',
-                        'Vehicle Accident', 'End of Life', 'Capacity Change', 'Faulty',
-                        'Adverse Weather', 'Vandalism']}
+            <WCB accent={G} multi options={REMOVAL_OPTS}
               value={d.removed.reasonForRemoval} onChange={togRA('reasonForRemoval')} />
             <SectionHead accent={G} label="Removed to Store" />
             <WF accent={G} ph="Stipulate location" v={d.removedToStore} set={set('removedToStore')} />
           </div>
         )
 
-      // 12 — Comments
       case 12:
         return (
           <div>
@@ -532,7 +343,6 @@ function TransformerWizardApp({ onClose }) {
           </div>
         )
 
-      // 13 — Photos
       case 13:
         return <PhotoAttachStep photos={photos} onChange={setPhotos} accent={W_PURPLE} />
 
@@ -540,13 +350,6 @@ function TransformerWizardApp({ onClose }) {
         return null
     }
   }
-
-  const missingFields = [
-    !d.pcoWONo    && 'PCo W/O No.',
-    !d.streetRoad && 'Street/Road',
-    !d.contractor && 'Contractor',
-    !d.namePrint  && 'Name (Print)',
-  ].filter(Boolean)
 
   const previewContent = buildPreviewContent(() => triggerGenerate(d, photos), scheme.accent)
 
@@ -562,7 +365,10 @@ function TransformerWizardApp({ onClose }) {
         onStepClick={setStep}
         onClose={onClose}
         onBack={() => setStep(s => s - 1)}
-        onSaveDraft={() => { setDraftPickerMode('save'); setDraftPickerOpen(true) }}
+        onSaveDraft={openSave}
+        onFillTestData={handleDevFill}
+        calibrationPdfUrl={import.meta.env.DEV ? `${import.meta.env.BASE_URL}forms/360S014EG.pdf` : undefined}
+        calibrationPageCount={import.meta.env.DEV ? 2 : undefined}
         onNext={() => {
           const next = step + 1
           setStep(next)
@@ -572,8 +378,14 @@ function TransformerWizardApp({ onClose }) {
         bg={scheme.bg}
         mid={scheme.mid}
         border={scheme.border}
-        progressColor={STEP_SCHEME[step] === 'issued' ? W_GREEN : STEP_SCHEME[step] === 'removed' ? W_RED : W_YELLOW}
-        getDotColor={i => { const s = STEP_SCHEME[i]; return s === 'issued' ? W_GREEN : s === 'removed' ? W_RED : W_PURPLE }}
+        progressColor={
+          STEP_SCHEME[step] === 'issued'  ? W_GREEN :
+          STEP_SCHEME[step] === 'removed' ? W_RED   : W_YELLOW
+        }
+        getDotColor={i => {
+          const s = STEP_SCHEME[i]
+          return s === 'issued' ? W_GREEN : s === 'removed' ? W_RED : W_PURPLE
+        }}
         isPreview={isPreview}
         onShare={handleShare}
         onClosePreview={() => { setStep(s => s - 1); clearPdf() }}
@@ -583,20 +395,10 @@ function TransformerWizardApp({ onClose }) {
         {renderCurrentStep()}
       </WizardShell>
 
-      <DraftPicker
-        open={draftPickerOpen}
-        onClose={() => setDraftPickerOpen(false)}
-        formKey="360S014EG"
-        formLabel="Transformer Record"
-        d={d}
-        step={step}
-        photos={photos}
-        onLoad={handleDraftLoad}
-        accent={G}
-        initialMode={draftPickerMode}
-      />
+      <DraftPicker {...draftPickerProps} />
     </>
   )
 }
 
 export default TransformerWizardApp
+
