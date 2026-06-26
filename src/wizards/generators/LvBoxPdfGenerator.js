@@ -110,8 +110,9 @@ export async function generateEdPdf(d, photos = []) {
   const templateBytes = await fetchPdfTemplate(getTemplateUrl())
   const pdfDoc        = await PDFDocument.load(templateBytes)
   const font          = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const [p1]          = pdfDoc.getPages()
-  const draw          = createPageDrawer(p1, font, DEFAULT_INK, A4_HEIGHT)
+  const [p1]                 = pdfDoc.getPages()
+  const { height: p1Height } = p1.getSize()
+  const draw                 = createPageDrawer(p1, font, DEFAULT_INK, p1Height)
 
   // ── Header ────────────────────────────────────────────────────────────────
   const h   = LAYOUT.header
