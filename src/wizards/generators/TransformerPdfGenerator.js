@@ -1,397 +1,250 @@
 /**
- * TransformerPdfGenerator.js — Pure async PDF generator for 360S014EG.
+ * TransformerPdfGenerator.js — PDF generator for 360S014EG
+ * (AS-Built Transformer Record).
  *
- * Extracted from TransformerWizard.jsx so that:
- *   - The React component only handles UI state
- *   - PDF generation is testable in isolation (no React dependency)
- *   - The template is cached in memory after the first call (via fetchPdfTemplate)
+ * Nearly every field on this form comes in an "Issued" / "Removed" pair at
+ * mirrored coordinates, and several option-groups (phases, transformer
+ * type, tap setting, enclosure type, connection type) were previously
+ * expressed as a shared map looked up by the current value. Each option is
+ * now its own named field — same outcome as every other form, and each one
+ * can be moved or recalibrated independently of its siblings.
  *
- * Usage inside the wizard:
- *   import { generateTransformerPdf } from './generators/TransformerPdfGenerator'
- *   ...
- *   const { pdfBytes, ... } = usePdfGenerate(generateTransformerPdf)
+ * issued()/removed() are small helpers mirroring the original's
+ * `d.issued || {}` / `d.removed || {}` fallback, so every "issued"/"removed"
+ * field can read its parent object safely even if it's missing.
  *
- * @param {object} d      - Wizard form state (see TransformerWizard.jsx for shape)
- * @param {Array}  photos - Array of { dataUrl: string, name?: string }
- * @returns {Promise<Uint8Array>} - The generated PDF as a byte array
+ * Page 2 is a list of comment lines split on '\n' — the user's textarea
+ * newlines map straight onto fixed ruled lines on the form (no word-
+ * wrapping), so that stays as a small loop reading from GRIDS rather than a
+ * single field.
+ *
+ * Coordinate convention
+ * ─────────────────────
+ * All Y values are TOP-ORIGIN (CSS / screen style). renderFields converts
+ * them to pdf-lib bottom-origin internally.
+ *
+ * @param {object}  d       - Form state from TransformerWizard
+ * @param {Array}   photos  - Photo attachments
+ * @returns {Promise<Uint8Array>}
  */
 
 import { PDFDocument, StandardFonts } from 'pdf-lib'
-import {
-  fetchPdfTemplate,
-  createPageDrawer,
-  drawSignature,
-  DEFAULT_INK,
-  A4_HEIGHT,
-} from '../../shared/pdfDrawUtils'
+import { fetchPdfTemplate, createPageDrawer, DEFAULT_INK, A4_HEIGHT } from '../../shared/pdfDrawUtils'
+import { renderFields, renderGridRow } from '../../shared/pdfFieldRenderer'
 import { appendPhotosToPdf } from '../../shared/appendPhotosToPdf'
 
-// ── Template URL ──────────────────────────────────────────────────────────────
-// Using a function so `import.meta.env.BASE_URL` is evaluated at call-time
-// (Vite replaces it during the build; we can't use it at module-evaluation time
-// in a plain JS file that might be imported before Vite processes it).
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/360S014EG.pdf`
 
-// ── Field coordinate tables ───────────────────────────────────────────────────
-// All Y values are top-origin (CSS-style). The drawing helpers convert them.
+// ── Safe accessors for the issued/removed sub-objects ────────────────────────
+const issued  = d => d.issued  || {}
+const removed = d => d.removed || {}
+const removalReasons = d => (Array.isArray(removed(d).reasonForRemoval) ? removed(d).reasonForRemoval : [])
 
-const P1_FIELDS = {
-  // Header
-  streetRoad:         { x: 115, y:  88 },
-  contractor:         { x: 440, y:  88 },
-  cityTown:           { x: 115, y: 106 },
-  district:           { x: 250, y: 106 },
-  dateWorkCompleted:  { x: 440, y: 106 },
-  pcoWONo:            { x: 115, y: 123 },
-  ciwrNo:             { x: 250, y: 123 },
-  npJobNumber:        { x: 160, y: 140 },
-  namePrint:          { x: 440, y: 141 },
-  // Signature image: top-left corner of the image
-  signature:          { x: 438, y: 118, maxW: 120, maxH: 22 },
-  // Site details (centred within their cells)
-  transformerSiteId:  { fieldLeft:  33, fieldWidth: 128, y: 195 },
-  poleId:             { fieldLeft: 162, fieldWidth: 128, y: 195 },
-  zoneSubstation:     { fieldLeft: 296, fieldWidth: 128, y: 195 },
-  feederId:           { fieldLeft: 439, fieldWidth: 126, y: 195 },
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELDS — Page 1. Page 2 has no simple named fields (only the GRIDS
+// comment-line list).
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Installation type checkboxes
-const P1_INSTALL_CK = {
-  'New':                  { x: 144, y: 222 },
-  'Refurbished':          { x: 218, y: 222 },
-  'Emergency / Stock':    { x: 317, y: 222 },
-  'Removal Only':         { x: 446, y: 222 },
-}
+export const FIELDS = {
+  p1: {
 
-// Ownership checkboxes
-const P1_OWNERSHIP_CK = {
-  Powerco:  { x: 144, y: 243 },
-  Customer: { x: 218, y: 243 },
-  Other:    { x: 317, y: 243 },
-}
+    // ── Header ─────────────────────────────────────────────────────────────────
+    streetRoad:        { type: 'text', align: 'left', x: 115, y:  88, value: d => d.streetRoad },
+    contractor:        { type: 'text', align: 'left', x: 440, y:  88, value: d => d.contractor },
+    cityTown:          { type: 'text', align: 'left', x: 115, y: 106, value: d => d.cityTown },
+    district:          { type: 'text', align: 'left', x: 250, y: 106, value: d => d.district },
+    dateWorkCompleted: { type: 'text', align: 'left', x: 440, y: 106, value: d => d.dateWorkCompleted },
+    pcoWONo:           { type: 'text', align: 'left', x: 115, y: 123, value: d => d.pcoWONo },
+    ciwrNo:            { type: 'text', align: 'left', x: 250, y: 123, value: d => d.ciwrNo },
+    npJobNumber:       { type: 'text', align: 'left', x: 160, y: 140, value: d => d.npJobNumber },
+    namePrint:         { type: 'text', align: 'left', x: 440, y: 141, value: d => d.namePrint },
+    signed:            { type: 'signature', x: 438, y: 118, maxW: 120, maxH: 22, value: d => d.signed },
 
-// Issued / Removed voltage text (centred)
-const P1_VOLTAGE = {
-  issuedHV:   { fieldLeft: 150, fieldWidth:  85, y: 311 },
-  issuedLV:   { fieldLeft: 250, fieldWidth:  85, y: 311 },
-  removedHV:  { fieldLeft: 360, fieldWidth:  95, y: 311 },
-  removedLV:  { fieldLeft: 480, fieldWidth:  70, y: 311 },
-}
+    // Site details — centred within their cells
+    transformerSiteId: { type: 'text', align: 'center', x:  33, width: 128, y: 195, value: d => d.transformerSiteId },
+    poleId:             { type: 'text', align: 'center', x: 162, width: 128, y: 195, value: d => d.poleId },
+    zoneSubstation:     { type: 'text', align: 'center', x: 296, width: 128, y: 195, value: d => d.zoneSubstation },
+    feederId:           { type: 'text', align: 'center', x: 439, width: 126, y: 195, value: d => d.feederId },
 
-// Connection type checkboxes — issued HV
-const P1_CONN_I_HV = {
-  Bushing:    { x: 148, y: 327 },
-  'Cable Box':{ x: 148, y: 344 },
-  'Dead Break':{ x: 148, y: 361 },
-  'Pitch Box':{ x: 148, y: 378 },
-}
-// Issued LV
-const P1_CONN_I_LV = {
-  Bushing:    { x: 247, y: 327 },
-  'Cable Box':{ x: 247, y: 344 },
-  'Dead Break':{ x: 247, y: 361 },
-  Resin:      { x: 247, y: 378 },
-}
-// Removed HV
-const P1_CONN_R_HV = {
-  Bushing:    { x: 361, y: 327 },
-  'Cable Box':{ x: 361, y: 344 },
-  'Dead Break':{ x: 361, y: 361 },
-  'Pitch Box':{ x: 361, y: 378 },
-}
-// Removed LV
-const P1_CONN_R_LV = {
-  Bushing:    { x: 467, y: 327 },
-  'Cable Box':{ x: 467, y: 344 },
-  'Dead Break':{ x: 466, y: 361 },
-  Resin:      { x: 467, y: 378 },
-}
+    // ── Installation type ────────────────────────────────────────────────────────
+    installNew:            { type: 'check', x: 144, y: 222, value: d => d.installationType === 'New' },
+    installRefurbished:    { type: 'check', x: 218, y: 222, value: d => d.installationType === 'Refurbished' },
+    installEmergencyStock: { type: 'check', x: 317, y: 222, value: d => d.installationType === 'Emergency / Stock' },
+    installRemovalOnly:    { type: 'check', x: 446, y: 222, value: d => d.installationType === 'Removal Only' },
 
-// Capacity kVA (centred)
-const P1_CAPACITY = {
-  issued:   { fieldLeft: 155, fieldWidth: 170, y: 400 },
-  removed:  { fieldLeft: 330, fieldWidth: 260, y: 400 },
-}
+    // ── Ownership ────────────────────────────────────────────────────────────────
+    ownershipPowerco:  { type: 'check', x: 144, y: 243, value: d => d.ownership === 'Powerco' },
+    ownershipCustomer: { type: 'check', x: 218, y: 243, value: d => d.ownership === 'Customer' },
+    ownershipOther:    { type: 'check', x: 317, y: 243, value: d => d.ownership === 'Other' },
+    ownershipOtherText: { type: 'text', align: 'left', x: 360, y: 219, value: d => (d.ownership === 'Other' ? d.ownershipOther : '') },
 
-// Phase ellipses — [cx, cssCY, rx, ry]
-const P1_PHASES_I = { Three: [216,428,16,7], One: [240,428,11,7], SWER: [265,428,14,7] }
-const P1_PHASES_R = { Three: [434,428,16,7], One: [458,428,11,7], SWER: [483,428,14,7] }
+    // ── Voltage ──────────────────────────────────────────────────────────────────
+    issuedVoltageHV:  { type: 'text', align: 'center', x: 150, width:  85, y: 311, value: d => issued(d).voltageHV },
+    issuedVoltageLV:  { type: 'text', align: 'center', x: 250, width:  85, y: 311, value: d => issued(d).voltageLV },
+    removedVoltageHV: { type: 'text', align: 'center', x: 360, width:  95, y: 311, value: d => removed(d).voltageHV },
+    removedVoltageLV: { type: 'text', align: 'center', x: 480, width:  70, y: 311, value: d => removed(d).voltageLV },
 
-// Serial numbers (centred)
-const P1_SERIAL = {
-  issued:  { fieldLeft: 155, fieldWidth: 170, y: 445 },
-  removed: { fieldLeft: 330, fieldWidth: 260, y: 445 },
-}
+    // ── Connection type — Issued HV / LV, Removed HV / LV ───────────────────────
+    issuedConnHVBushing:    { type: 'check', x: 148, y: 327, value: d => issued(d).connectionTypeHV === 'Bushing' },
+    issuedConnHVCableBox:   { type: 'check', x: 148, y: 344, value: d => issued(d).connectionTypeHV === 'Cable Box' },
+    issuedConnHVDeadBreak:  { type: 'check', x: 148, y: 361, value: d => issued(d).connectionTypeHV === 'Dead Break' },
+    issuedConnHVPitchBox:   { type: 'check', x: 148, y: 378, value: d => issued(d).connectionTypeHV === 'Pitch Box' },
 
-// Enclosure type checkboxes
-const P1_ENC_I = {
-  'Pole Mount':        { x: 148, y: 464 },
-  Plastic:             { x: 247, y: 464 },
-  Fibreglass:          { x: 148, y: 481 },
-  Building:            { x: 247, y: 481 },
-  Fenced:              { x: 148, y: 498 },
-  'Metal Cover':       { x: 247, y: 498 },
-  'Customer Premise':  { x: 148, y: 515 },
-}
-const P1_ENC_R = {
-  'Pole Mount':        { x: 361, y: 464 },
-  Plastic:             { x: 467, y: 464 },
-  Fibreglass:          { x: 361, y: 481 },
-  Building:            { x: 467, y: 481 },
-  Fenced:              { x: 361, y: 498 },
-  'Metal Cover':       { x: 467, y: 498 },
-  'Customer Premise':  { x: 361, y: 515 },
-}
+    issuedConnLVBushing:    { type: 'check', x: 247, y: 327, value: d => issued(d).connectionTypeLV === 'Bushing' },
+    issuedConnLVCableBox:   { type: 'check', x: 247, y: 344, value: d => issued(d).connectionTypeLV === 'Cable Box' },
+    issuedConnLVDeadBreak:  { type: 'check', x: 247, y: 361, value: d => issued(d).connectionTypeLV === 'Dead Break' },
+    issuedConnLVResin:      { type: 'check', x: 247, y: 378, value: d => issued(d).connectionTypeLV === 'Resin' },
 
-// Enclosure models (centred)
-const P1_ENC_MODEL = {
-  issued:  { fieldLeft: 155, fieldWidth: 170, y: 536 },
-  removed: { fieldLeft: 330, fieldWidth: 260, y: 536 },
-}
+    removedConnHVBushing:   { type: 'check', x: 361, y: 327, value: d => removed(d).connectionTypeHV === 'Bushing' },
+    removedConnHVCableBox:  { type: 'check', x: 361, y: 344, value: d => removed(d).connectionTypeHV === 'Cable Box' },
+    removedConnHVDeadBreak: { type: 'check', x: 361, y: 361, value: d => removed(d).connectionTypeHV === 'Dead Break' },
+    removedConnHVPitchBox:  { type: 'check', x: 361, y: 378, value: d => removed(d).connectionTypeHV === 'Pitch Box' },
 
-// Transformer type ellipses — [cx, cssCY, rx, ry]
-const P1_TX_TYPE_I = {
-  Bearer:       [172, 565, 16, 8],
-  'Grnd Mount': [219, 565, 26, 8],
-  Hanger:       [265, 565, 17, 8],
-  Pedestal:     [305, 565, 20, 8],
-}
-const P1_TX_TYPE_R = {
-  Bearer:       [390, 565, 16, 8],
-  'Grnd Mount': [436, 565, 26, 8],
-  Hanger:       [483, 565, 17, 8],
-  Pedestal:     [523, 565, 20, 8],
-}
+    removedConnLVBushing:   { type: 'check', x: 467, y: 327, value: d => removed(d).connectionTypeLV === 'Bushing' },
+    removedConnLVCableBox:  { type: 'check', x: 467, y: 344, value: d => removed(d).connectionTypeLV === 'Cable Box' },
+    // NOTE: x:466 (not 467) — matches the original LAYOUT exactly; not a typo
+    // we're free to "fix" since that would shift this one tick visually.
+    removedConnLVDeadBreak: { type: 'check', x: 466, y: 361, value: d => removed(d).connectionTypeLV === 'Dead Break' },
+    removedConnLVResin:     { type: 'check', x: 467, y: 378, value: d => removed(d).connectionTypeLV === 'Resin' },
 
-// Make / model (centred)
-const P1_MAKE = {
-  issued:  { fieldLeft: 155, fieldWidth: 170, y: 581 },
-  removed: { fieldLeft: 330, fieldWidth: 260, y: 581 },
-}
-const P1_MODEL = {
-  issued:  { fieldLeft: 155, fieldWidth: 170, y: 604 },
-  removed: { fieldLeft: 330, fieldWidth: 260, y: 604 },
-}
+    // ── Capacity ─────────────────────────────────────────────────────────────────
+    issuedCapacityKVA:  { type: 'text', align: 'center', x: 155, width: 170, y: 400, value: d => issued(d).capacityKVA },
+    removedCapacityKVA: { type: 'text', align: 'center', x: 330, width: 260, y: 400, value: d => removed(d).capacityKVA },
 
-// Issued-only technical fields
-const P1_ISSUED_TECH = {
-  voltTest:             { fieldLeft: 155, fieldWidth: 170, y: 628 },
-  // Tap setting ellipses: value → [cx, cssCY, rx]
-  tap: {
-    '-10':  [164, 654, 10], '-7.5': [191, 654, 10], '-5':  [217, 654, 10],
-    '-2.5': [242, 654, 10], '0':    [266, 654, 10], '+2.5':[292, 654, 11],
-    '+5':   [319, 654, 10],
+    // ── Phase ellipses ───────────────────────────────────────────────────────────
+    issuedPhaseThree:  { type: 'ellipse', cx: 216, cy: 428, rx: 16, ry: 7, value: d => issued(d).phases === 'Three' },
+    issuedPhaseOne:    { type: 'ellipse', cx: 240, cy: 428, rx: 11, ry: 7, value: d => issued(d).phases === 'One' },
+    issuedPhaseSWER:   { type: 'ellipse', cx: 265, cy: 428, rx: 14, ry: 7, value: d => issued(d).phases === 'SWER' },
+    removedPhaseThree: { type: 'ellipse', cx: 434, cy: 428, rx: 16, ry: 7, value: d => removed(d).phases === 'Three' },
+    removedPhaseOne:   { type: 'ellipse', cx: 458, cy: 428, rx: 11, ry: 7, value: d => removed(d).phases === 'One' },
+    removedPhaseSWER:  { type: 'ellipse', cx: 483, cy: 428, rx: 14, ry: 7, value: d => removed(d).phases === 'SWER' },
+
+    // ── Serial numbers ───────────────────────────────────────────────────────────
+    issuedSerialNumber:  { type: 'text', align: 'center', x: 155, width: 170, y: 445, value: d => issued(d).serialNumber },
+    removedSerialNumber: { type: 'text', align: 'center', x: 330, width: 260, y: 445, value: d => removed(d).serialNumber },
+
+    // ── Enclosure type ───────────────────────────────────────────────────────────
+    issuedEncPoleMount:       { type: 'check', x: 148, y: 464, value: d => issued(d).enclosureType === 'Pole Mount' },
+    issuedEncPlastic:         { type: 'check', x: 247, y: 464, value: d => issued(d).enclosureType === 'Plastic' },
+    issuedEncFibreglass:      { type: 'check', x: 148, y: 481, value: d => issued(d).enclosureType === 'Fibreglass' },
+    issuedEncBuilding:        { type: 'check', x: 247, y: 481, value: d => issued(d).enclosureType === 'Building' },
+    issuedEncFenced:          { type: 'check', x: 148, y: 498, value: d => issued(d).enclosureType === 'Fenced' },
+    issuedEncMetalCover:      { type: 'check', x: 247, y: 498, value: d => issued(d).enclosureType === 'Metal Cover' },
+    issuedEncCustomerPremise: { type: 'check', x: 148, y: 515, value: d => issued(d).enclosureType === 'Customer Premise' },
+
+    removedEncPoleMount:       { type: 'check', x: 361, y: 464, value: d => removed(d).enclosureType === 'Pole Mount' },
+    removedEncPlastic:         { type: 'check', x: 467, y: 464, value: d => removed(d).enclosureType === 'Plastic' },
+    removedEncFibreglass:      { type: 'check', x: 361, y: 481, value: d => removed(d).enclosureType === 'Fibreglass' },
+    removedEncBuilding:        { type: 'check', x: 467, y: 481, value: d => removed(d).enclosureType === 'Building' },
+    removedEncFenced:          { type: 'check', x: 361, y: 498, value: d => removed(d).enclosureType === 'Fenced' },
+    removedEncMetalCover:      { type: 'check', x: 467, y: 498, value: d => removed(d).enclosureType === 'Metal Cover' },
+    removedEncCustomerPremise: { type: 'check', x: 361, y: 515, value: d => removed(d).enclosureType === 'Customer Premise' },
+
+    issuedEnclosureModel:  { type: 'text', align: 'center', x: 155, width: 170, y: 536, value: d => issued(d).enclosureModel },
+    removedEnclosureModel: { type: 'text', align: 'center', x: 330, width: 260, y: 536, value: d => removed(d).enclosureModel },
+
+    // ── Transformer type ellipses ─────────────────────────────────────────────────
+    issuedTxBearer:     { type: 'ellipse', cx: 172, cy: 565, rx: 16, ry: 8, value: d => issued(d).transformerType === 'Bearer' },
+    issuedTxGrndMount:  { type: 'ellipse', cx: 219, cy: 565, rx: 26, ry: 8, value: d => issued(d).transformerType === 'Grnd Mount' },
+    issuedTxHanger:     { type: 'ellipse', cx: 265, cy: 565, rx: 17, ry: 8, value: d => issued(d).transformerType === 'Hanger' },
+    issuedTxPedestal:   { type: 'ellipse', cx: 305, cy: 565, rx: 20, ry: 8, value: d => issued(d).transformerType === 'Pedestal' },
+    removedTxBearer:    { type: 'ellipse', cx: 390, cy: 565, rx: 16, ry: 8, value: d => removed(d).transformerType === 'Bearer' },
+    removedTxGrndMount: { type: 'ellipse', cx: 436, cy: 565, rx: 26, ry: 8, value: d => removed(d).transformerType === 'Grnd Mount' },
+    removedTxHanger:    { type: 'ellipse', cx: 483, cy: 565, rx: 17, ry: 8, value: d => removed(d).transformerType === 'Hanger' },
+    removedTxPedestal:  { type: 'ellipse', cx: 523, cy: 565, rx: 20, ry: 8, value: d => removed(d).transformerType === 'Pedestal' },
+
+    // ── Make / model ───────────────────────────────────────────────────────────────
+    issuedMake:   { type: 'text', align: 'center', x: 155, width: 170, y: 581, value: d => issued(d).make },
+    removedMake:  { type: 'text', align: 'center', x: 330, width: 260, y: 581, value: d => removed(d).make },
+    issuedModel:  { type: 'text', align: 'center', x: 155, width: 170, y: 604, value: d => issued(d).model },
+    removedModel: { type: 'text', align: 'center', x: 330, width: 260, y: 604, value: d => removed(d).model },
+
+    // ── Issued-only technical data ───────────────────────────────────────────────
+    issuedVoltTest: { type: 'text', align: 'center', x: 155, width: 170, y: 628, value: d => issued(d).voltTest },
+
+    // Tap setting ellipses — ry is fixed at 6 for every option (matches original)
+    tapMinus10: { type: 'ellipse', cx: 164, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '-10' },
+    tapMinus75: { type: 'ellipse', cx: 191, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '-7.5' },
+    tapMinus5:  { type: 'ellipse', cx: 217, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '-5' },
+    tapMinus25: { type: 'ellipse', cx: 242, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '-2.5' },
+    tapZero:    { type: 'ellipse', cx: 266, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '0' },
+    tapPlus25:  { type: 'ellipse', cx: 292, cy: 654, rx: 11, ry: 6, value: d => issued(d).tapSetting === '+2.5' },
+    tapPlus5:   { type: 'ellipse', cx: 319, cy: 654, rx: 10, ry: 6, value: d => issued(d).tapSetting === '+5' },
+
+    mdiYes: { type: 'check', x: 148, y: 663, value: d => issued(d).mdiFitted === 'YES' },
+    mdiNo:  { type: 'check', x: 247, y: 663, value: d => issued(d).mdiFitted === 'NO' },
+
+    issuedCtRatio: { type: 'text', align: 'center', x: 155, width: 170, y: 682, value: d => issued(d).ctRatio },
+
+    issuedEarthTest1: { type: 'text', align: 'left', x: 160, y: 699, value: d => issued(d).earthTest1 },
+    issuedEarthTest2: { type: 'text', align: 'left', x: 221, y: 699, value: d => issued(d).earthTest2 },
+    issuedTotalMEN:   { type: 'text', align: 'left', x: 300, y: 699, value: d => issued(d).totalMEN },
+
+    issuedFuseSizeHV: { type: 'text', align: 'left', x: 175, y: 717, value: d => issued(d).fuseSizeHV },
+    issuedFuseSizeLV: { type: 'text', align: 'left', x: 275, y: 717, value: d => issued(d).fuseSizeLV },
+
+    issuedLvDisconnectorMake:  { type: 'text', align: 'left', x: 175, y: 737, value: d => issued(d).lvDisconnectorMake },
+    issuedLvDisconnectorModel: { type: 'text', align: 'left', x: 275, y: 737, value: d => issued(d).lvDisconnectorModel },
+
+    // ── Removal reasons ──────────────────────────────────────────────────────────
+    removalReasonRelocation:     { type: 'check', x: 361, y: 647, value: d => removalReasons(d).includes('Relocation') },
+    removalReasonVegetation:     { type: 'check', x: 467, y: 647, value: d => removalReasons(d).includes('Vegetation') },
+    removalReasonSiteDismantled: { type: 'check', x: 361, y: 664, value: d => removalReasons(d).includes('Site Dismantled') },
+    removalReasonReconstruction: { type: 'check', x: 467, y: 664, value: d => removalReasons(d).includes('Reconstruction') },
+    removalReasonVehicleAccident:{ type: 'check', x: 361, y: 681, value: d => removalReasons(d).includes('Vehicle Accident') },
+    removalReasonEndOfLife:      { type: 'check', x: 467, y: 681, value: d => removalReasons(d).includes('End of Life') },
+    removalReasonCapacityChange: { type: 'check', x: 361, y: 697, value: d => removalReasons(d).includes('Capacity Change') },
+    removalReasonFaulty:         { type: 'check', x: 467, y: 697, value: d => removalReasons(d).includes('Faulty') },
+    removalReasonAdverseWeather: { type: 'check', x: 361, y: 725, value: d => removalReasons(d).includes('Adverse Weather') },
+    removalReasonVandalism:      { type: 'check', x: 467, y: 725, value: d => removalReasons(d).includes('Vandalism') },
+
+    // ── Removed to store ──────────────────────────────────────────────────────────
+    removedToStore: { type: 'text', align: 'left', x: 178, y: 755, value: d => d.removedToStore },
   },
-  mdiYes:               { x: 148, y: 663 },
-  mdiNo:                { x: 247, y: 663 },
-  ctRatio:              { fieldLeft: 155, fieldWidth: 170, y: 682 },
-  earthTest1:           { x: 160, y: 699 },
-  earthTest2:           { x: 221, y: 699 },
-  totalMEN:             { x: 300, y: 699 },
-  fuseSizeHV:           { x: 175, y: 717 },
-  fuseSizeLV:           { x: 275, y: 717 },
-  lvDisconnectorMake:   { x: 175, y: 737 },
-  lvDisconnectorModel:  { x: 275, y: 737 },
 }
 
-// Removal reasons
-const P1_REMOVAL_REASONS = {
-  Relocation:         { x: 361, y: 647 },
-  Vegetation:         { x: 467, y: 647 },
-  'Site Dismantled':  { x: 361, y: 664 },
-  Reconstruction:     { x: 467, y: 664 },
-  'Vehicle Accident': { x: 361, y: 681 },
-  'End of Life':      { x: 467, y: 681 },
-  'Capacity Change':  { x: 361, y: 697 },
-  Faulty:             { x: 467, y: 697 },
-  'Adverse Weather':  { x: 361, y: 725 },
-  Vandalism:          { x: 467, y: 725 },
+// ─────────────────────────────────────────────────────────────────────────────
+// GRIDS — Page 2 comment lines. The user's textarea newlines map directly
+// onto fixed ruled lines (no word-wrapping), so this is a row list rather
+// than a single field.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const GRIDS = {
+  p2Comments: {
+    x: 60,
+    align: 'left', // change to 'center' or 'right' if needed ('center' also needs `width`)
+    width: undefined,
+    rowY: [90, 104, 118, 132, 146, 160, 174],
+  },
 }
-
-// "Removed to store" field
-const P1_REMOVED_TO_STORE = { x: 178, y: 755 }
-
-// Page 2 — comments
-const P2_COMMENT_Y = [90, 104, 118, 132, 146, 160, 174]
-const P2_COMMENT_X = 60
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GENERATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @param {object}  d       - Form state from TransformerWizard
- * @param {Array}   photos  - Photo attachments
- * @returns {Promise<Uint8Array>}
- */
 export async function generateTransformerPdf(d, photos = []) {
-  // ── Load template (cached after first call) ───────────────────────────────
   const templateBytes = await fetchPdfTemplate(getTemplateUrl())
   const pdfDoc        = await PDFDocument.load(templateBytes)
   const font          = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const [p1, p2]      = pdfDoc.getPages()
+  const draw1         = createPageDrawer(p1, font, DEFAULT_INK, A4_HEIGHT)
+  const draw2         = createPageDrawer(p2, font, DEFAULT_INK, A4_HEIGHT)
 
-  // ── Create page-bound drawing helpers ────────────────────────────────────
-  const d1 = createPageDrawer(p1, font, DEFAULT_INK, A4_HEIGHT)
-  const d2 = createPageDrawer(p2, font, DEFAULT_INK, A4_HEIGHT)
+  await renderFields({ pdfDoc, page: p1, draw: draw1 }, FIELDS.p1, d)
 
-  const i = d.issued   || {}
-  const r = d.removed  || {}
-
-  // ── Page 1: Header ────────────────────────────────────────────────────────
-  d1.t(P1_FIELDS.streetRoad.x,        P1_FIELDS.streetRoad.y,        d.streetRoad)
-  d1.t(P1_FIELDS.contractor.x,        P1_FIELDS.contractor.y,        d.contractor)
-  d1.t(P1_FIELDS.cityTown.x,          P1_FIELDS.cityTown.y,          d.cityTown)
-  d1.t(P1_FIELDS.district.x,          P1_FIELDS.district.y,          d.district)
-  d1.t(P1_FIELDS.dateWorkCompleted.x, P1_FIELDS.dateWorkCompleted.y, d.dateWorkCompleted)
-  d1.t(P1_FIELDS.pcoWONo.x,           P1_FIELDS.pcoWONo.y,           d.pcoWONo)
-  d1.t(P1_FIELDS.ciwrNo.x,            P1_FIELDS.ciwrNo.y,            d.ciwrNo)
-  d1.t(P1_FIELDS.npJobNumber.x,       P1_FIELDS.npJobNumber.y,       d.npJobNumber)
-  d1.t(P1_FIELDS.namePrint.x,         P1_FIELDS.namePrint.y,         d.namePrint)
-
-  // Signature
-  const sig = P1_FIELDS.signature
-  await drawSignature(pdfDoc, p1, d.signed, sig.x, sig.y, sig.maxW, sig.maxH, A4_HEIGHT)
-
-  // ── Page 1: Site details (centred) ────────────────────────────────────────
-  const siteCentred = [
-    ['transformerSiteId', d.transformerSiteId],
-    ['poleId',            d.poleId],
-    ['zoneSubstation',    d.zoneSubstation],
-    ['feederId',          d.feederId],
-  ]
-  siteCentred.forEach(([key, val]) => {
-    const f = P1_FIELDS[key]
-    d1.tc(f.fieldLeft, f.fieldWidth, f.y, val)
-  })
-
-  // ── Page 1: Installation type + ownership ─────────────────────────────────
-  Object.entries(P1_INSTALL_CK).forEach(([label, pos]) =>
-    d1.ck(pos.x, pos.y, d.installationType === label)
-  )
-  Object.entries(P1_OWNERSHIP_CK).forEach(([label, pos]) =>
-    d1.ck(pos.x, pos.y, d.ownership === label)
-  )
-  if (d.ownership === 'Other') d1.t(360, 219, d.ownershipOther)
-
-  // ── Page 1: Voltage ───────────────────────────────────────────────────────
-  d1.tc(P1_VOLTAGE.issuedHV.fieldLeft,  P1_VOLTAGE.issuedHV.fieldWidth,  P1_VOLTAGE.issuedHV.y,  i.voltageHV)
-  d1.tc(P1_VOLTAGE.issuedLV.fieldLeft,  P1_VOLTAGE.issuedLV.fieldWidth,  P1_VOLTAGE.issuedLV.y,  i.voltageLV)
-  d1.tc(P1_VOLTAGE.removedHV.fieldLeft, P1_VOLTAGE.removedHV.fieldWidth, P1_VOLTAGE.removedHV.y, r.voltageHV)
-  d1.tc(P1_VOLTAGE.removedLV.fieldLeft, P1_VOLTAGE.removedLV.fieldWidth, P1_VOLTAGE.removedLV.y, r.voltageLV)
-
-  // ── Page 1: Connection types ──────────────────────────────────────────────
-  const connMaps = [
-    [P1_CONN_I_HV, i.connectionTypeHV],
-    [P1_CONN_I_LV, i.connectionTypeLV],
-    [P1_CONN_R_HV, r.connectionTypeHV],
-    [P1_CONN_R_LV, r.connectionTypeLV],
-  ]
-  connMaps.forEach(([map, value]) =>
-    Object.entries(map).forEach(([label, pos]) =>
-      d1.ck(pos.x, pos.y, value === label)
-    )
-  )
-
-  // ── Page 1: Capacity ──────────────────────────────────────────────────────
-  d1.tc(P1_CAPACITY.issued.fieldLeft,  P1_CAPACITY.issued.fieldWidth,  P1_CAPACITY.issued.y,  i.capacityKVA)
-  d1.tc(P1_CAPACITY.removed.fieldLeft, P1_CAPACITY.removed.fieldWidth, P1_CAPACITY.removed.y, r.capacityKVA)
-
-  // ── Page 1: Phase ellipses ────────────────────────────────────────────────
-  Object.entries(P1_PHASES_I).forEach(([label, [cx, cy, rx, ry]]) =>
-    d1.circ(cx, cy, rx, ry, i.phases === label)
-  )
-  Object.entries(P1_PHASES_R).forEach(([label, [cx, cy, rx, ry]]) =>
-    d1.circ(cx, cy, rx, ry, r.phases === label)
-  )
-
-  // ── Page 1: Serial numbers ────────────────────────────────────────────────
-  d1.tc(P1_SERIAL.issued.fieldLeft,  P1_SERIAL.issued.fieldWidth,  P1_SERIAL.issued.y,  i.serialNumber)
-  d1.tc(P1_SERIAL.removed.fieldLeft, P1_SERIAL.removed.fieldWidth, P1_SERIAL.removed.y, r.serialNumber)
-
-  // ── Page 1: Enclosure types ───────────────────────────────────────────────
-  Object.entries(P1_ENC_I).forEach(([label, pos]) =>
-    d1.ck(pos.x, pos.y, i.enclosureType === label)
-  )
-  Object.entries(P1_ENC_R).forEach(([label, pos]) =>
-    d1.ck(pos.x, pos.y, r.enclosureType === label)
-  )
-  d1.tc(P1_ENC_MODEL.issued.fieldLeft,  P1_ENC_MODEL.issued.fieldWidth,  P1_ENC_MODEL.issued.y,  i.enclosureModel)
-  d1.tc(P1_ENC_MODEL.removed.fieldLeft, P1_ENC_MODEL.removed.fieldWidth, P1_ENC_MODEL.removed.y, r.enclosureModel)
-
-  // ── Page 1: Transformer type ellipses ─────────────────────────────────────
-  Object.entries(P1_TX_TYPE_I).forEach(([label, [cx, cy, rx, ry]]) =>
-    d1.circ(cx, cy, rx, ry, i.transformerType === label)
-  )
-  Object.entries(P1_TX_TYPE_R).forEach(([label, [cx, cy, rx, ry]]) =>
-    d1.circ(cx, cy, rx, ry, r.transformerType === label)
-  )
-
-  // ── Page 1: Make & model ──────────────────────────────────────────────────
-  d1.tc(P1_MAKE.issued.fieldLeft,  P1_MAKE.issued.fieldWidth,  P1_MAKE.issued.y,  i.make)
-  d1.tc(P1_MAKE.removed.fieldLeft, P1_MAKE.removed.fieldWidth, P1_MAKE.removed.y, r.make)
-  d1.tc(P1_MODEL.issued.fieldLeft,  P1_MODEL.issued.fieldWidth,  P1_MODEL.issued.y,  i.model)
-  d1.tc(P1_MODEL.removed.fieldLeft, P1_MODEL.removed.fieldWidth, P1_MODEL.removed.y, r.model)
-
-  // ── Page 1: Issued-only technical data ────────────────────────────────────
-  d1.tc(
-    P1_ISSUED_TECH.voltTest.fieldLeft,
-    P1_ISSUED_TECH.voltTest.fieldWidth,
-    P1_ISSUED_TECH.voltTest.y,
-    i.voltTest,
-  )
-
-  // Tap setting ellipses
-  Object.entries(P1_ISSUED_TECH.tap).forEach(([val, [cx, cy, rx]]) =>
-    d1.circ(cx, cy, rx, 6, i.tapSetting === val)
-  )
-
-  // MDI fitted
-  d1.ck(P1_ISSUED_TECH.mdiYes.x, P1_ISSUED_TECH.mdiYes.y, i.mdiFitted === 'YES')
-  d1.ck(P1_ISSUED_TECH.mdiNo.x,  P1_ISSUED_TECH.mdiNo.y,  i.mdiFitted === 'NO')
-
-  // CT Ratio (centred)
-  d1.tc(
-    P1_ISSUED_TECH.ctRatio.fieldLeft,
-    P1_ISSUED_TECH.ctRatio.fieldWidth,
-    P1_ISSUED_TECH.ctRatio.y,
-    i.ctRatio,
-  )
-
-  // Earth tests
-  d1.t(P1_ISSUED_TECH.earthTest1.x, P1_ISSUED_TECH.earthTest1.y, i.earthTest1)
-  d1.t(P1_ISSUED_TECH.earthTest2.x, P1_ISSUED_TECH.earthTest2.y, i.earthTest2)
-  d1.t(P1_ISSUED_TECH.totalMEN.x,   P1_ISSUED_TECH.totalMEN.y,   i.totalMEN)
-
-  // Fuse sizes
-  d1.t(P1_ISSUED_TECH.fuseSizeHV.x, P1_ISSUED_TECH.fuseSizeHV.y, i.fuseSizeHV)
-  d1.t(P1_ISSUED_TECH.fuseSizeLV.x, P1_ISSUED_TECH.fuseSizeLV.y, i.fuseSizeLV)
-
-  // LV disconnector
-  d1.t(P1_ISSUED_TECH.lvDisconnectorMake.x,  P1_ISSUED_TECH.lvDisconnectorMake.y,  i.lvDisconnectorMake)
-  d1.t(P1_ISSUED_TECH.lvDisconnectorModel.x, P1_ISSUED_TECH.lvDisconnectorModel.y, i.lvDisconnectorModel)
-
-  // ── Page 1: Removal reasons ───────────────────────────────────────────────
-  const reasons = Array.isArray(r.reasonForRemoval) ? r.reasonForRemoval : []
-  Object.entries(P1_REMOVAL_REASONS).forEach(([label, pos]) =>
-    d1.ck(pos.x, pos.y, reasons.includes(label))
-  )
-
-  // ── Page 1: Removed to store ──────────────────────────────────────────────
-  d1.t(P1_REMOVED_TO_STORE.x, P1_REMOVED_TO_STORE.y, d.removedToStore)
-
-  // ── Page 2: Comments (pre-split on newlines) ──────────────────────────────
+  // ── Page 2: Comments — split on newlines onto fixed ruled lines ─────────
+  // Reuses renderGridRow with a single synthetic "line" column so this list
+  // gets the same alignment control as every other grid (change
+  // GRIDS.p2Comments.align to 'center' or 'right' if needed).
+  const { x: cx, align, width, rowY } = GRIDS.p2Comments
+  const lineCol = { line: { x: cx, align, width } }
   const commentLines = (d.comments || '').split('\n')
-  commentLines.slice(0, P2_COMMENT_Y.length).forEach((line, idx) => {
-    d2.t(P2_COMMENT_X, P2_COMMENT_Y[idx], line)
+  commentLines.slice(0, rowY.length).forEach((line, idx) => {
+    renderGridRow(draw2, lineCol, rowY[idx], { line })
   })
 
-  // ── Photo pages ───────────────────────────────────────────────────────────
-  if (photos && photos.length > 0) {
-    await appendPhotosToPdf(pdfDoc, photos)
-  }
+  if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
 
-  // ── Serialise ─────────────────────────────────────────────────────────────
   return new Uint8Array(await pdfDoc.save())
 }

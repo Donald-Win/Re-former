@@ -15,18 +15,28 @@ import { useAllowZoom } from './useAllowZoom'
  *   children
  *
  * Dev-only props (dead-code-eliminated in production builds):
- *   onFillTestData     fn()|null  — 🧪 fills all fields with dummy data
+ *   onFillTestData     fn(allOptions: boolean)|null  — 🧪 fills all fields.
+ *     WizardShell owns which mode is currently active (so it can show it —
+ *     see below) and tells the wizard which one to apply on each tap:
+ *     true = devFillStateAllOptions (every "1 of N" option ticked at once),
+ *     false = devFillState (one realistic value per field). Wire it
+ *     straight to useWizardSetup's handleDevFill, unchanged.
  *   calibrationPdfUrl  string     — 📐 URL of the form PDF to calibrate against
  *   calibrationPageCount number   — total pages in the form (default 1)
  *
  * ── Calibration workflow ──────────────────────────────────────────────────
  *  1. npm run dev (or --host for iPad)
- *  2. Open any wizard → tap 🧪 to fill all fields
- *  3. Tap 📐 to load the CoordOverlay for that wizard's PDF
- *  4. The form PDF renders full-screen — click any field to read x/y coords
- *  5. Use ← → to navigate pages of multi-page forms
- *  6. Tap 📐 again to return to the form view
- *  7. Tap 'Preview Form →' to generate a filled PDF and compare positions
+ *  2. Open any wizard → tap 🧪 to fill all fields with realistic data
+ *  3. Tap 🧪 again to switch to "show every option at once" — a small
+ *     ALL OPTIONS badge appears next to the form title for as long as this
+ *     mode is active, and the button itself turns purple (🔬), so you can
+ *     tell which mode is loaded without generating a PDF first
+ *  4. Tap 📐 to load the CoordOverlay for that wizard's PDF
+ *  5. The form PDF renders full-screen — click any field to read x/y coords
+ *  6. Use the −/100%/+ control (or pinch) to zoom in for precise placement
+ *  7. Use ← → to navigate pages of multi-page forms
+ *  8. Tap 📐 again to return to the form view
+ *  9. Tap 'Preview Form →' to generate a filled PDF and compare positions
  *
  * Both buttons are fully eliminated from production bundles:
  * Vite replaces import.meta.env.DEV with false at build time; Rollup strips
@@ -48,10 +58,6 @@ export function WizardShell({
   const isFirstStep = step === 0
   const totalPages  = calibrationPageCount || 1
 
-  // Allow pinch-to-zoom while the filled-PDF preview overlay is showing —
-  // locked the rest of the time (see useAllowZoom for details).
-  useAllowZoom(isPreview)
-
   // ── Calibration state ────────────────────────────────────────────────────
   // Always declared (React hook rules). Only the render branches are DEV-gated.
   const [calibMode,    setCalibMode]    = useState(false)
@@ -59,6 +65,24 @@ export function WizardShell({
   const [calibPage,    setCalibPage]    = useState(1)
   const [calibLoading, setCalibLoading] = useState(false)
   const [CalibComp,    setCalibComp]    = useState(null)
+
+  // ── Dev-fill mode ─────────────────────────────────────────────────────────
+  // WizardShell owns this (rather than the wizard or useWizardSetup) so the
+  // current mode can actually be SHOWN — both on the button and as a badge
+  // next to the form title — instead of only being visible once you generate
+  // the PDF and see which kind of data came out.
+  const [fillMode, setFillMode] = useState('normal') // 'normal' | 'all'
+  const handleFillToggle = useCallback(() => {
+    const next = fillMode === 'normal' ? 'all' : 'normal'
+    setFillMode(next)
+    onFillTestData?.(next === 'all')
+  }, [fillMode, onFillTestData])
+
+  // Allow pinch-to-zoom while the filled-PDF preview overlay OR the
+  // coordinate-calibration overlay is showing — locked the rest of the time
+  // (see useAllowZoom for details). The calibration tool also has its own
+  // explicit +/- zoom control for precision work without a touchscreen.
+  useAllowZoom(isPreview || calibMode)
 
   const handleCalibToggle = useCallback(async () => {
     if (calibMode) { setCalibMode(false); return }
@@ -117,6 +141,14 @@ export function WizardShell({
           <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
           <div style={{ fontSize: 10, opacity: 0.75 }}>
             {formNumber}
+            {import.meta.env.DEV && fillMode === 'all' && (
+              <span style={{
+                marginLeft: 8,
+                background: '#a78bfa',
+                borderRadius: 4, padding: '1px 6px',
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+              }}>ALL OPTIONS</span>
+            )}
             {import.meta.env.DEV && calibMode && (
               <span style={{
                 marginLeft: 8,
@@ -273,20 +305,27 @@ export function WizardShell({
           </button>
         )}
 
-        {/* 🧪 Fill test data — DEV only, hidden while calibrating */}
+        {/* 🧪 Fill test data — DEV only, hidden while calibrating. Toggles
+            between realistic dummy data and "show every option at once" —
+            see useWizardSetup.js / devFillState.js. Button colour + emoji
+            reflect whichever mode is CURRENTLY ACTIVE, not which one tapping
+            it will switch to, so it's visible without generating a PDF. */}
         {import.meta.env.DEV && onFillTestData && !isPreview && !calibMode && (
           <button
-            onClick={onFillTestData}
-            title="Fill all fields with test data (DEV only)"
+            onClick={handleFillToggle}
+            title={fillMode === 'all'
+              ? 'Showing every option at once (DEV only) — tap to switch back to realistic data'
+              : 'Filled with realistic test data (DEV only) — tap to show every option at once'}
             style={{
               padding: '13px 14px', borderRadius: 12, flexShrink: 0,
-              border: '2px solid #d97706',
-              background: '#fffbeb', color: '#d97706',
+              border: `2px solid ${fillMode === 'all' ? '#6d28d9' : '#d97706'}`,
+              background: fillMode === 'all' ? '#f5f3ff' : '#fffbeb',
+              color: fillMode === 'all' ? '#6d28d9' : '#d97706',
               fontFamily: 'inherit', fontSize: 16, fontWeight: 700,
               cursor: 'pointer', minWidth: 48,
             }}
           >
-            🧪
+            {fillMode === 'all' ? '🔬' : '🧪'}
           </button>
         )}
 
@@ -426,3 +465,4 @@ export function WizardShell({
     </div>
   )
 }
+

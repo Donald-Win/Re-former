@@ -18,11 +18,14 @@ import { createStore, get, set, del } from 'idb-keyval'
 const autosaveIdb = createStore('re-former-autosave', 'slots')
 
 const AUTOSAVE_DEBOUNCE = 600
-const MAX_PHOTOS        = 5
 
 function stripSignature(data) {
+  // Signatures are large (50–200 KB as base64) and already persisted in userPrefs,
+  // so we never store them in autosave slots. Covers the shared 'signed' field and
+  // the HV Inspection wizard's 'wtlSigned' and 'fsSigned'.
+  const SIG_KEYS = new Set(['signed', 'wtlSigned', 'fsSigned'])
   return Object.fromEntries(
-    Object.entries(data || {}).filter(([k]) => k !== 'signed')
+    Object.entries(data || {}).filter(([k]) => !SIG_KEYS.has(k))
   )
 }
 
@@ -32,7 +35,7 @@ async function writeAutosave(formKey, d, step, photos) {
       savedAt: Date.now(),
       step,
       data:    stripSignature(d),
-      photos:  (photos || []).slice(0, MAX_PHOTOS),
+      photos:  photos || [],
     }
     await set(formKey, payload, autosaveIdb)
   } catch (err) {

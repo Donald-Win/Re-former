@@ -1,14 +1,22 @@
 /**
  * useWizardSetup — shared setup hook for all wizards.
  *
- * Extracts the three patterns that are identical across every wizard:
+ * Extracts four patterns that are identical across every wizard:
  *   1. Save to job history when advancing past step 0
  *   2. loadJobHistory handler
  *   3. setD convenience setter
+ *   4. handleDevFill — DEV-only 🧪 button handler. Fills the form with
+ *      either realistic dummy data or a "show every option at once"
+ *      calibration fill (see devFillState.js) depending on the boolean
+ *      WizardShell passes in; every wizard gets both for free from this one
+ *      hook, with WizardShell owning (and showing) which mode is active.
  *
  * Usage:
  *   const { loadJobHistory, set, handleDevFill } =
  *     useWizardSetup(d, setD, step, formType)
+ *
+ *   // handleDevFill takes the mode WizardShell is currently in:
+ *   <WizardShell onFillTestData={handleDevFill} ...>
  *
  * Props:
  *   d         — wizard form state
@@ -31,7 +39,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { saveToHistory } from './jobHistory'
-import { devFillState } from './devFillState'
+import { devFillState, devFillStateAllOptions } from './devFillState'
 
 export function useWizardSetup(d, setD, step, formType) {
   const prevStepRef = useRef(0)
@@ -68,10 +76,19 @@ export function useWizardSetup(d, setD, step, formType) {
     }
   }, [setD])
 
-  // DEV-only — dead-code eliminated by Vite/Rollup in production builds
+  // DEV-only — dead-code eliminated by Vite/Rollup in production builds.
+  // `allOptions` is supplied by WizardShell, which owns the current mode
+  // (and shows it on the button) — this hook just applies whichever fill
+  // was asked for:
+  //   allOptions=true  → devFillStateAllOptions (every "1 of N" option
+  //                       ticked at once, every text field shows its own
+  //                       key — see devFillState.js and the
+  //                       calibration-mode section of pdfFieldRenderer.js)
+  //   allOptions=false → devFillState (one realistic value per field)
   const handleDevFill = import.meta.env.DEV
-    ? () => setD(devFillState)
+    ? (allOptions) => setD(allOptions ? devFillStateAllOptions : devFillState)
     : undefined
 
   return { loadJobHistory, set, handleDevFill }
 }
+

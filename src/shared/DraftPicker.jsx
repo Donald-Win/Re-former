@@ -18,7 +18,7 @@
  *   accent     string
  *   initialMode string   — 'menu' | 'save' | 'list'
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Save, FolderOpen, Trash2, X, ChevronRight, Check } from 'lucide-react'
 import { listDrafts, saveDraft, deleteDraft, draftLabel, draftSub, draftAge } from './draftStore'
 import { APP_ACCENT } from './constants'
@@ -43,6 +43,12 @@ export function DraftPicker({
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const closeTimerRef = useRef(null)
+
+  // Clear the auto-close timer if the component unmounts while it is counting down
+  useEffect(() => {
+    return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }
+  }, [])
 
   // Load drafts from IndexedDB
   const refreshDrafts = useCallback(async () => {
@@ -80,9 +86,11 @@ export function DraftPicker({
       await saveDraft({ formKey, name, step, data: d, photos })
       await refreshDrafts()
       setSaved(true)
-      setTimeout(() => { setSaved(false); onClose() }, 900)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = setTimeout(() => { setSaved(false); onClose() }, 900)
     } catch (err) {
       console.error('[DraftPicker] Save failed:', err)
+    } finally {
       setSaving(false)
     }
   }

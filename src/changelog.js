@@ -13,6 +13,36 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.18.0',
+    changes: [
+      {
+        heading: 'GPS button for Pole Record co-ordinates',
+        detail: 'The GPS Co-ordinates section on the Pole Record wizard now has a "Use my GPS" button. Tap it to read your device\'s location and automatically fill in North, East, and Altitude — no more typing co-ordinates in by hand or switching to a separate map app.',
+      },
+    ],
+  },
+  {
+    version: '2.17.0',
+    changes: [
+      {
+        heading: 'Add Row buttons no longer vanish when all rows are deleted',
+        detail: 'In the Pole Record and Zone Substation wizards, tapping × on every conductor, crossarm, or equipment row permanently hid the “Add Row” button, locking the form. The button now always stays visible below the row list.',
+      },
+      {
+        heading: 'Save Draft button no longer gets stuck on “Saving…”',
+        detail: 'After a successful save, the Save Draft button would stay disabled and show “Saving…” for the rest of the session. It now resets correctly after every save.',
+      },
+      {
+        heading: 'All attached photos are now saved in drafts',
+        detail: 'Drafts and autosaves were silently dropping any photos beyond the fifth. All photos are now saved in full — the storage system (IndexedDB) was specifically chosen to handle large photo sets without any limit.',
+      },
+      {
+        heading: 'Background fixes',
+        detail: 'Fixed a timer left running in the background after every PDF generation. Fixed an issue where HV Inspection Certificate signature data could be stored unnecessarily in draft saves.',
+      },
+    ],
+  },
+  {
     version: '2.16.0',
     changes: [
       {

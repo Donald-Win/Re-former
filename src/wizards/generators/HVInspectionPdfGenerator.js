@@ -2,25 +2,25 @@
  * HVInspectionPdfGenerator.js — PDF generator for 220F028A
  * (Pre-Commissioning HV Inspection Certificate).
  *
- * Extracted from HVInspectionWizard.jsx as part of the architectural migration
- * to standalone generator files using the pdfDrawUtils engine.
- *
  * EQUIP_TYPES and all check-row arrays are exported so HVInspectionWizard.jsx
  * can import them directly, avoiding duplicate definitions.
  *
- * Template
- * ────────
- * The PDF template is fetched once per session and cached in memory via
- * fetchPdfTemplate(), so repeat previews cost no network I/O.
+ * This form is mostly one big tick-grid (13 equipment-type columns × ~40
+ * check rows across two pages), which is exactly the case that doesn't
+ * benefit from the single-field FIELDS model — there's no calibration win
+ * to be had naming 500+ individual cells when the whole grid only needs a
+ * handful of shared column positions and per-section row positions. Those
+ * stay as small loops reading from GRIDS, structured the same way as every
+ * other generator's repeating tables.
  *
- * LAYOUT coordinates
- * ──────────────────
- * Top-origin (CSS / screen style), same as every other re-former generator.
- * See the derivation formulae next to the LAYOUT object below.
+ * The few genuinely simple, individually-positioned fields (the page 1
+ * title, the page 3 signature block, and the three "Other (Specify)"
+ * labels) are declared in FIELDS as usual.
  *
- * Usage:
- *   import { generateHvPdf } from './generators/HVInspectionPdfGenerator'
- *   const { pdfBytes, ... } = usePdfGenerate(generateHvPdf)
+ * Coordinate convention
+ * ─────────────────────
+ * All Y values are TOP-ORIGIN (CSS / screen style). renderFields converts
+ * them to pdf-lib bottom-origin internally.
  *
  * @param {object} d      – Wizard form state (see HVInspectionWizard.jsx)
  * @param {Array}  photos – Array of { dataUrl: string, name?: string }
@@ -28,13 +28,8 @@
  */
 
 import { PDFDocument, StandardFonts } from 'pdf-lib'
-import {
-  fetchPdfTemplate,
-  createPageDrawer,
-  drawSignature,
-  DEFAULT_INK,
-  A4_HEIGHT,
-} from '../../shared/pdfDrawUtils'
+import { fetchPdfTemplate, createPageDrawer, DEFAULT_INK, A4_HEIGHT } from '../../shared/pdfDrawUtils'
+import { renderFields } from '../../shared/pdfFieldRenderer'
 import { appendPhotosToPdf } from '../../shared/appendPhotosToPdf'
 import {
   EQUIP_TYPES,
@@ -46,7 +41,6 @@ import {
   OTHER_CHECKS,
 } from './HVInspectionChecks'
 
-// ── Template URL ──────────────────────────────────────────────────────────────
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/220F028A.pdf`
 
@@ -54,81 +48,65 @@ const getTemplateUrl = () =>
 const OTHER_LABEL_KEYS = ['other1', 'other2', 'other3']
 
 // Performance rows occupy the lower portion of the combined p2 rowY array.
-const PERF_ROW_OFFSET = 4  // Operation occupies rows 0–3; Performance starts at 4
+const PERF_ROW_OFFSET = 4 // Operation occupies rows 0–3; Performance starts at 4
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LAYOUT
-// All Y values are top-origin (CSS / screen style).
-// The createPageDrawer helpers convert to pdf-lib bottom-origin internally.
-//
-// Tick column X  =  original pdf-lib col-centre x  − 5
-// Tick row Y     =  834 − original pdf-lib bottom-origin y
-// Text Y         =  842 − original pdf-lib bottom-origin y  − fontSize
-// Sig  Y         =  842 − (pdfY_bottom + imgHeight)   [top of image, top-origin]
+// FIELDS — the handful of individually-positioned fields on this form.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LAYOUT = {
-
-  // ── Page 1 ─────────────────────────────────────────────────────────────────
-
+export const FIELDS = {
   p1: {
-    // Composite project title drawn at top of page 1.
-    // Composed from: npJobNumber, projectName, streetRoad, cityTown, siteId.
-    title: { x: 135, y: 107, size: 10 },
-
-    // Visual Checks table (15 rows × 13 equipment-type columns).
-    visual: {
-      // colX[i] — tick left-edge x for equipment-type column i  (orig P1_COL_X − 5)
-      colX: [226, 251, 276, 302, 327, 352, 378, 403, 428, 453, 479, 504, 530],
-      // rowY[i] — tick top-origin Y for visual-check row i       (834 − orig P1_ROW_Y)
-      rowY: [404, 428, 451, 479, 501, 525, 546, 563, 580, 597, 615, 632, 647, 666, 686],
+    // Composite project title — npJobNumber, projectName, streetRoad, cityTown, siteId
+    title: {
+      type: 'text', align: 'left', x: 135, y: 107, size: 10,
+      value: d => [d.npJobNumber, d.projectName, d.streetRoad, d.cityTown, d.siteId].filter(Boolean).join(' — '),
     },
   },
-
-  // ── Page 2 ─────────────────────────────────────────────────────────────────
-
   p2: {
-    // Operation and Performance tables share the same 13-column layout.
-    // colX[i] — tick left-edge x  (orig P2_COL_X − 5)
-    colX: [244, 268, 292, 316, 340, 364, 388, 412, 436, 460, 484, 508, 532],
+    // "Other (Specify)" row labels — fixed 3 rows, ticks for these rows live in GRIDS.other
+    otherLabel1: { type: 'text', align: 'left', x: 135, y: 639, size: 9, value: d => d.other1 },
+    otherLabel2: { type: 'text', align: 'left', x: 135, y: 657, size: 9, value: d => d.other2 },
+    otherLabel3: { type: 'text', align: 'left', x: 135, y: 676, size: 9, value: d => d.other3 },
+  },
+  p3: {
+    wtlName:   { type: 'text', align: 'left', x: 193, y: 115, size: 10, value: d => d.wtlName },
+    wtlCertNo: { type: 'text', align: 'left', x: 193, y: 141, size: 10, value: d => d.wtlCertNo },
+    date:      { type: 'text', align: 'left', x: 383, y: 141, size: 10, value: d => d.dateWorkCompleted },
+    fsName:    { type: 'text', align: 'left', x: 173, y: 192, size: 10, value: d => d.fsName },
+    sinNapa:   { type: 'text', align: 'left', x: 140, y: 229, size: 10, value: d => d.fsSinNapa },
+    wtlSig:    { type: 'signature', x: 383, y: 106, maxW: 100, maxH: 22, value: d => d.wtlSigned },
+    fsSig:     { type: 'signature', x: 383, y: 182, maxW: 100, maxH: 22, value: d => d.fsSigned },
+  },
+}
 
-    // Combined row array for Operation (0–3) and Performance (4–16).
-    // rowY[i] — tick top-origin Y  (834 − orig P2_ROW_Y)
-    rowY: [241, 259, 276, 296, 314, 333, 351, 370, 388, 407, 425, 444, 462, 481, 499, 518, 541],
+// ─────────────────────────────────────────────────────────────────────────────
+// GRIDS — the equipment-type × check-row tables (pages 1 and 2).
+// colX positions are shared across every row in a table; rowY positions are
+// shared across every equipment-type column.
+// ─────────────────────────────────────────────────────────────────────────────
 
-    // QA rows: Construction Standards, Safety Standards
-    // (834 − orig P2_QA_Y)
-    qaRowY: [565, 584],
-
-    // Documentation rows: As Built Info Recorded, Defects Recorded
-    // (834 − orig P2_DOC_Y)
-    docRowY: [602, 621],
-
-    // Other (Specify) rows — user-typed label plus per-equip-type tick marks.
-    other: {
-      // colX[i] — tick left-edge x  (orig P2_OTHER_COL_X − 5)
-      colX:      [244, 268, 292, 316, 340, 364, 388, 412, 435, 459, 483, 508, 532],
-      // rowY[i] — tick top-origin Y  (834 − orig P2_OTHER_Y)
-      rowY:      [640, 658, 677],
-      // labelRowY[i] — text baseline Y for the label (842 − orig P2_OTHER_Y − 9)
-      labelRowY: [639, 657, 676],
-      labelX:    135,
-      labelSize: 9,
-    },
+export const GRIDS = {
+  // Page 1 — Visual Checks (15 rows × 13 columns)
+  visual: {
+    colX: [226, 251, 276, 302, 327, 352, 378, 403, 428, 453, 479, 504, 530],
+    rowY: [404, 428, 451, 479, 501, 525, 546, 563, 580, 597, 615, 632, 647, 666, 686],
   },
 
-  // ── Page 3 — Signatures ─────────────────────────────────────────────────────
-  // size: 10 for all text fields (matches original; kept explicit for clarity).
-  // Sig cssY: top-of-image in top-origin coords = 842 − (pdfY_bottom + 22).
+  // Page 2 — Operation (rows 0–3) and Performance (rows 4–16) share one
+  // column layout and one combined row array.
+  operationPerformance: {
+    colX: [244, 268, 292, 316, 340, 364, 388, 412, 436, 460, 484, 508, 532],
+    rowY: [241, 259, 276, 296, 314, 333, 351, 370, 388, 407, 425, 444, 462, 481, 499, 518, 541],
+  },
 
-  p3: {
-    wtlName: { x: 193, y: 115, size: 10 },            // WTL printed name
-    wtlSig:  { x: 383, y: 106, maxW: 100, maxH: 22 }, // WTL signature image
-    certNo:  { x: 193, y: 141, size: 10 },            // WTL certificate number
-    date:    { x: 383, y: 141, size: 10 },            // Date work completed (same row)
-    fsName:  { x: 173, y: 192, size: 10 },            // Field Switcher printed name
-    fsSig:   { x: 383, y: 182, maxW: 100, maxH: 22 }, // Field Switcher signature image
-    sinNapa: { x: 140, y: 229, size: 10 },            // Field Switcher SIN / NAPA ID
+  // Page 2 — QA (2 rows), Documentation (2 rows) — same columns as above.
+  qa:  { rowY: [565, 584] },
+  doc: { rowY: [602, 621] },
+
+  // Page 2 — "Other (Specify)" tick marks (labels are in FIELDS.p2).
+  other: {
+    colX: [244, 268, 292, 316, 340, 364, 388, 412, 435, 459, 483, 508, 532],
+    rowY: [640, 658, 677],
   },
 }
 
@@ -136,112 +114,72 @@ const LAYOUT = {
 // GENERATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Generate the Pre-Commissioning HV Inspection Certificate PDF.
- *
- * Signature images are embedded via drawSignature(), which scales each image
- * to fit within the maxW × maxH bounding box while preserving aspect ratio —
- * an improvement over the original code that stretched images to a fixed size.
- *
- * @param {object} d      – Full wizard form state
- * @param {Array}  photos – Photo attachments  [{ dataUrl, name? }]
- * @returns {Promise<Uint8Array>}
- */
 export async function generateHvPdf(d, photos = []) {
-
-  // ── Load template (cached after first call) ──────────────────────────────
   const templateBytes = await fetchPdfTemplate(getTemplateUrl())
   const pdfDoc        = await PDFDocument.load(templateBytes)
   const font          = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   const [p1, p2, p3] = pdfDoc.getPages()
-
-  // Bind a drawing helper to each of the three form pages.
   const draw1 = createPageDrawer(p1, font, DEFAULT_INK, A4_HEIGHT)
   const draw2 = createPageDrawer(p2, font, DEFAULT_INK, A4_HEIGHT)
   const draw3 = createPageDrawer(p3, font, DEFAULT_INK, A4_HEIGHT)
 
-  // ── Page 1 — Project Title ───────────────────────────────────────────────
-  const titleText = [d.npJobNumber, d.projectName, d.streetRoad, d.cityTown, d.siteId]
-    .filter(Boolean).join(' — ')
-  draw1.t(LAYOUT.p1.title.x, LAYOUT.p1.title.y, titleText, LAYOUT.p1.title.size)
+  await renderFields({ pdfDoc, page: p1, draw: draw1 }, FIELDS.p1, d)
+  await renderFields({ pdfDoc, page: p2, draw: draw2 }, FIELDS.p2, d)
+  await renderFields({ pdfDoc, page: p3, draw: draw3 }, FIELDS.p3, d)
 
   // ── Page 1 — Visual Checks (15 rows × 13 columns) ───────────────────────
-  const { colX: p1ColX, rowY: p1RowY } = LAYOUT.p1.visual
+  const visual = GRIDS.visual
   VISUAL_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.visualChecks?.[check.id] || {}
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw1.ck(p1ColX[colIdx], p1RowY[rowIdx], equipCols[equip.id])
+      draw1.ck(visual.colX[colIdx], visual.rowY[rowIdx], equipCols[equip.id])
     })
   })
 
-  // ── Page 2 — Operation Checks (4 rows, rowY indices 0–3) ────────────────
-  const { colX: p2ColX, rowY: p2RowY } = LAYOUT.p2
+  // ── Page 2 — Operation Checks (rows 0–3) ─────────────────────────────────
+  const op = GRIDS.operationPerformance
   OPERATION_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.operationChecks?.[check.id] || {}
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw2.ck(p2ColX[colIdx], p2RowY[rowIdx], equipCols[equip.id])
+      draw2.ck(op.colX[colIdx], op.rowY[rowIdx], equipCols[equip.id])
     })
   })
 
-  // ── Page 2 — Performance Tests (13 rows, rowY indices 4–16) ─────────────
+  // ── Page 2 — Performance Tests (rows 4–16) ───────────────────────────────
   PERFORMANCE_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.performanceChecks?.[check.id] || {}
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw2.ck(p2ColX[colIdx], p2RowY[rowIdx + PERF_ROW_OFFSET], equipCols[equip.id])
+      draw2.ck(op.colX[colIdx], op.rowY[rowIdx + PERF_ROW_OFFSET], equipCols[equip.id])
     })
   })
 
-  // ── Page 2 — QA Checks ──────────────────────────────────────────────────
+  // ── Page 2 — QA Checks ────────────────────────────────────────────────────
   QA_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.qaChecks?.[check.id] || {}
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw2.ck(p2ColX[colIdx], LAYOUT.p2.qaRowY[rowIdx], equipCols[equip.id])
+      draw2.ck(op.colX[colIdx], GRIDS.qa.rowY[rowIdx], equipCols[equip.id])
     })
   })
 
-  // ── Page 2 — Documentation Checks ───────────────────────────────────────
+  // ── Page 2 — Documentation Checks ────────────────────────────────────────
   DOC_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.docChecks?.[check.id] || {}
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw2.ck(p2ColX[colIdx], LAYOUT.p2.docRowY[rowIdx], equipCols[equip.id])
+      draw2.ck(op.colX[colIdx], GRIDS.doc.rowY[rowIdx], equipCols[equip.id])
     })
   })
 
-  // ── Page 2 — Other / Specify rows ───────────────────────────────────────
-  const { colX: otherColX, rowY: otherRowY, labelRowY, labelX, labelSize } = LAYOUT.p2.other
+  // ── Page 2 — Other / Specify tick marks (labels rendered via FIELDS.p2) ─
+  const other = GRIDS.other
   OTHER_CHECKS.forEach((check, rowIdx) => {
     const equipCols = d.otherChecks?.[check.id] || {}
-    const labelText = d[OTHER_LABEL_KEYS[rowIdx]]
-    if (labelText) draw2.t(labelX, labelRowY[rowIdx], labelText, labelSize)
     EQUIP_TYPES.forEach((equip, colIdx) => {
-      draw2.ck(otherColX[colIdx], otherRowY[rowIdx], equipCols[equip.id])
+      draw2.ck(other.colX[colIdx], other.rowY[rowIdx], equipCols[equip.id])
     })
   })
 
-  // ── Page 3 — Signature text fields ──────────────────────────────────────
-  const s = LAYOUT.p3
-  draw3.t(s.wtlName.x, s.wtlName.y, d.wtlName,          s.wtlName.size)
-  draw3.t(s.certNo.x,  s.certNo.y,  d.wtlCertNo,        s.certNo.size)
-  draw3.t(s.date.x,    s.date.y,    d.dateWorkCompleted, s.date.size)
-  draw3.t(s.fsName.x,  s.fsName.y,  d.fsName,           s.fsName.size)
-  draw3.t(s.sinNapa.x, s.sinNapa.y, d.fsSinNapa,        s.sinNapa.size)
-
-  // ── Page 3 — Signature images ────────────────────────────────────────────
-  // drawSignature() scales each image to fit within maxW × maxH while
-  // preserving aspect ratio; silently no-ops for falsy / invalid values.
-  await drawSignature(
-    pdfDoc, p3, d.wtlSigned,
-    s.wtlSig.x, s.wtlSig.y, s.wtlSig.maxW, s.wtlSig.maxH, A4_HEIGHT,
-  )
-  await drawSignature(
-    pdfDoc, p3, d.fsSigned,
-    s.fsSig.x,  s.fsSig.y,  s.fsSig.maxW,  s.fsSig.maxH,  A4_HEIGHT,
-  )
-
-  // ── Photos (appended as additional pages) ────────────────────────────────
   if (photos && photos.length > 0) await appendPhotosToPdf(pdfDoc, photos)
 
   return new Uint8Array(await pdfDoc.save())
 }
-
