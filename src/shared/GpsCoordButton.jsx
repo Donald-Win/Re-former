@@ -1,23 +1,20 @@
 /**
- * GpsLocationButton
+ * GpsCoordButton
  *
- * A single button that:
- *  1. Calls navigator.geolocation.getCurrentPosition
- *  2. Reverse-geocodes the result via OpenStreetMap Nominatim
- *  3. Calls onLocation({ streetRoad, cityTown, district }) with the result
+ * A button that reads the device's GPS position and fills in NZTM2000
+ * North / East co-ordinates (plus Altitude, when the device reports one) —
+ * for use in the "GPS Co-ordinates" section of the Pole Record wizard (and
+ * any future wizard step that asks for NZTM North/East rather than a
+ * street address).
  *
- * Shows inline loading and error states. Does nothing silently on AbortError.
+ * Unlike GpsLocationButton (which reverse-geocodes a GPS fix to a street
+ * address via Nominatim), this button does a local WGS84 → NZTM2000
+ * conversion (see src/shared/nztm.js) and makes no network request — it
+ * works fully offline once the device has a GPS fix.
  *
- * Rate-limit protection
- * ─────────────────────
- * Nominatim's usage policy bans IPs that send more than ~1 request/second.
- * On a failed request a user might rapidly re-tap the button, firing
- * multiple reverse-geocode requests in quick succession and triggering a
- * temporary HTTP 429 ban.
- *
- * A strict 2-second cooldown is applied after ANY error (geolocation or
- * network). During the cooldown the button is disabled and shows a
- * "Please wait…" label. The error message remains visible below.
+ * Rate-limit / rapid-retap protection mirrors GpsLocationButton: a strict
+ * 2-second cooldown is applied after any error, during which the button is
+ * disabled and shows a "Please wait…" label.
  *
  * maximumAge
  * ──────────
@@ -27,37 +24,36 @@
  * low-signal areas frequently exceeds the 15-second timeout below and
  * surfaces as a spurious TIMEOUT error. Accepting a fix up to 30 seconds
  * old lets the OS return an already-locked, still field-accurate position
- * instantly in the common case.
+ * instantly in the common case, while still being fresh enough for as-built
+ * pole co-ordinates.
  *
  * Props:
- *   onLocation(fields)  — called with { streetRoad, cityTown, district }
- *   accent              — hex colour for the button border/text
+ *   onCoords(fields) — called with { gpsNorth, gpsEast, altitude? }.
+ *                      `altitude` is only included when the device reports
+ *                      one, so a caller spreading this into existing form
+ *                      state never blanks out a value the user typed in
+ *                      manually.
+ *   accent           — hex colour for the button border/text
  */
 import { useState, useRef, useEffect } from 'react'
+import { latLonToNztm } from './nztm'
 
 const COOLDOWN_MS = 2000
 
-export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
-  const [status,     setStatus]     = useState('idle') // 'idle' | 'locating' | 'geocoding' | 'error'
+export function GpsCoordButton({ onCoords, accent = '#6366f1' }) {
+  const [status,     setStatus]     = useState('idle') // 'idle' | 'locating' | 'error'
   const [errorMsg,   setErrorMsg]   = useState('')
   const [isCooldown, setIsCooldown] = useState(false)
 
   // Holds the cooldown timer so we can clear it on unmount
   const cooldownRef = useRef(null)
 
-  // Clear any pending cooldown when the component unmounts so we never call
-  // setIsCooldown on an unmounted component (avoids a React state update warning)
   useEffect(() => {
     return () => {
       if (cooldownRef.current) clearTimeout(cooldownRef.current)
     }
   }, [])
 
-  /**
-   * Transition into the error state and start the 2-second cooldown.
-   * Clears any existing cooldown first (defensive — shouldn't be running,
-   * but safe if handlePress is somehow called while a cooldown is active).
-   */
   const enterError = (msg) => {
     setStatus('error')
     setErrorMsg(msg)
@@ -72,9 +68,7 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
   }
 
   const handlePress = () => {
-    // Double-guard: the button is visually disabled during loading and
-    // cooldown, but explicit checks here prevent any edge-case double-tap.
-    if (loading || isCooldown) return
+    if (status === 'locating' || isCooldown) return
 
     if (!navigator.geolocation) {
       enterError('Geolocation is not supported by this browser.')
@@ -85,40 +79,27 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
     setErrorMsg('')
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        setStatus('geocoding')
-        const { latitude, longitude } = pos.coords
+      (pos) => {
+        const { latitude, longitude, altitude } = pos.coords
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-          )
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          const data = await res.json()
-          const a = data.address || {}
+          const { northing, easting } = latLonToNztm(latitude, longitude)
+          const hasAltitude = altitude !== null && altitude !== undefined
 
-          // Build street: "12 Example Road" or just "Example Road"
-          const streetParts = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean)
-          const streetRoad  = streetParts.join(' ')
-
-          // City/town: prefer city, fall back through smaller place types
-          const cityTown = a.city || a.town || a.village || a.hamlet || a.suburb || ''
-
-          // District: use NZ regional council (state), strip " Region" suffix
-          const district = (a.state || a.county || a.state_district || '').replace(/ Region$/i, '')
-
-          onLocation({ streetRoad, cityTown, district })
+          onCoords({
+            gpsNorth: String(northing),
+            gpsEast:  String(easting),
+            // Only included when the device actually reports one — many
+            // phones/tablets return null for altitude without a strong fix.
+            ...(hasAltitude ? { altitude: `${Math.round(altitude)}m` } : {}),
+          })
           setStatus('idle')
         } catch (err) {
-          console.error('GpsLocationButton: reverse geocode failed', err)
-          // Network / Nominatim error — apply cooldown to avoid 429 on rapid retry
-          enterError('Could not look up address. Check your internet connection.')
+          console.error('GpsCoordButton: NZTM conversion failed', err)
+          enterError('Could not calculate co-ordinates. Try again.')
         }
       },
       (err) => {
-        // Geolocation errors do not hit Nominatim, but we still apply the
-        // cooldown for consistency — it prevents UI flicker from rapid taps
-        // and covers the edge case where the user hammers retry on a timeout.
+        // Mirrors GpsLocationButton's error handling for consistency.
         if (err.code === err.PERMISSION_DENIED) {
           const isInsecure = location.protocol !== 'https:' && location.hostname !== 'localhost'
           if (isInsecure) {
@@ -146,13 +127,11 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
     )
   }
 
-  const loading  = status === 'locating' || status === 'geocoding'
-  const disabled = loading || isCooldown
+  const disabled = status === 'locating' || isCooldown
 
-  const label = status === 'locating'  ? '📡 Getting location…'
-              : status === 'geocoding' ? '🗺 Looking up address…'
-              : isCooldown             ? '⏳ Please wait…'
-              : '📍 Use my location'
+  const label = status === 'locating' ? '📡 Getting GPS fix…'
+              : isCooldown            ? '⏳ Please wait…'
+              : '📍 Use my GPS for North / East'
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -189,6 +168,10 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           {errorMsg}
         </div>
       )}
+      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, lineHeight: 1.4 }}>
+        Fills North / East from your device's GPS, converted to NZTM2000. Works offline.
+        {' '}Altitude is filled too when your device reports one.
+      </div>
     </div>
   )
 }

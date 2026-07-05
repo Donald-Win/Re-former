@@ -8,7 +8,7 @@
  *   Page 3 — Sections i, j, k, l
  *   Page 4 — Document control (not written to)
  *
- * ── Declarative fields (NEW) ──────────────────────────────────────────────────
+ * ── Declarative fields ───────────────────────────────────────────────────────
  * Every simple, named field (header text, checkboxes, the signature, etc.)
  * is defined ONCE in the FIELDS object below: coordinates, alignment, type,
  * and the value to draw all live together in a single object. To change a
@@ -22,9 +22,11 @@
  * handful of column/row positions applied across a variable number of data
  * rows, plus per-row pass/fail logic. Those stay as small procedural loops
  * further down, reading their column/row constants from GRIDS instead of
- * FIELDS. There's no calibration win to be had forcing a table into the
- * single-field model — you already only set 4-6 shared numbers for an
- * entire grid, calibrating row-by-row wouldn't be any faster.
+ * FIELDS. Each cell still gets the same alignment control as a regular
+ * field though: section k uses renderGridRow() (named columns — each can
+ * have its own align/type), and sections f/i use renderMatrixRow() (one
+ * shared alignment for every circuit's value cell in a row, via
+ * GRIDS.sectionF.valueAlign / GRIDS.sectionI.valueAlign).
  *
  * Data shape (wizard state)
  * ─────────────────────────
@@ -53,15 +55,15 @@ import {
   DEFAULT_INK,
   A4_HEIGHT,
 } from '../../shared/pdfDrawUtils'
-import { renderFields } from '../../shared/pdfFieldRenderer'
+import { renderFields, renderGridRow, renderMatrixRow } from '../../shared/pdfFieldRenderer'
 import { appendPhotosToPdf } from '../../shared/appendPhotosToPdf'
 
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/220F028B.pdf`
 
 // ── Font sizes ─────────────────────────────────────────────────────────────────
-const FS    = 10   // standard field text
-const FS_SM = 10  // narrow circuit value cells (grids only)
+const FS    = 10  // standard field text
+const FS_SM = 10  // circuit value cells (grids only)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELDS — every simple, named field. One object = one field: position,
@@ -108,7 +110,7 @@ export const FIELDS = {
 
   // ── Page 2 — sections d/e/g/h (f is a grid — see GRIDS.sectionF) ────────────
   p2: {
-    // d) Neutral Earth Bonding — Yes/No/NA tick columns at x=313/373/430
+    // d) Neutral Earth Bonding — Yes/No/NA tick columns
     dPoleBushingYes:     { type: 'check', x: 407, y: 148, value: d => d.dPoleBushing === 'Yes' },
     dPoleBushingNo:      { type: 'check', x: 436, y: 148, value: d => d.dPoleBushing === 'No' },
     dPoleNeutralCondYes: { type: 'check', x: 407, y: 172, value: d => d.dPoleNeutralCond === 'Yes' },
@@ -139,7 +141,7 @@ export const FIELDS = {
 
   // ── Page 3 — sections j/l (i and k are grids — see GRIDS) ───────────────────
   p3: {
-    // j) Loop Impedance Tests — shared left edge at x=350
+    // j) Loop Impedance Tests — right-aligned, shared right edge at x=283
     jRW: { type: 'text', align: 'right', x: 283, y: 358, size: FS, value: d => d.jRW },
     jRB: { type: 'text', align: 'right', x: 283, y: 382, size: FS, value: d => d.jRB },
     jWB: { type: 'text', align: 'right', x: 283, y: 407, size: FS, value: d => d.jWB },
@@ -165,9 +167,16 @@ export const FIELDS = {
 
 export const GRIDS = {
 
-  // Section f) Off-Load Voltage Checks — 6 measurement rows × up to 4 circuits
+  // Section f) Off-Load Voltage Checks — 6 measurement rows × up to 4 circuits.
+  // valueAlign/valueWidth control how each circuit's reading sits within its
+  // column — change valueAlign to 'center' or 'right' to match the printed
+  // form (center also needs valueWidth). ckX is the separate confirmed-tick/
+  // cross column at the end of the row, always a checkbox — not affected by
+  // valueAlign.
   sectionF: {
     circuitX: [138, 210, 274, 346],
+    valueAlign: 'left',
+    valueWidth: undefined,
     ckX: 513,
     rows: [
       { fieldKey: 'rw', y: 410 },
@@ -179,9 +188,12 @@ export const GRIDS = {
     ],
   },
 
-  // Section i) Phasing / Paralleling Checks — 3 measurement rows + 1 neutrals row
+  // Section i) Phasing / Paralleling Checks — 3 measurement rows + 1 neutrals row.
+  // Same valueAlign/valueWidth pattern as sectionF.
   sectionI: {
     circuitX: [138, 216, 293, 372],
+    valueAlign: 'left',
+    valueWidth: undefined,
     ckX: 513,
     rows: [
       { fieldKey: 'r1r2', y: 210 },
@@ -191,11 +203,14 @@ export const GRIDS = {
     neutralsY: 283,
   },
 
-  // Section k) LV Open Point Restoration — up to 4 rows
+  // Section k) LV Open Point Restoration — up to 4 rows. Each column has its
+  // own x + alignment, same as every other named-column grid in this app.
   sectionK: {
-    locationX: 125,
-    ckX: 513,
     rowY: [542, 566, 591, 615],
+    cols: {
+      location: { x: 125, align: 'left' },
+      restored: { x: 513, type: 'check' },
+    },
   },
 }
 
@@ -248,9 +263,8 @@ export async function generateB28Pdf(d, photos = []) {
   const fCircuits = (d.fCircuits || []).slice(0, 4)
 
   f.rows.forEach(({ fieldKey, y }) => {
-    fCircuits.forEach((circ, circIdx) => {
-      const x = f.circuitX[circIdx]
-      if (x !== undefined) draw2.t(x, y, circ[fieldKey] || '', FS_SM)
+    renderMatrixRow(draw2, f.circuitX, y, fCircuits.map(c => c[fieldKey] || ''), {
+      align: f.valueAlign, width: f.valueWidth, size: FS_SM,
     })
     const status = voltRowStatus(fCircuits, fieldKey)
     if (status === 'confirmed') draw2.ck(f.ckX, y, true)
@@ -262,9 +276,8 @@ export async function generateB28Pdf(d, photos = []) {
   const iCircuits = (d.iCircuits || []).slice(0, 4)
 
   iL.rows.forEach(({ fieldKey, y }) => {
-    iCircuits.forEach((circ, circIdx) => {
-      const x = iL.circuitX[circIdx]
-      if (x !== undefined) draw3.t(x, y, circ[fieldKey] || '', FS_SM)
+    renderMatrixRow(draw3, iL.circuitX, y, iCircuits.map(c => c[fieldKey] || ''), {
+      align: iL.valueAlign, width: iL.valueWidth, size: FS_SM,
     })
     const status = phasingRowStatus(iCircuits, fieldKey)
     if (status === 'confirmed') draw3.ck(iL.ckX, y, true)
@@ -272,18 +285,14 @@ export async function generateB28Pdf(d, photos = []) {
   })
 
   // Neutrals connected — one tick per circuit column in the neutrals row
-  iCircuits.forEach((circ, circIdx) => {
-    const x = iL.circuitX[circIdx]
-    if (x !== undefined) draw3.ck(x, iL.neutralsY, circ.neutral)
-  })
+  renderMatrixRow(draw3, iL.circuitX, iL.neutralsY, iCircuits.map(c => c.neutral), { type: 'check' })
 
   // ── Page 3: Section k) LV Open Point Restoration (grid) ──────────────────
   const kL = GRIDS.sectionK
   ;(d.kPoints || []).forEach((pt, idx) => {
     const y = kL.rowY[idx]
     if (y === undefined) return
-    draw3.t(kL.locationX, y, pt.location, FS)
-    draw3.ck(kL.ckX, y, pt.restored)
+    renderGridRow(draw3, kL.cols, y, pt, FS)
   })
 
   // ── Photos (appended as additional pages) ─────────────────────────────────

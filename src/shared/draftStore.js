@@ -23,7 +23,6 @@ import { createStore, get, set, del, keys } from 'idb-keyval'
 const draftIdb = createStore('re-former-drafts', 'drafts')
 
 const MAX_DRAFTS = 50
-const MAX_PHOTOS = 5
 
 // ── One-time migration from old localStorage drafts ───────────────────────────
 // Uses a Promise rather than a boolean flag so concurrent callers all await the
@@ -72,10 +71,12 @@ function makeId() {
 }
 
 function stripSignature(data) {
-  // Signature is large (50–200 KB as base64) and is already persisted in
-  // userPrefs, so we never store it in drafts.
+  // Signatures are large (50–200 KB as base64) and already persisted in userPrefs,
+  // so we never store them in drafts. Covers the shared 'signed' field and the
+  // HV Inspection wizard's 'wtlSigned' and 'fsSigned'.
+  const SIG_KEYS = new Set(['signed', 'wtlSigned', 'fsSigned'])
   return Object.fromEntries(
-    Object.entries(data || {}).filter(([k]) => k !== 'signed')
+    Object.entries(data || {}).filter(([k]) => !SIG_KEYS.has(k))
   )
 }
 
@@ -106,7 +107,7 @@ export async function saveDraft({ formKey, name, step, data, photos = [] }) {
     step:    step || 0,
     savedAt: new Date().toISOString(),
     data:    stripSignature(data),
-    photos:  (photos || []).slice(0, MAX_PHOTOS),
+    photos:  photos || [],
   }
 
   await set(entry.id, entry, draftIdb)
@@ -138,7 +139,7 @@ export async function updateDraft(id, { name, step, data, photos }) {
     step:    step ?? existing.step,
     savedAt: new Date().toISOString(),
     data:    stripSignature(data),
-    photos:  (photos || []).slice(0, MAX_PHOTOS),
+    photos:  photos || [],
   }
 
   await set(id, updated, draftIdb)

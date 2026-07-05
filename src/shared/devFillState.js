@@ -5,16 +5,30 @@
  * Dead-code eliminated in production builds (Rollup tree-shakes the import
  * because all call-sites are inside `import.meta.env.DEV ? ... : undefined`).
  *
- * ── Usage in any wizard ────────────────────────────────────────────────────
- *   import { devFillState } from '../shared/devFillState'
+ * Two state-updater functions are exported:
+ *   devFillState            — one realistic, plausible value per field (as before)
+ *   devFillStateAllOptions  — same realistic fill, PLUS flags the state so the
+ *                             PDF renderer shows every "1 of N" checkbox/
+ *                             ellipse option and every text field's position
+ *                             at once (see its own doc comment below, and
+ *                             the calibration-mode section in
+ *                             src/shared/pdfFieldRenderer.js)
  *
- *   // Inside the component, after usePdfGenerate:
- *   const handleDevFill = import.meta.env.DEV ? () => setD(devFillState) : undefined
+ * useWizardSetup.js wires the dev-only 🧪 button to TOGGLE between the two
+ * on each tap, so no wizard needs its own button or extra prop for this:
+ *   import { devFillState, devFillStateAllOptions } from '../shared/devFillState'
  *
- *   // On the WizardShell:
+ *   // Inside useWizardSetup:
+ *   const fillModeRef = useRef('normal')
+ *   const handleDevFill = import.meta.env.DEV ? () => {
+ *     if (fillModeRef.current === 'normal') { setD(devFillStateAllOptions); fillModeRef.current = 'all' }
+ *     else                                  { setD(devFillState);          fillModeRef.current = 'normal' }
+ *   } : undefined
+ *
+ *   // On the WizardShell, unchanged:
  *   <WizardShell ... onFillTestData={handleDevFill}>
  *
- * ── Algorithm ──────────────────────────────────────────────────────────────
+ * ── Algorithm (devFillState's realistic fill) ───────────────────────────────
  * devFillState is a React state-updater function: (prevState) => nextState.
  * Passing it directly to setD() works because React's setState accepts
  * an updater function — no wrapper needed.
@@ -31,10 +45,24 @@
  *  8. object[]       → every item is recursed (handles row tables)
  *  9. empty []       → inferEmptyArray (handles multi-select and selection arrays)
  * 10. nested object  → recursed
+ *
+ * devFillStateAllOptions runs this exact same fill first (so anything NOT
+ * covered by calibration mode — e.g. circuit-grid range checks that need
+ * real in-range numbers — still looks sensible), then adds __calibrate: true.
  */
 
 // ── Today's date in YYYY-MM-DD (HTML date input format) ───────────────────────
 const TODAY = new Date().toISOString().slice(0, 10)
+
+/**
+ * Build an array of `count` rows, each produced by `rowFn(index)`. Used
+ * below to give every repeating-row table (conductors, box entries, etc.)
+ * a FULL set of rows up to that wizard's actual maximum — see the
+ * "Repeating-row tables" section of OVERRIDE_VALUES for why this matters.
+ */
+function repeatRows(count, rowFn) {
+  return Array.from({ length: count }, (_, i) => rowFn(i))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OVERRIDE_VALUES
@@ -238,17 +266,131 @@ const OVERRIDE_VALUES = {
   jRW: '0.08', jRB: '0.07', jWB: '0.09',
   jRN: '0.06', jWN: '0.07', jBN: '0.08',
 
-  // Circuit-centric voltage checks — 2 circuits with readings in acceptable range
-  // (R–W/W–B/B–R: 412–422 V  ·  R–N/W–N/B–N: 238–244 V)
+  // Circuit-centric voltage checks — ALL 4 possible circuits, every reading
+  // in the acceptable range (R–W/W–B/B–R: 412–422 V · R–N/W–N/B–N: 238–244 V).
+  // Was previously only 2 of the 4 — the other two circuit COLUMNS on the
+  // form never got any data, so there was nothing to calibrate against.
   fCircuits: [
     { rw: '416', wb: '418', br: '415', rn: '240', wn: '241', bn: '239' },
     { rw: '417', wb: '419', br: '416', rn: '241', wn: '240', bn: '240' },
+    { rw: '418', wb: '417', br: '414', rn: '239', wn: '239', bn: '238' },
+    { rw: '420', wb: '416', br: '413', rn: '242', wn: '243', bn: '241' },
   ],
 
-  // Circuit-centric phasing/paralleling checks — 2 circuits, <10 V, neutrals connected
+  // Circuit-centric phasing/paralleling checks — ALL 4 possible circuits,
+  // every reading <10 V (same "only 2 of 4" issue as fCircuits above).
   iCircuits: [
     { r1r2: '2', w1w2: '3', b1b2: '1', neutral: true },
     { r1r2: '3', w1w2: '2', b1b2: '2', neutral: true },
+    { r1r2: '4', w1w2: '5', b1b2: '3', neutral: false },
+    { r1r2: '1', w1w2: '4', b1b2: '2', neutral: true },
+  ],
+
+  // ── Repeating-row tables — every row, up to each wizard's real maximum ──────
+  // Without an explicit array override here, a row-table field falls through
+  // to the generic array rules further down (see fillValue), which only fill
+  // whatever rows ALREADY exist in the wizard's current state — typically
+  // just the single row every wizard starts with. That's enough for the
+  // wizard's own UI, but for PDF calibration it means only the FIRST row's
+  // position ever gets tested; every other row on the form (up to 20, for
+  // LV Box) never receives any data, so there's nothing on the page to check
+  // its coordinates against. These overrides replace each array wholesale
+  // with a full set of rows instead, regardless of how many rows happen to
+  // exist when you tap fill.
+  //
+  // The standalone field overrides above (level, existing, voltage, size,
+  // normalState, operatingVoltage, voltageRating, fuseSize, equipmentId, ir,
+  // phase, cableSize, material, circuitLength, insulation, equipIdNew,
+  // equipIdOld, address, serviceOrDist, numberOfDisconnects, fuseHolders,
+  // owner, installedOrRemoved, manufacturerModel, drawingRef) still apply to
+  // any OTHER field with that exact name elsewhere — e.g. LvConnectionWizard
+  // has a standalone `fuseSize` field, not part of any row table — they're
+  // just no longer reached for the row tables themselves, since those are
+  // now fully replaced below.
+
+  // Pole — conductors (max 7)
+  conductors: repeatRows(7, i => ({
+    level: String(i + 1),
+    existing: i % 2 === 0 ? 'E' : 'N',
+    size: ['95mm²', '50mm²', '16mm²', '25mm²', '35mm²', '70mm²', '120mm²'][i],
+    material: ['ACSR', 'Cu', 'AAC', 'AAAC', 'ABC', 'ACSR', 'Cu'][i],
+    insulation: i % 2 === 0 ? 'Bare' : 'PVC',
+    picker: 'manual',
+  })),
+
+  // Pole — crossarms (max 7)
+  crossarms: repeatRows(7, i => ({
+    level: String(i + 1),
+    existing: i % 2 === 0 ? 'E' : 'N',
+    voltage: ['LV', '11', '22', '33', 'LVTX', '66', '11'][i],
+    endSize: ['A', 'B', 'D', 'Z', 'A', 'B', 'D'][i],
+    length: String(20 + (i % 3) * 3),
+    arms: i % 2 === 0 ? '1' : '2',
+    insulatorType: ['PN', 'PS', 'TT', 'DP', 'EDO', 'PN', 'PS'][i],
+    armMaterial: ['T', 'S', 'C', 'T', 'S', 'C', 'T'][i],
+    wires: i % 2 === 0 ? '3' : '6',
+  })),
+
+  // ElecEquip — equipment rating rows (max 5)
+  equipmentRating: repeatRows(5, i => ({
+    equipmentId: `SW-${i + 1}`,
+    normalState: i % 2 === 0 ? 'Closed' : 'Open',
+    operatingVoltage: ['11kV', '22kV', '33kV'][i % 3],
+    voltageRating: ['11kV', '22kV', '33kV'][i % 3],
+    fuseSize: ['100A', '63A', '40A'][i % 3],
+  })),
+
+  // ElecEquip — page 2 multi-item table (max 15)
+  multiItems: repeatRows(15, i => ({
+    ir: i % 2 === 0 ? 'I' : 'R',
+    equipmentId: `EQ-${i + 1}`,
+    equipmentType: ['Fused ABS', 'TX Fuse', 'Line Fuse', 'Solid Link', 'Lightning Arrester'][i % 5],
+    manufacturer: 'ABB',
+    model: `Model-${i + 1}`,
+    serialNumber: `SN-${1000 + i}`,
+    operatingVoltage: ['11kV', '22kV', '33kV'][i % 3],
+    voltageRating: ['11kV', '22kV', '33kV'][i % 3],
+    fuseSize: ['100A', '63A', '40A'][i % 3],
+  })),
+
+  // ZoneSub — additional equipment items (max 11)
+  additionalItems: repeatRows(11, i => ({
+    installedOrRemoved: i % 2 === 0 ? 'Installed' : 'Removed',
+    equipmentId: `EQ-${i + 1}`,
+    serialNo: `SN-${2000 + i}`,
+    manufacturerModel: `ABB Model-${i + 1}`,
+    description: `Test item ${i + 1} for coordinate calibration.`,
+    drawingRef: `DRG-${100 + i}`,
+  })),
+
+  // ElecDistribution — cable circuit rows (max 3)
+  cableRows: [
+    { voltage: '11kV', phase: 'Three', cableSize: '95mm²',  material: 'ACSR', insulation: 'Bare', numberOfCables: '1', numberOfCores: '3', circuitLength: '150m' },
+    { voltage: 'LV',   phase: 'Three', cableSize: '185mm²', material: 'Cu',   insulation: 'PVC',  numberOfCables: '1', numberOfCores: '4', circuitLength: '80m' },
+    { voltage: 'LV',   phase: 'One',   cableSize: '16mm²',  material: 'Cu',   insulation: 'PVC',  numberOfCables: '1', numberOfCores: '2', circuitLength: '20m' },
+  ],
+
+  // LvBox — box entry rows (max 20)
+  boxRows: repeatRows(20, i => ({
+    equipIdNew: `NEW-${i + 1}`,
+    equipIdOld: `OLD-${i + 1}`,
+    address: `${i + 1} Test Road`,
+    manufacturer: 'ABB',
+    model: `Model-${i + 1}`,
+    serviceOrDist: i % 2 === 0 ? 'Service' : 'Distribution',
+    numberOfDisconnects: String((i % 4) + 1),
+    fuseHolders: '3×100A',
+    typeOfChange: 'New',
+    reasonForRemoval: '',
+    owner: 'Powerco',
+  })),
+
+  // DistributionTransformer — LV open point restoration rows (max 4)
+  kPoints: [
+    { location: 'Feeder pillar at 12 Smith Street', restored: true },
+    { location: 'Pole P-204', restored: false },
+    { location: 'Box B-9', restored: true },
+    { location: 'Link cabinet LC-3', restored: true },
   ],
 
   // ── Shared text fields ───────────────────────────────────────────────────────
@@ -373,7 +515,10 @@ function fillValue(key, value) {
 }
 
 /**
- * devFillState — React state updater function.
+ * devFillState — React state updater function. Fills every field with one
+ * plausible, realistic value — exactly as before. Explicitly clears
+ * __calibrate so tapping back to this mode after using
+ * devFillStateAllOptions() correctly returns to normal rendering.
  *
  * Pass directly to setD():
  *   setD(devFillState)
@@ -384,5 +529,39 @@ function fillValue(key, value) {
  * @returns {object}          Fully populated state for PDF calibration
  */
 export function devFillState(prevState) {
-  return fillObject(prevState)
+  return { ...fillObject(prevState), __calibrate: false }
 }
+
+/**
+ * devFillStateAllOptions — React state updater function for seeing every
+ * "1 of N" option's position on the page in a single render.
+ *
+ * Pass directly to setD():
+ *   setD(devFillStateAllOptions)
+ *
+ * Fields like d.equipmentType or d.poleCode are a single string checked
+ * against several named checkbox/ellipse options — no amount of dummy data
+ * can make one string equal several different values at once, so filling
+ * the wizard state can only ever show ONE option's tick per field. Setting
+ * __calibrate = true instead tells the PDF renderer (renderFields /
+ * renderGridRow in pdfFieldRenderer.js) to bypass each field's real
+ * condition for this generation pass: every checkbox/ellipse is forced to
+ * show, and every text field prints its own key name instead of its real
+ * value — so you can see every option, AND every normally-hidden
+ * "Other, specify"-style field, in one PDF, each one labelled.
+ *
+ * Still runs the normal realistic fill first underneath, so anything NOT
+ * driven by a FIELDS/GRIDS value() — e.g. the circuit-grid range checks in
+ * DistributionTransformerPdfGenerator, which need real in-range numbers to
+ * show their confirmed tick — still looks sensible.
+ *
+ * Tap the same dev "fill" button again (wired to toggle between this and
+ * devFillState — see useWizardSetup.js) to go back to realistic data.
+ *
+ * @param {object} prevState - Current wizard form state (passed by React)
+ * @returns {object}          State flagged so the next PDF render shows every option
+ */
+export function devFillStateAllOptions(prevState) {
+  return { ...fillObject(prevState), __calibrate: true }
+}
+

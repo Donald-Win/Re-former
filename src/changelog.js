@@ -13,6 +13,75 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.18.3',
+    changes: [
+      {
+        heading: 'Photos are attached in the order you select them',
+        detail: 'When adding several photos at once, they could occasionally end up in a different order in the finished PDF than the order you picked them in (larger photos sometimes finished loading after smaller ones). Photos are now always appended in the exact order you selected them.',
+      },
+    ],
+  },
+  {
+    version: '2.18.2',
+    changes: [
+      {
+        heading: 'GPS buttons time out less often in weak-signal areas',
+        detail: 'The "Use my GPS" and "Use my location" buttons were requesting a brand-new satellite fix on every tap, which could take longer than 15 seconds in rural areas or under cover. They now accept a location reading from the last 30 seconds, which is still accurate enough for field records and far less likely to time out.',
+      },
+      {
+        heading: 'Signature drawing runs slightly faster',
+        detail: 'The calculation that trims blank space around a saved signature has been sped up under the hood. Not something you\'ll see directly, but one less thing for the app to do after every signature.',
+      },
+    ],
+  },
+  {
+    version: '2.18.1',
+    changes: [
+      {
+        heading: 'Saved drafts no longer drop photos beyond the fifth',
+        detail: 'Saving a named draft, or letting the app auto-save your progress in the background, was still silently keeping only the first 5 photos — even though full photo sets have been supported everywhere else since 2.17.0. All attached photos are now kept in both cases.',
+      },
+      {
+        heading: 'Loading a draft now always replaces your current photos',
+        detail: 'If you had photos attached to a form and then loaded a different saved draft with fewer (or no) photos, the old photos could be left in place instead of being replaced. Loading a draft now always shows exactly the photos saved with it.',
+      },
+      {
+        heading: 'Earth resistance tick on Distribution Transformer Commissioning Certificate',
+        detail: 'A reading exactly at the limit (e.g. exactly 25 Ω) now correctly shows a green tick, matching the "25 Ω or less" standard, instead of only ticking for readings strictly below it.',
+      },
+    ],
+  },
+  {
+    version: '2.18.0',
+    changes: [
+      {
+        heading: 'GPS button for Pole Record co-ordinates',
+        detail: 'The GPS Co-ordinates section on the Pole Record wizard now has a "Use my GPS" button. Tap it to read your device\'s location and automatically fill in North, East, and Altitude — no more typing co-ordinates in by hand or switching to a separate map app.',
+      },
+    ],
+  },
+  {
+    version: '2.17.0',
+    changes: [
+      {
+        heading: 'Add Row buttons no longer vanish when all rows are deleted',
+        detail: 'In the Pole Record and Zone Substation wizards, tapping × on every conductor, crossarm, or equipment row permanently hid the “Add Row” button, locking the form. The button now always stays visible below the row list.',
+      },
+      {
+        heading: 'Save Draft button no longer gets stuck on “Saving…”',
+        detail: 'After a successful save, the Save Draft button would stay disabled and show “Saving…” for the rest of the session. It now resets correctly after every save.',
+      },
+      {
+        heading: 'All attached photos are now saved in drafts',
+        detail: 'Drafts and autosaves were silently dropping any photos beyond the fifth. All photos are now saved in full — the storage system (IndexedDB) was specifically chosen to handle large photo sets without any limit.',
+      },
+      {
+        heading: 'Background fixes',
+        detail: 'Fixed a timer left running in the background after every PDF generation. Fixed an issue where HV Inspection Certificate signature data could be stored unnecessarily in draft saves.',
+      },
+    ],
+  },
+  {
     version: '2.16.0',
     changes: [
       {

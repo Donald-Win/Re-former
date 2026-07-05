@@ -1,57 +1,38 @@
 /**
  * useWizardSetup — shared setup hook for all wizards.
  *
- * Extracts the three patterns that are identical across every wizard:
- *   1. Save to job history when advancing past step 0
- *   2. loadJobHistory handler
- *   3. setD convenience setter
+ * Provides:
+ *   1. setD convenience setter
+ *   2. DEV-only test-data fill handler
  *
  * Usage:
- *   const { loadJobHistory, set, handleDevFill } =
- *     useWizardSetup(d, setD, step, formType)
+ *   const { set, handleDevFill } = useWizardSetup(d, setD, step, formType)
+ *
+ * History note (v2.18.3) — job history write path removed
+ * ─────────────────────────────────────────────────────────
+ * This hook used to also snapshot the form into a "recent jobs" history
+ * (jobHistory.js) every time the user advanced past step 0, and expose a
+ * `loadJobHistory` setter to load one back in. No wizard ever called
+ * `loadJobHistory` or displayed the saved history — ProjectPicker.jsx
+ * superseded this as the actual "load previous job details" UI back in
+ * v2.12.0 — so every job was silently writing to localStorage for a
+ * feature with no UI. That write path (and the now-unused jobHistory.js
+ * module) has been removed.
+ *
+ * `step` and `formType` are kept as accepted parameters — rather than
+ * changing every wizard's call site — in case a real "recent jobs" picker
+ * is built later and this is the natural place to reintroduce the save.
  *
  * Props:
- *   d         — wizard form state
+ *   d         — wizard form state (accepted, unused — see history note)
  *   setD      — wizard state setter
- *   step      — current step
- *   formType  — e.g. '360S014EC' — saved into job history so picker can show it
- *
- * Fixes vs. original
- * ──────────────────
- * 1. The useEffect previously had `[step]` as its dependency array, which
- *    suppressed the ESLint exhaustive-deps warning but meant the effect
- *    closed over the initial value of `d` forever — if the user edited fields
- *    before advancing, saveToHistory received a stale snapshot.  We now
- *    include `d` and `formType` in deps.  `prevStepRef` lets us detect the
- *    0→1 transition without re-running on every step change.
- *
- * 2. `loadJobHistory` and `set` are wrapped in useCallback so wizards that
- *    pass them down as props (e.g. to JobDetailsStep or WCB) don't trigger
- *    unnecessary child re-renders on every parent render.
+ *   step      — current step (accepted, unused — see history note)
+ *   formType  — e.g. '360S014EC' (accepted, unused — see history note)
  */
-import { useEffect, useRef, useCallback } from 'react'
-import { saveToHistory } from './jobHistory'
+import { useCallback } from 'react'
 import { devFillState } from './devFillState'
 
 export function useWizardSetup(d, setD, step, formType) {
-  const prevStepRef = useRef(0)
-
-  // Save to job history when user advances past step 0.
-  // Both `d` and `formType` are included in deps so saveToHistory always
-  // receives the current form values, not a stale closure snapshot.
-  useEffect(() => {
-    if (prevStepRef.current === 0 && step === 1) {
-      saveToHistory({ ...d, formType })
-    }
-    prevStepRef.current = step
-  }, [step, d, formType])
-
-  // Load a previous job into the form.
-  // useCallback gives callers a stable reference — safe to pass as a prop.
-  const loadJobHistory = useCallback((fields) => {
-    setD(prev => ({ ...prev, ...fields }))
-  }, [setD])
-
   // Convenience field setter — supports both calling styles:
   //   Curried:  set('fieldName')(value)   — used as onChange prop
   //   Two-arg:  set('fieldName', value)   — used inline
@@ -73,5 +54,5 @@ export function useWizardSetup(d, setD, step, formType) {
     ? () => setD(devFillState)
     : undefined
 
-  return { loadJobHistory, set, handleDevFill }
+  return { set, handleDevFill }
 }

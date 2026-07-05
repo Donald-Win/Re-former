@@ -10,6 +10,7 @@ import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
+import { GpsCoordButton } from '../shared/GpsCoordButton'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
@@ -424,6 +425,7 @@ function PoleRecordWizard({ onClose }) {
               {d.gpsRequired==='Yes' && (
                 <div style={{ background:'#f5f5f5', borderRadius:10, padding:12, marginBottom:12 }}>
                   <div style={{ fontWeight:700, fontSize:11, marginBottom:8, color:'#555' }}>GPS CO-ORDINATES</div>
+                  <GpsCoordButton accent={W_PURPLE} onCoords={coords => setD(p => ({ ...p, ...coords }))} />
                   <WF label="North"                    v={d.gpsNorth}  set={set('gpsNorth')}  ph="e.g. 5812345" />
                   <WF label="East"                     v={d.gpsEast}   set={set('gpsEast')}   ph="e.g. 1832456" />
                   <WF label="Altitude above sea level" v={d.altitude}  set={set('altitude')}  ph="e.g. 45m" />
@@ -614,17 +616,17 @@ function PoleRecordWizard({ onClose }) {
                     <WSel label="Existing / New" value={c.existing} onChange={v => setCond(i,'existing',v)} options={EN_OPTS} />
                   </div>
                   <ConductorPicker c={c} i={i} setCond={setCond} setMultiCond={setMultiCond} />
-                  {isLastRow && d.conductors.length<7 && (
-                    <button
-                      onClick={() => setD(p => ({ ...p, conductors: [...p.conductors, { level:String(p.conductors.length+1), existing:'', size:'', material:'', insulation:'', picker:null }]}))}
-                      style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                      + Add Another Row
-                    </button>
-                  )}
                 </div>
               ) : null
             })
           })()}
+          {d.conductors.length < 7 && (
+            <button
+              onClick={() => setD(p => ({ ...p, conductors: [...p.conductors, { level:String(p.conductors.length+1), existing:'', size:'', material:'', insulation:'', picker:null }]}))}
+              style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              + Add Another Row
+            </button>
+          )}
         </div>
       )
 
@@ -663,17 +665,17 @@ function PoleRecordWizard({ onClose }) {
                   <div style={{ height:1, background:'#e5e7eb', margin:'8px 0' }} />
                   <WF label="Insulator Type" v={c.insulatorType} set={v => setCA(i,'insulatorType',v)} ph="PN / PS / TT / DP / EDO" />
                   <WF label="# Wires"        v={c.wires}         set={v => setCA(i,'wires', v.replace(/\D/g,''))} ph="e.g. 3" type="number" />
-                  {isLastRow && d.crossarms.length<7 && (
-                    <button
-                      onClick={() => setD(p => ({ ...p, crossarms: [...p.crossarms, { level:String(p.crossarms.length+1), existing:'', voltage:'', endSize:'', length:'', arms:'', insulatorType:'', armMaterial:'', wires:'' }]}))}
-                      style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                      + Add Another Row
-                    </button>
-                  )}
                 </div>
               ) : null
             })
           })()}
+          {d.crossarms.length < 7 && (
+            <button
+              onClick={() => setD(p => ({ ...p, crossarms: [...p.crossarms, { level:String(p.crossarms.length+1), existing:'', voltage:'', endSize:'', length:'', arms:'', insulatorType:'', armMaterial:'', wires:'' }]}))}
+              style={{ marginTop:10, padding:'10px 16px', borderRadius:8, border:'none', background:W_PURPLE, color:'#fff', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              + Add Another Row
+            </button>
+          )}
         </div>
       )
 

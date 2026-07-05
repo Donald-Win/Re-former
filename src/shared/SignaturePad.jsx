@@ -198,43 +198,39 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     lastMid.current  = null
     hasMoved.current = false
 
-    const dpr  = Math.min(window.devicePixelRatio || 1, 2)
-    const W    = canvas.width
-    const H    = canvas.height
-    const data = canvas.getContext('2d').getImageData(0, 0, W, H).data
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const W   = canvas.width
+    const H   = canvas.height
+    const imageData = canvas.getContext('2d').getImageData(0, 0, W, H)
 
     // ── Optimised tight bounding-box crop ─────────────────────────────────────
     //
-    // PROBLEM WITH THE ORIGINAL:
-    // The original nested loop iterated every pixel (W × H) in a single pass,
-    // checking all four bounds simultaneously. On a 2× retina canvas this means
-    // scanning up to ~240,000 pixels (750 × 320 physical) on every stroke-end,
-    // entirely on the main thread, causing micro-stutters during signing.
-    //
-    // FIX — four directional sweeps, each with early exit:
+    // Four directional sweeps, each with early exit, exactly as before:
     //   1. Top→Bottom to find minY — stops at the first non-empty row.
     //   2. Bottom→Top to find maxY — stops at the first non-empty row.
     //   3. Left→Right within [minY, maxY] to find minX — narrows on each row.
     //   4. Right→Left within [minY, maxY] to find maxX — narrows on each row.
     //
-    // Each sweep steps through the raw ImageData buffer in increments of 4
-    // (one pixel), reading only the alpha byte (index +3). This avoids the
-    // `(y * W + x) * 4 + 3` multiply per pixel in favour of a single add.
-    //
-    // For a typical signature covering the centre third of the canvas the
-    // top/bottom sweeps terminate after ~10–20 rows; the left/right sweeps
-    // only scan the Y-band containing ink, skipping the blank margins entirely.
+    // 32-BIT PIXEL VIEW (vs per-byte alpha checks):
+    // getImageData returns a Uint8ClampedArray of R,G,B,A bytes. The
+    // previous version read one byte per pixel (the alpha channel, offset
+    // +3) via a ×4 stride. This version instead views the exact same
+    // underlying buffer as a Uint32Array, so each element IS one whole
+    // pixel (all four channels packed into one 32-bit int). Checking
+    // `data32[i] !== 0` tests R, G, B, and A in a single comparison rather
+    // than four separate byte reads — a blank/erased pixel is always
+    // 0x00000000 (fully transparent black, from clearRect), and any drawn
+    // ink pixel has non-zero alpha (and colour), so the whole-pixel test is
+    // exactly equivalent to the old "alpha byte > 0" test here, just faster.
+    const data32 = new Uint32Array(imageData.data.buffer)
 
     // ── 1. Find top edge (minY) ───────────────────────────────────────────────
-    // Outer label lets us break both loops at once when the first ink pixel is found.
     let minY = -1
     top: for (let y = 0; y < H; y++) {
-      // Start at the alpha byte of the first pixel on this row; step by 4
-      // (one pixel) to visit only alpha bytes across the full row width.
-      const rowAlphaStart = y * W * 4 + 3
-      const rowAlphaEnd   = rowAlphaStart + W * 4   // exclusive upper bound
-      for (let i = rowAlphaStart; i < rowAlphaEnd; i += 4) {
-        if (data[i] > 0) { minY = y; break top }
+      const rowStart = y * W
+      const rowEnd   = rowStart + W
+      for (let i = rowStart; i < rowEnd; i++) {
+        if (data32[i] !== 0) { minY = y; break top }
       }
     }
 
@@ -244,30 +240,28 @@ export function SignaturePad({ value, onChange, accent = APP_ACCENT }) {
     // ── 2. Find bottom edge (maxY) ────────────────────────────────────────────
     let maxY = minY
     bottom: for (let y = H - 1; y > minY; y--) {
-      const rowAlphaStart = y * W * 4 + 3
-      const rowAlphaEnd   = rowAlphaStart + W * 4
-      for (let i = rowAlphaStart; i < rowAlphaEnd; i += 4) {
-        if (data[i] > 0) { maxY = y; break bottom }
+      const rowStart = y * W
+      const rowEnd   = rowStart + W
+      for (let i = rowStart; i < rowEnd; i++) {
+        if (data32[i] !== 0) { maxY = y; break bottom }
       }
     }
 
     // ── 3. Find left edge (minX) — only within the discovered Y band ──────────
-    // Inner loop terminates as soon as it beats the current best minX for
-    // this row, so the search window shrinks with each tighter candidate found.
     let minX = W
     for (let y = minY; y <= maxY; y++) {
-      const rowBase = y * W * 4
+      const rowBase = y * W
       for (let x = 0; x < minX; x++) {
-        if (data[rowBase + x * 4 + 3] > 0) { minX = x; break }
+        if (data32[rowBase + x] !== 0) { minX = x; break }
       }
     }
 
     // ── 4. Find right edge (maxX) — only within the discovered Y band ─────────
     let maxX = 0
     for (let y = minY; y <= maxY; y++) {
-      const rowBase = y * W * 4
+      const rowBase = y * W
       for (let x = W - 1; x > maxX; x--) {
-        if (data[rowBase + x * 4 + 3] > 0) { maxX = x; break }
+        if (data32[rowBase + x] !== 0) { maxX = x; break }
       }
     }
 

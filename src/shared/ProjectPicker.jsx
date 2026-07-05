@@ -12,7 +12,7 @@
  *   onSelect  fn({ projectName, npJobNumber, pcoWONo, ciwrNo })
  *   accent    string
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, FolderOpen, Trash2, X, ChevronRight, Check, Pencil } from 'lucide-react'
 import { listProjects, saveProject, deleteProject, projectLabel, projectSub } from './projectStore'
 import { APP_ACCENT } from './constants'
@@ -27,6 +27,12 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
   const [saved, setSaved]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [editingProject, setEditingProject] = useState(null)
+  const closeTimerRef = useRef(null)
+
+  // Clear the auto-close timer if the component unmounts while it is counting down
+  useEffect(() => {
+    return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }
+  }, [])
 
   const refreshProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -65,7 +71,8 @@ export function ProjectPicker({ open, onClose, onSelect, accent = APP_ACCENT }) 
         onSelect({ projectName: entry.projectName, npJobNumber: entry.npJobNumber, pcoWONo: entry.pcoWONo, ciwrNo: entry.ciwrNo })
       }
       setSaved(true)
-      setTimeout(() => { setSaved(false); setEditingProject(null); setMode('list') }, 900)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = setTimeout(() => { setSaved(false); setEditingProject(null); setMode('list') }, 900)
     } catch (err) {
       console.error('[ProjectPicker] Save failed:', err)
     } finally {

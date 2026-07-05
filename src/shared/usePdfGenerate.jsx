@@ -84,12 +84,15 @@ export function usePdfGenerate(generatorFn) {
     }
 
     // ── Timeout race ──────────────────────────────────────────────────────────
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
+    // timeoutId is captured so we can clear the timer once the race settles —
+    // previously the 30-second timer kept running after every successful generation.
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
         () => reject(new Error('GENERATION_TIMEOUT')),
         GENERATION_TIMEOUT_MS,
       )
-    )
+    })
 
     // ── Generator resolution ──────────────────────────────────────────────────
     // A thunk (length === 0) is a lazy import factory: () => Promise<generatorFn>.
@@ -104,6 +107,7 @@ export function usePdfGenerate(generatorFn) {
 
     Promise.race([runGeneration(), timeoutPromise])
       .then(result => {
+        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         const bytes = result instanceof Uint8Array ? result : new Uint8Array(result)
@@ -116,6 +120,7 @@ export function usePdfGenerate(generatorFn) {
         setPdfGenerating(false)
       })
       .catch(err => {
+        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         console.error('PDF generation failed:', err)

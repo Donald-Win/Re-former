@@ -4,8 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#4f46e5" />
-    <link rel="manifest" href="/re-former/manifest.json" />
-    <link rel="apple-touch-icon" href="/re-former/icons/icon-192.png" />
+    <!--
+      %BASE_URL% is a Vite built-in template variable, resolved at build time
+      to the `base` value in vite.config.js (which is itself controlled by
+      the BASE_PATH env var — '/re-former/' for GitHub Pages, '/' for
+      Netlify). This is what lets a single index.html serve both deploy
+      targets correctly, replacing the old index.html / index.netlify.html
+      pair kept in sync by a manual `cp` step in netlify.toml.
+    -->
+    <link rel="manifest" href="%BASE_URL%manifest.json" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/icon-192.png" />
     <title>re-former — Powerco AS-Built Forms</title>
   </head>
   <body>
