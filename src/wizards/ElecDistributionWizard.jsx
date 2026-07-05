@@ -13,10 +13,10 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadEbGenerator = () =>
-  import('./generators/ElecDistributionPdfGenerator').then(m => m.generateEbPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateEbPdf = createWorkerGenerator('ElecDistributionPdfGenerator', 'generateEbPdf')
 
 const EB_ORANGE = APP_ACCENT
 const EB_BG     = WIZARD_COLORS.bg
@@ -101,7 +101,7 @@ export default function ElecDistributionWizard({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEbGenerator)
+    usePdfGenerate(generateEbPdf)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.cableRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
@@ -278,4 +278,3 @@ export default function ElecDistributionWizard({ onClose }) {
     </>
   )
 }
-

@@ -13,10 +13,10 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadEdGenerator = () =>
-  import('./generators/LvBoxPdfGenerator').then(m => m.generateEdPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateEdPdf = createWorkerGenerator('LvBoxPdfGenerator', 'generateEdPdf')
 
 const ED_GREEN  = APP_ACCENT
 const ED_BG     = WIZARD_COLORS.bg
@@ -110,7 +110,7 @@ export default function LvBoxWizard({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEdGenerator)
+    usePdfGenerate(generateEdPdf)
 
   const setRow = (i, k, v) => setD(prev => {
     const rows = prev.boxRows.map((r, idx) => idx === i ? { ...r, [k]: v } : r)
@@ -212,4 +212,3 @@ export default function LvBoxWizard({ onClose }) {
     </>
   )
 }
-

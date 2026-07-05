@@ -15,10 +15,10 @@ import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadPoleGenerator = () =>
-  import('./generators/PolePdfGenerator').then(m => m.generatePolePdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generatePolePdf = createWorkerGenerator('PolePdfGenerator', 'generatePolePdf')
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -300,7 +300,7 @@ function PoleRecordWizard({ onClose }) {
   const [photos, setPhotos] = useState([])
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadPoleGenerator)
+    usePdfGenerate(generatePolePdf)
 
   const isPreview = step === W_STEPS.length - 1
 
@@ -741,4 +741,3 @@ function PoleRecordWizard({ onClose }) {
 }
 
 export default PoleRecordWizard
-

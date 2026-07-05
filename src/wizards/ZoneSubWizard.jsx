@@ -14,10 +14,10 @@ import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadEfGenerator = () =>
-  import('./generators/ZoneSubPdfGenerator').then(m => m.generateEfPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateEfPdf = createWorkerGenerator('ZoneSubPdfGenerator', 'generateEfPdf')
 
 const ACCENT    = APP_ACCENT
 const EF_BG     = WIZARD_COLORS.bg
@@ -73,7 +73,7 @@ function ZoneSubWizard({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEfGenerator)
+    usePdfGenerate(generateEfPdf)
 
   const setRow = (i, field, val) => setD(p => {
     const items = [...p.additionalItems]
@@ -213,15 +213,15 @@ function ZoneSubWizard({ onClose }) {
                   <WF label="Drawing Ref No"      v={row.drawingRef}        set={v => setRow(i, 'drawingRef', v)}        accent={ACCENT} />
                 </div>
                 <WF label="Description of New Item" v={row.description} set={v => setRow(i, 'description', v)} accent={ACCENT} />
+                {isLastRow && d.additionalItems.length < 11 && (
+                  <button onClick={() => setD(p => ({ ...p, additionalItems: [...p.additionalItems, emptyRow()] }))}
+                    style={{ marginTop: 10, padding: '10px 16px', borderRadius: 8, border: 'none', background: ACCENT, color: '#fff', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    + Add Another Item
+                  </button>
+                )}
               </div>
             ) : null
           })}
-          {d.additionalItems.length < 11 && (
-            <button onClick={() => setD(p => ({ ...p, additionalItems: [...p.additionalItems, emptyRow()] }))}
-              style={{ marginTop: 10, padding: '10px 16px', borderRadius: 8, border: 'none', background: ACCENT, color: '#fff', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              + Add Another Item
-            </button>
-          )}
         </div>
       )
 
@@ -279,4 +279,3 @@ function ZoneSubWizard({ onClose }) {
 }
 
 export default ZoneSubWizard
-

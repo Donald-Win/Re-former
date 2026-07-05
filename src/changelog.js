@@ -13,6 +13,15 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.19.0',
+    changes: [
+      {
+        heading: 'PDF generation no longer freezes the app',
+        detail: 'Generating a filled PDF — especially one with several photos attached — used to briefly freeze the screen while it worked. PDF generation now happens in the background, so the app stays responsive the whole time.',
+      },
+    ],
+  },
+  {
     version: '2.18.3',
     changes: [
       {

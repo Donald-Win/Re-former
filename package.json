@@ -1,6 +1,6 @@
 {
   "name": "re-former",
-  "version": "2.18.3",
+  "version": "2.19.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "comlink": "^4.4.1",
     "idb-keyval": "^6.2.1",
     "lucide-react": "^0.263.1",
     "pdf-lib": "^1.17.1",

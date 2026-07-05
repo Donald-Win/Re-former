@@ -14,10 +14,10 @@ import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadTransformerGenerator = () =>
-  import('./generators/TransformerPdfGenerator').then(m => m.generateTransformerPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateTransformerPdf = createWorkerGenerator('TransformerPdfGenerator', 'generateTransformerPdf')
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -118,7 +118,7 @@ function TransformerWizardApp({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadTransformerGenerator)
+    usePdfGenerate(generateTransformerPdf)
 
   // ── State helpers ─────────────────────────────────────────────────────────
   const tog  = k => v => setD(p => ({ ...p,          [k]: p[k]          === v ? '' : v }))
@@ -401,4 +401,3 @@ function TransformerWizardApp({ onClose }) {
 }
 
 export default TransformerWizardApp
-

@@ -13,10 +13,10 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadEaGenerator = () =>
-  import('./generators/LvConnectionPdfGenerator').then(m => m.generateEaPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateEaPdf = createWorkerGenerator('LvConnectionPdfGenerator', 'generateEaPdf')
 
 const LV_TEAL   = APP_ACCENT
 const LV_BG     = WIZARD_COLORS.bg
@@ -66,7 +66,7 @@ export default function LvConnectionWizard({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEaGenerator)
+    usePdfGenerate(generateEaPdf)
   const handleShare = () => {
     sharePdf(
       pdfBytes,
@@ -209,4 +209,3 @@ export default function LvConnectionWizard({ onClose }) {
     </>
   )
 }
-

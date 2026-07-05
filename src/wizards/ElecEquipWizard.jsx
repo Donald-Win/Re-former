@@ -14,10 +14,10 @@ import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadEEGenerator = () =>
-  import('./generators/ElecEquipPdfGenerator').then(m => m.generateEEPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateEEPdf = createWorkerGenerator('ElecEquipPdfGenerator', 'generateEEPdf')
 
 const W_PURPLE = APP_ACCENT
 const W_YELLOW = APP_YELLOW
@@ -79,7 +79,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadEEGenerator)
+    usePdfGenerate(generateEEPdf)
   const tog = k => v => setD(p => ({ ...p, [k]: p[k] === v ? '' : v }))
 
   const setRating = (i, field) => v => setD(p => ({
@@ -438,4 +438,3 @@ function ElecEquipWizard({ onClose = () => {} }) {
 }
 
 export default ElecEquipWizard
-

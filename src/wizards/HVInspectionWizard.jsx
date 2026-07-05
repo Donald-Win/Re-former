@@ -17,6 +17,7 @@ import { useDraftPicker } from '../shared/useDraftPicker'
 import { DraftPicker } from '../shared/DraftPicker'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 import {
   EQUIP_TYPES,
   VISUAL_CHECKS,
@@ -27,9 +28,8 @@ import {
   OTHER_CHECKS,
 } from './generators/HVInspectionChecks'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadHvGenerator = () =>
-  import('./generators/HVInspectionPdfGenerator').then(m => m.generateHvPdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateHvPdf = createWorkerGenerator('HVInspectionPdfGenerator', 'generateHvPdf')
 
 const FORM_KEY   = '220F028A'
 const FORM_LABEL = 'HV Inspection Certificate'
@@ -272,7 +272,7 @@ export default function HVInspectionWizard({ onClose }) {
   const { set, handleDevFill } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadHvGenerator)
+    usePdfGenerate(generateHvPdf)
 
   // ── Dynamic step list based on selected equipment ──────────────────────────
   const selectedEquipObjs = EQUIP_TYPES.filter(e => d.selectedEquip.includes(e.id))
@@ -441,4 +441,3 @@ export default function HVInspectionWizard({ onClose }) {
     </>
   )
 }
-

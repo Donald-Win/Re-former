@@ -13,10 +13,22 @@ import { useWizardSetup } from '../shared/useWizardSetup'
 import { useDraft } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { createWorkerGenerator } from '../shared/pdfWorkerClient'
+import {
+  VOLT_MEASUREMENTS,
+  PHASING_MEASUREMENTS,
+  EARTH_LIMITS,
+  LOOP_LIMIT,
+  voltRange,
+  phasingRange,
+  earthRange,
+  loopRange,
+  voltRowStatus,
+  phasingRowStatus,
+} from './generators/DistributionTransformerLimits'
 
-// ── Lazy generator import ─────────────────────────────────────────────────────
-const loadB28Generator = () =>
-  import('./generators/DistributionTransformerPdfGenerator').then(m => m.generateB28Pdf)
+// ── PDF generation now runs off the main thread via the shared PDF worker ────
+const generateB28Pdf = createWorkerGenerator('DistributionTransformerPdfGenerator', 'generateB28Pdf')
 
 const FORM_KEY   = '220F028B'
 const FORM_LABEL = 'Distribution Transformer Commissioning Certificate'
@@ -52,34 +64,6 @@ const AS_BUILT_ITEMS = [
   { key: 'asBuiltLabelling', label: 'Labelling completed per 393S004 Labelling and Safety Signage Requirements Standard' },
 ]
 
-// Voltage measurements within each circuit card
-const VOLT_MEASUREMENTS = [
-  { key: 'rw', label: 'R to W', acceptable: '412–422 V' },
-  { key: 'wb', label: 'W to B', acceptable: '412–422 V' },
-  { key: 'br', label: 'B to R', acceptable: '412–422 V' },
-  { key: 'rn', label: 'R to N', acceptable: '238–244 V' },
-  { key: 'wn', label: 'W to N', acceptable: '238–244 V' },
-  { key: 'bn', label: 'B to N', acceptable: '238–244 V' },
-]
-
-// Phasing measurements within each circuit card
-const PHASING_MEASUREMENTS = [
-  { key: 'r1r2', label: 'R1 to R2', acceptable: '<10 V' },
-  { key: 'w1w2', label: 'W1 to W2', acceptable: '<10 V' },
-  { key: 'b1b2', label: 'B1 to B2', acceptable: '<10 V' },
-]
-
-// Earth resistance limits used for range-checking in section b)
-const EARTH_LIMITS = {
-  earthLeg1: 25,  // electrode ≤ 25 Ω
-  earthLeg2: 25,
-  menUrban:   5,  // MEN urban ≤ 5 Ω
-  menRural:  25,  // MEN rural ≤ 25 Ω
-}
-
-// Loop impedance limit — < 0.2 Ω
-const LOOP_LIMIT = 0.2
-
 // ── Empty circuit factories ───────────────────────────────────────────────────
 // No 'confirmed' field — confirmation is computed per row at PDF generation time
 // based on which measurements the tech actually entered.
@@ -87,57 +71,11 @@ const LOOP_LIMIT = 0.2
 const emptyVoltCircuit    = () => ({ rw: '', wb: '', br: '', rn: '', wn: '', bn: '' })
 const emptyPhasingCircuit = () => ({ r1r2: '', w1w2: '', b1b2: '', neutral: false })
 
-// ── Range-checking helpers ────────────────────────────────────────────────────
-
-// Returns true (in range) | false (out of range) | null (no value entered)
-function voltRange(key, val) {
-  if (val === '' || val == null) return null
-  const n = parseFloat(val)
-  if (isNaN(n)) return false
-  if (['rw', 'wb', 'br'].includes(key)) return n >= 412 && n <= 422
-  if (['rn', 'wn', 'bn'].includes(key)) return n >= 238 && n <= 244
-  return null
-}
-
-function phasingRange(val) {
-  if (val === '' || val == null) return null
-  const n = parseFloat(val)
-  if (isNaN(n)) return false
-  return n < 10
-}
-
-// Per-row status across all circuits — used by the PDF generator and UI summary.
-// 'confirmed' = has values AND all in range  → tick in PDF
-// 'failed'    = has values but any out of range → cross in PDF
-// 'empty'     = no circuits have a value entered → nothing in PDF
-function voltRowStatus(circuits, key) {
-  const filled = circuits.map(c => c[key]).filter(v => v !== '' && v != null)
-  if (filled.length === 0) return 'empty'
-  return filled.every(v => voltRange(key, v) === true) ? 'confirmed' : 'failed'
-}
-
-function phasingRowStatus(circuits, key) {
-  const filled = circuits.map(c => c[key]).filter(v => v !== '' && v != null)
-  if (filled.length === 0) return 'empty'
-  return filled.every(v => phasingRange(v) === true) ? 'confirmed' : 'failed'
-}
-
-// Earth resistance: must be BELOW the limit (lower = better)
-function earthRange(key, val) {
-  if (val === '' || val == null) return null
-  const n = parseFloat(val)
-  if (isNaN(n)) return false
-  const limit = EARTH_LIMITS[key]
-  return limit !== undefined ? n < limit : null
-}
-
-// Loop impedance: must be below 0.2 Ω
-function loopRange(val) {
-  if (val === '' || val == null) return null
-  const n = parseFloat(val)
-  if (isNaN(n)) return false
-  return n < LOOP_LIMIT
-}
+// Range-checking helpers (voltRange, phasingRange, earthRange, loopRange,
+// voltRowStatus, phasingRowStatus) and their constants now live in
+// ./generators/DistributionTransformerLimits — imported above — so the
+// wizard's live UI feedback and the PDF generator's tick/cross marks always
+// agree on the same thresholds.
 
 // ── Initial state ─────────────────────────────────────────────────────────────
 
@@ -294,7 +232,7 @@ function EarthField({ label, fieldKey, value, onChange, ph, accent }) {
         {label}
         {limit !== undefined && (
           <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>
-            (limit &lt; {limit} Ω)
+            (limit ≤ {limit} Ω)
           </span>
         )}
       </div>
@@ -537,7 +475,7 @@ export default function DistributionTransformerWizard({ onClose }) {
   })
 
   const { pdfBytes, pdfBlobUrl, triggerGenerate, clearPdf, buildPreviewContent } =
-    usePdfGenerate(loadB28Generator)
+    usePdfGenerate(generateB28Pdf)
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)

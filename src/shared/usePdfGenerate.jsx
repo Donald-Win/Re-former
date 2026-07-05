@@ -7,33 +7,34 @@
  *
  * Generator argument — two supported patterns
  * ────────────────────────────────────────────
- * (a) Direct function (original API — fully backward-compatible):
- *       import { generateEEPdf } from './generators/ElecEquipPdfGenerator'
- *       usePdfGenerate(generateEEPdf)
+ * (a) Direct function — called immediately as `fn(d, photos)`. This covers
+ *     both a plain synchronous/async generator function AND the worker-backed
+ *     wrapper every wizard now uses by default (see below):
+ *       import { createWorkerGenerator } from '../shared/pdfWorkerClient'
+ *       const generatePolePdf = createWorkerGenerator('PolePdfGenerator', 'generatePolePdf')
+ *       usePdfGenerate(generatePolePdf)
  *
  * (b) Zero-argument thunk returning a Promise that resolves to the generator
- *     function (preferred — enables Vite code-splitting per wizard):
- *       // Define at module scope so the reference is stable across renders:
+ *     function (kept for any generator that still wants plain main-thread
+ *     code-splitting without the worker):
  *       const loadEEGenerator = () =>
  *         import('./generators/ElecEquipPdfGenerator').then(m => m.generateEEPdf)
- *
  *       usePdfGenerate(loadEEGenerator)
  *
- *     The thunk is resolved on each triggerGenerate call; the browser's
- *     native module cache means the network round-trip only happens once.
- *
  * Detection: a thunk is distinguished from a direct generator by `.length === 0`
- * (zero declared parameters).  All project generators declare at least one
- * parameter (`d`), so the heuristic is reliable for this codebase.
+ * (zero declared parameters). Every worker-backed generator created via
+ * createWorkerGenerator() declares 2 parameters (d, photos), so it is always
+ * treated as pattern (a) and called directly — no change was needed here
+ * when wizards were switched over to the worker.
  *
- * Web Worker — off-main-thread generation (optional, currently unused)
+ * Web Worker — off-main-thread generation (v2.19.0: now the default path)
  * ──────────────────────────────────────────────────────────────────────
- * appendPhotosToPdf already supports running inside a worker (it falls back
- * to OffscreenCanvas/createImageBitmap when `document` is undefined), so the
- * generation pipeline is worker-safe whenever it's needed. See
- * src/workers/pdfGen.worker.js for the ready-to-use Comlink scaffold and its
- * usage example — the worker-backed thunk takes (d, photos) directly, so the
- * hook treats it as pattern (a) above (a direct generator), not (b).
+ * Every wizard generates its PDF via src/workers/pdfGen.worker.js through
+ * src/shared/pdfWorkerClient.js's createWorkerGenerator(). appendPhotosToPdf
+ * already supports running inside a worker (it falls back to
+ * OffscreenCanvas/createImageBitmap when `document` is undefined), so the
+ * full generation pipeline — fetch template, draw fields, embed photos — is
+ * DOM-free and runs entirely off the main thread.
  *
  * Race-condition guard
  * ────────────────────
@@ -84,15 +85,12 @@ export function usePdfGenerate(generatorFn) {
     }
 
     // ── Timeout race ──────────────────────────────────────────────────────────
-    // timeoutId is captured so we can clear the timer once the race settles —
-    // previously the 30-second timer kept running after every successful generation.
-    let timeoutId
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
         () => reject(new Error('GENERATION_TIMEOUT')),
         GENERATION_TIMEOUT_MS,
       )
-    })
+    )
 
     // ── Generator resolution ──────────────────────────────────────────────────
     // A thunk (length === 0) is a lazy import factory: () => Promise<generatorFn>.
@@ -107,7 +105,6 @@ export function usePdfGenerate(generatorFn) {
 
     Promise.race([runGeneration(), timeoutPromise])
       .then(result => {
-        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         const bytes = result instanceof Uint8Array ? result : new Uint8Array(result)
@@ -120,7 +117,6 @@ export function usePdfGenerate(generatorFn) {
         setPdfGenerating(false)
       })
       .catch(err => {
-        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         console.error('PDF generation failed:', err)
@@ -195,4 +191,3 @@ export function usePdfGenerate(generatorFn) {
     buildPreviewContent,
   }
 }
-

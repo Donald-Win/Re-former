@@ -1,47 +1,31 @@
 /**
  * pdfGen.worker.js — Comlink-based Web Worker for off-main-thread PDF generation.
  *
- * Prerequisites
- * ─────────────
- *   npm i comlink
+ * Status: WIRED IN (v2.19.0). Every wizard now generates its PDF through
+ * this worker via src/shared/pdfWorkerClient.js — see that file for the
+ * client-side half of this. Previously this file existed as scaffolding
+ * only and nothing called into it; all 9 generators were still running on
+ * the main thread.
  *
- * Vite bundles this file as a separate worker chunk (via the ?worker suffix
- * on the import in the calling module). All generator dynamic imports listed
- * in GENERATORS are statically visible to Rollup so they are included in the
- * worker chunk at build time.
+ * appendPhotosToPdf already supports running inside a worker (it falls back
+ * to OffscreenCanvas / createImageBitmap when running here, detected via
+ * `typeof document === 'undefined'`), so the full pipeline — fetch
+ * template, draw fields, embed photos — is DOM-free and safe to run here.
  *
- * appendPhotosToPdf uses OffscreenCanvas / createImageBitmap when running
- * inside a worker (detected via `typeof document === 'undefined'`), so the
- * full pipeline — fetch template, draw fields, embed photos — is DOM-free.
+ * Usage
+ * ─────
+ * Don't call this file directly — go through pdfWorkerClient.js:
  *
- * Usage in a wizard
- * ─────────────────
- * Replace the direct generator import with a worker-backed thunk.
- * Create both objects at module scope (outside the component) so they are
- * only initialised once:
- *
- *   import PdfGenWorker from '../workers/pdfGen.worker.js?worker'
- *   import * as Comlink  from 'comlink'
- *
- *   const _worker = new PdfGenWorker()
- *   const pdfApi  = Comlink.wrap(_worker)
- *
- *   // Inside the component, pass a stable thunk to usePdfGenerate.
- *   // d and photos are NOT captured here — they are forwarded by
- *   // triggerGenerate(d, photos) at call time:
- *   const { triggerGenerate, ... } = usePdfGenerate(
- *     (d, photos) => pdfApi.generate('ElecEquipPdfGenerator', 'generateEEPdf', d, photos)
- *   )
- *
- * The generate() function returns a Comlink-transferred Uint8Array (zero-copy
- * transfer of the underlying ArrayBuffer from worker to main thread).
+ *   import { createWorkerGenerator } from '../shared/pdfWorkerClient'
+ *   const generateXPdf = createWorkerGenerator('XPdfGenerator', 'generateXPdf')
+ *   const { triggerGenerate } = usePdfGenerate(generateXPdf)
  *
  * Terminating the worker
  * ──────────────────────
- * Call `_worker.terminate()` (and `pdfApi[Comlink.releaseProxy]()`) in the
- * wizard's cleanup / unmount effect if you want to free worker memory when
- * the wizard closes. For this app's usage pattern (one wizard open at a time)
- * a single long-lived worker per wizard type is acceptable.
+ * Not currently done — a single long-lived worker per app session is fine
+ * for this app's usage pattern (one wizard open at a time). If a future
+ * change needs to free worker memory, call `_worker.terminate()` in
+ * pdfWorkerClient.js.
  */
 
 import * as Comlink from 'comlink'
@@ -50,6 +34,8 @@ import * as Comlink from 'comlink'
 // All dynamic imports must be listed explicitly so Vite/Rollup can analyse
 // and bundle them into the worker chunk at build time.
 const GENERATORS = {
+  DistributionTransformerPdfGenerator:
+    () => import('../wizards/generators/DistributionTransformerPdfGenerator.js'),
   ElecEquipPdfGenerator:
     () => import('../wizards/generators/ElecEquipPdfGenerator.js'),
   ElecDistributionPdfGenerator:
