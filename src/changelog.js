@@ -13,6 +13,15 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.18.3',
+    changes: [
+      {
+        heading: 'Photos are attached in the order you select them',
+        detail: 'When adding several photos at once, they could occasionally end up in a different order in the finished PDF than the order you picked them in (larger photos sometimes finished loading after smaller ones). Photos are now always appended in the exact order you selected them.',
+      },
+    ],
+  },
+  {
     version: '2.18.2',
     changes: [
       {

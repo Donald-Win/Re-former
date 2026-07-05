@@ -5,9 +5,34 @@
  *   photos   – array of { dataUrl: string, name: string }
  *   onChange – setter: (updaterFn) => void  (called with prev => [...prev, newItem])
  *   accent   – optional hex colour string for branding
+ *
+ * Read-order fix (v2.18.3)
+ * ────────────────────────
+ * Previously each selected file kicked off its own independent FileReader
+ * and appended to `photos` in whichever order its `onload` fired. Since
+ * FileReader read time depends on file size, a smaller/later-selected photo
+ * could finish decoding before an earlier, larger one — so photos could
+ * silently land in the generated PDF in a different order than the user
+ * picked them in.
+ *
+ * Fix: read every selected file as a Promise, wait for all of them via
+ * Promise.allSettled (which preserves input order regardless of resolve
+ * timing), then append the whole batch to `photos` in one onChange call.
+ * This also cuts N re-renders (one per file) down to 1 per batch. Any file
+ * that fails to read is skipped (with a console warning) rather than
+ * discarding the whole batch.
  */
 import React, { useRef } from 'react'
 import { Camera, X, ImageIcon } from 'lucide-react'
+
+function readFileAsPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = ev => resolve({ dataUrl: ev.target.result, name: file.name })
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`))
+    reader.readAsDataURL(file)
+  })
+}
 
 export function PhotoAttachStep({ photos = [], onChange, accent = '#4f46e5' }) {
   const inputRef = useRef(null)
@@ -15,15 +40,30 @@ export function PhotoAttachStep({ photos = [], onChange, accent = '#4f46e5' }) {
   const handleFiles = (e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
-    files.forEach(file => {
-      const reader = new FileReader()
-      reader.onload = ev => {
-        onChange(prev => [...prev, { dataUrl: ev.target.result, name: file.name }])
-      }
-      reader.readAsDataURL(file)
-    })
-    // Reset so the same file can be re-added if removed and re-selected
+
+    // Reset immediately so the same file(s) can be re-selected later if
+    // removed — safe to do now since `files` above already captured the
+    // File objects independently of the input element.
     e.target.value = ''
+
+    Promise.allSettled(files.map(readFileAsPhoto)).then(results => {
+      const newPhotos = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value)
+
+      if (newPhotos.length > 0) {
+        // Single batched append, in the same order the user selected them.
+        onChange(prev => [...prev, ...newPhotos])
+      }
+
+      const failed = results.filter(r => r.status === 'rejected')
+      if (failed.length > 0) {
+        console.warn(
+          `PhotoAttachStep: ${failed.length} photo(s) failed to load`,
+          failed.map(f => f.reason),
+        )
+      }
+    })
   }
 
   const removePhoto = (idx) => {
