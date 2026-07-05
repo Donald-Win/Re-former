@@ -16,10 +16,14 @@ window.addEventListener('appinstalled', () => {
   window.dispatchEvent(new Event('pwaInstalled'))
 })
 
-// Register service worker
+// Register service worker.
+// import.meta.env.BASE_URL is Vite's resolved `base` config value (with a
+// trailing slash) — '/re-former/' on GitHub Pages, '/' on Netlify — so this
+// single file now covers both deploy targets. Previously main.netlify.jsx
+// existed only to hardcode '/sw.js' instead of '/re-former/sw.js'.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/re-former/sw.js')
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
       .then(reg => {
         reg.update()
         // Update banner logic (including SKIP_WAITING) is handled inside App.jsx.

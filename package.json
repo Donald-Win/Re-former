@@ -1,6 +1,6 @@
 {
   "name": "re-former",
-  "version": "2.18.0",
+  "version": "2.18.2",
   "type": "module",
   "scripts": {
     "dev": "vite",

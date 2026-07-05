@@ -13,6 +13,36 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.18.2',
+    changes: [
+      {
+        heading: 'GPS buttons time out less often in weak-signal areas',
+        detail: 'The "Use my GPS" and "Use my location" buttons were requesting a brand-new satellite fix on every tap, which could take longer than 15 seconds in rural areas or under cover. They now accept a location reading from the last 30 seconds, which is still accurate enough for field records and far less likely to time out.',
+      },
+      {
+        heading: 'Signature drawing runs slightly faster',
+        detail: 'The calculation that trims blank space around a saved signature has been sped up under the hood. Not something you\'ll see directly, but one less thing for the app to do after every signature.',
+      },
+    ],
+  },
+  {
+    version: '2.18.1',
+    changes: [
+      {
+        heading: 'Saved drafts no longer drop photos beyond the fifth',
+        detail: 'Saving a named draft, or letting the app auto-save your progress in the background, was still silently keeping only the first 5 photos — even though full photo sets have been supported everywhere else since 2.17.0. All attached photos are now kept in both cases.',
+      },
+      {
+        heading: 'Loading a draft now always replaces your current photos',
+        detail: 'If you had photos attached to a form and then loaded a different saved draft with fewer (or no) photos, the old photos could be left in place instead of being replaced. Loading a draft now always shows exactly the photos saved with it.',
+      },
+      {
+        heading: 'Earth resistance tick on Distribution Transformer Commissioning Certificate',
+        detail: 'A reading exactly at the limit (e.g. exactly 25 Ω) now correctly shows a green tick, matching the "25 Ω or less" standard, instead of only ticking for readings strictly below it.',
+      },
+    ],
+  },
+  {
     version: '2.18.0',
     changes: [
       {

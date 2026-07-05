@@ -1,7 +1,8 @@
 [build]
-  # BASE_PATH=/ tells the merged vite.config.js to use base: '/' for Netlify.
-  # vite.config.netlify.js is no longer needed and can be deleted.
-  command = "cp manifest.netlify.json manifest.json && cp index.netlify.html index.html && BASE_PATH=/ npm run build"
+  # index.html and manifest.json are now shared with the GitHub Pages build
+  # (see index.html's %BASE_URL% and manifest.json's relative paths) —
+  # no more `cp` swap step needed here.
+  command = "BASE_PATH=/ npm run build"
   publish = "dist"
   ignore = "[ \"$BRANCH\" = \"dev\" ]"
 

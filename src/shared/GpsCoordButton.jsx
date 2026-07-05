@@ -16,6 +16,17 @@
  * 2-second cooldown is applied after any error, during which the button is
  * disabled and shows a "Please wait…" label.
  *
+ * maximumAge
+ * ──────────
+ * getCurrentPosition is called with maximumAge: 30000 (30 seconds) rather
+ * than 0. Requesting a brand-new fix on every tap forces the device's GPS
+ * hardware to reacquire a satellite lock from cold, which in rural or
+ * low-signal areas frequently exceeds the 15-second timeout below and
+ * surfaces as a spurious TIMEOUT error. Accepting a fix up to 30 seconds
+ * old lets the OS return an already-locked, still field-accurate position
+ * instantly in the common case, while still being fresh enough for as-built
+ * pole co-ordinates.
+ *
  * Props:
  *   onCoords(fields) — called with { gpsNorth, gpsEast, altitude? }.
  *                      `altitude` is only included when the device reports
@@ -112,7 +123,7 @@ export function GpsCoordButton({ onCoords, accent = '#6366f1' }) {
           enterError('Could not get location. Try again.')
         }
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     )
   }
 
