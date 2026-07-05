@@ -17,7 +17,11 @@ import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
+<<<<<<< HEAD
 const APP_VERSION = '2.18.3'
+=======
+const APP_VERSION = '2.16.1'
+>>>>>>> eeff5ccda7b52d4b4bae8296de278e4c4378af9a
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
