@@ -10,9 +10,10 @@ import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
 // ── PDF generation now runs off the main thread via the shared PDF worker ────
@@ -87,6 +88,7 @@ export default function LvConnectionWizard({ onClose }) {
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EA')
   const { clearDraft: clearFormDraft } = useDraft('360S014EA', d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: '360S014EA', setD, setStep, setPhotos, maxStep: LV_STEPS.length - 2 })
 
   const renderCurrentStep = () => {
     switch (step) {
@@ -178,6 +180,8 @@ export default function LvConnectionWizard({ onClose }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={LV_TEAL} />
+
         <WizardShell
           title="AS-Built LV Connection"
           formNumber="360S014EA"

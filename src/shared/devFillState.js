@@ -34,6 +34,8 @@
  * an updater function — no wrapper needed.
  *
  * Processing rules (applied in order):
+ *  0. Pole-wizard-only fields → merged in first if missing (see
+ *     withPoleExtras below), so they're visible to rules 1–10 at all
  *  1. Signature fields (signed, wtlSigned, fsSigned) → PRESERVED from userPrefs
  *  2. null values → preserved as-is
  *  3. OVERRIDE_VALUES map → exact key match overrides everything (incl. arrays)
@@ -62,6 +64,72 @@ const TODAY = new Date().toISOString().slice(0, 10)
  */
 function repeatRows(count, rowFn) {
   return Array.from({ length: count }, (_, i) => rowFn(i))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POLE WIZARD — fields never present in initial state
+// ─────────────────────────────────────────────────────────────────────────────
+// Unlike every other wizard (which builds its initial state via
+// getBaseFormState({ ...all fields declared as '' })), PoleWizard.jsx's
+// useState() only seeds `conductors`, `crossarms`, and `accessories` on top
+// of the shared base fields. Every other field on the form — Pole IDs &
+// Activity, New Pole Details, Equipment on Pole, the rest of Accessories,
+// and Work Description — is added to state lazily via setD() the first
+// time the user taps or types into that control.
+//
+// fillObject() below only iterates keys that ALREADY exist on prevState
+// (see fillValue's Object.entries(obj) loop), so any key PoleWizard hasn't
+// created yet is completely invisible to it. That's why the 🧪 fill button
+// was skipping almost the entire "Pole IDs & Activity" step (and several
+// others) — those keys simply don't exist in state until manually touched
+// first.
+//
+// withPoleExtras() merges in a default ('') for every one of these fields
+// that's still absent, WITHOUT touching any that the user (or a previous
+// fill) has already set — so this only fills gaps, never overwrites real
+// data or clobbers a field the user deliberately left blank.
+//
+// Detection: PoleWizard is the only wizard whose state has BOTH a
+// `conductors` array AND a `crossarms` array, so that combination is used
+// as the shape check.
+const POLE_EXTRA_FIELDS = {
+  // Step 1 — Pole IDs & Activity
+  oldPoleId: '', poleActivity: '', newPoleId: '', manufacturedDate: '',
+  crossarmActivity: '', poleLoading: '',
+  ownership: '', ownershipOther: '',
+  sharedUse: '', sharedUseOther: '',
+  reasonForRemoval: '',
+
+  // Step 2 — New Pole Details
+  gpsRequired: '', gpsNorth: '', gpsEast: '', altitude: '',
+  poleCondition: '', poleCode: '',
+  dulhuntyCode: '', iupCode: '', otherCode: '',
+  manufacturerPoleId: '', poleType: '', poleTypeOther: '',
+
+  // Step 3 — Equipment on Pole
+  absId: '', linksId: '', dropoutFuseId: '', transformerId: '',
+  regulatorId: '', sectionliserId: '', faultIndicatorId: '', lightningArresterId: '',
+  otherEquipType: '', otherEquipId: '',
+
+  // Step 4 — Accessories (accessories[] itself is already seeded by the wizard)
+  controlBoxPurpose: '', accessoriesOther: '',
+
+  // Step 5 — Conductors (service info; conductors[] itself already seeded)
+  serviceConnections: '', serviceAddresses: '',
+
+  // Step 7 — Work Description
+  workDescription: '',
+}
+
+function withPoleExtras(prevState) {
+  if (!Array.isArray(prevState?.conductors) || !Array.isArray(prevState?.crossarms)) {
+    return prevState
+  }
+  const merged = { ...prevState }
+  for (const [k, v] of Object.entries(POLE_EXTRA_FIELDS)) {
+    if (!(k in merged)) merged[k] = v
+  }
+  return merged
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +213,24 @@ const OVERRIDE_VALUES = {
   accessoriesOther:   'Cable guard',
   reasonForRemoval:   'End of life replacement.',  // string in Pole wizard
   workDescription:    'New pole installed per 393S001. Site left clean and tidy.',
+
+  // ── Pole wizard — "Equipment on Pole" IDs (only present once the user has
+  // tapped the corresponding equipment button; see withPoleExtras above) ────
+  absId:                'EQ-100',
+  linksId:              'EQ-101',
+  dropoutFuseId:        'EQ-102',
+  transformerId:        'TX-100',
+  regulatorId:          'EQ-103',
+  sectionliserId:       'EQ-104',
+  faultIndicatorId:     'EQ-105',
+  lightningArresterId:  'EQ-106',
+
+  // ── Pole wizard — custom pole-code / pole-type entry fields (only present
+  // once the user has selected DULHUNTY / IUP / OTHER / "Other" type) ───────
+  dulhuntyCode:  'D300 8kN 12m',
+  iupCode:       '12kN 11m',
+  otherCode:     'Other Co 10kN 12m',
+  poleTypeOther: 'Custom pole type',
 
   // ── Conductor / crossarm row fields (nested in arrays) ──────────────────────
   existing:      'N',   // 'E'|'N'
@@ -523,13 +609,18 @@ function fillValue(key, value) {
  * Pass directly to setD():
  *   setD(devFillState)
  *
- * Works for any wizard regardless of its specific state shape.
+ * Works for any wizard regardless of its specific state shape. For the Pole
+ * wizard specifically, also merges in defaults for every field PoleWizard.jsx
+ * only ever adds to state lazily (Pole IDs & Activity, New Pole Details,
+ * Equipment on Pole, the rest of Accessories, and Work Description — see
+ * withPoleExtras above) — without this, those fields stayed invisible to the
+ * fill button until manually typed into or tapped first.
  *
  * @param {object} prevState - Current wizard form state (passed by React)
  * @returns {object}          Fully populated state for PDF calibration
  */
 export function devFillState(prevState) {
-  return { ...fillObject(prevState), __calibrate: false }
+  return { ...fillObject(withPoleExtras(prevState)), __calibrate: false }
 }
 
 /**
@@ -550,7 +641,8 @@ export function devFillState(prevState) {
  * value — so you can see every option, AND every normally-hidden
  * "Other, specify"-style field, in one PDF, each one labelled.
  *
- * Still runs the normal realistic fill first underneath, so anything NOT
+ * Still runs the normal realistic fill first underneath (including the Pole
+ * wizard's lazily-added fields — see devFillState above), so anything NOT
  * driven by a FIELDS/GRIDS value() — e.g. the circuit-grid range checks in
  * DistributionTransformerPdfGenerator, which need real in-range numbers to
  * show their confirmed tick — still looks sensible.
@@ -562,6 +654,5 @@ export function devFillState(prevState) {
  * @returns {object}          State flagged so the next PDF render shows every option
  */
 export function devFillStateAllOptions(prevState) {
-  return { ...fillObject(prevState), __calibrate: true }
+  return { ...fillObject(withPoleExtras(prevState)), __calibrate: true }
 }
-

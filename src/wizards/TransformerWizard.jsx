@@ -5,9 +5,10 @@ import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -144,6 +145,7 @@ function TransformerWizardApp({ onClose }) {
   // ── Shared hooks ──────────────────────────────────────────────────────────
   const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EG')
   const { clearDraft: clearFormDraft } = useDraft('360S014EG', d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: '360S014EG', setD, setStep, setPhotos, maxStep: T_STEPS.length - 2 })
 
   const missingFields = [
     !d.pcoWONo    && 'PCo W/O No.',
@@ -355,6 +357,8 @@ function TransformerWizardApp({ onClose }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={W_PURPLE} />
+
       <WizardShell
         title="AS-Built Transformer Record"
         formNumber="360S014EG"

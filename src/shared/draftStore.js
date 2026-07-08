@@ -13,7 +13,7 @@
  *   name       — user-supplied label
  *   step       — wizard step when saved
  *   savedAt    — ISO timestamp
- *   data       — form field values  (signed/signature excluded — stored in userPrefs)
+ *   data       — form field values  (main 'signed' field excluded — stored in userPrefs)
  *   photos     — array of { dataUrl, name } — stored in full in IndexedDB
  */
 
@@ -70,11 +70,26 @@ function makeId() {
   return 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
 }
 
+/**
+ * Strip signature fields that shouldn't be duplicated into every draft.
+ *
+ * v2.20.0 — only the shared 'signed' field is stripped now. That's the
+ * tech's main signature: it's already persisted separately in userPrefs
+ * (My Details) and reloaded automatically via getBaseFormState() every
+ * time a wizard opens, so storing a second copy in every draft would just
+ * waste space for no benefit.
+ *
+ * 'wtlSigned' and 'fsSigned' (the HV Inspection Certificate's Witness Test
+ * Lead and Field Switcher signatures) are NO LONGER stripped. Unlike
+ * 'signed', they have no other persistent home — wtlSigned only starts as
+ * a copy of the main signature but can be redrawn independently for that
+ * specific certificate, and fsSigned has no default at all. Previously,
+ * saving a named draft mid-fill silently dropped whichever of these the
+ * tech had already drawn; reloading that draft left the signature pad
+ * blank with no way to recover it short of re-signing. Both are now kept.
+ */
 function stripSignature(data) {
-  // Signatures are large (50–200 KB as base64) and already persisted in userPrefs,
-  // so we never store them in drafts. Covers the shared 'signed' field and the
-  // HV Inspection wizard's 'wtlSigned' and 'fsSigned'.
-  const SIG_KEYS = new Set(['signed', 'wtlSigned', 'fsSigned'])
+  const SIG_KEYS = new Set(['signed'])
   return Object.fromEntries(
     Object.entries(data || {}).filter(([k]) => !SIG_KEYS.has(k))
   )

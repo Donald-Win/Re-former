@@ -13,6 +13,54 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.20.2',
+    changes: [
+      {
+        heading: 'Pole Record — newly added conductor rows no longer disappear',
+        detail: 'After starting a conductor row (tapping Cu, Ali, or Manual) but before picking a specific size, tapping "+ Add Another Row" could make the brand new row vanish instead of appearing on screen. The new row now always shows up correctly.',
+      },
+      {
+        heading: 'App updates no longer reload the page twice',
+        detail: 'Tapping "Update now" on the update banner occasionally caused the app to refresh twice in quick succession. It now reloads once, as intended.',
+      },
+      {
+        heading: 'Removed the unused "Excel version" download links',
+        detail: 'A few forms showed a "Download Excel version" link that never worked, since no Excel files were ever provided alongside the PDFs. This option has been removed — every form here is a PDF.',
+      },
+    ],
+  },
+  {
+    version: '2.20.1',
+    changes: [
+      {
+        heading: 'Restoring unsaved progress no longer shows a blank screen',
+        detail: 'If a form crashed or was closed while sitting on the "Preview & Print" screen, restoring that progress previously jumped straight back to a blank preview with no PDF and no way forward except closing it and starting again. Restoring now returns you to the Photos step instead — tap "Preview Form" from there and the PDF generates correctly.',
+      },
+    ],
+  },
+  {
+    version: '2.20.0',
+    changes: [
+      {
+        heading: 'Pick up where you left off',
+        detail: 'If the app closes or crashes partway through filling out a form, reopening that form now offers to restore your progress — including any photos already attached — instead of making you start again. This is separate from named drafts and is cleared automatically once you generate and share the finished PDF.',
+      },
+      {
+        heading: 'HV Inspection Certificate signatures are no longer lost from saved progress',
+        detail: 'The Team Lead and Field Switcher signatures on the Pre-Commissioning HV Inspection Certificate are now kept when you save a draft or when your progress is restored, instead of being dropped.',
+      },
+    ],
+  },
+  {
+    version: '2.19.1',
+    changes: [
+      {
+        heading: 'Distribution Transformer Certificate — label corrected',
+        detail: 'The missing-fields warning on the Distribution Transformer Commissioning Certificate now correctly reads "PCo W/O No." to match the rest of the app — it previously said "SAP W/O No." by mistake.',
+      },
+    ],
+  },
+  {
     version: '2.19.0',
     changes: [
       {

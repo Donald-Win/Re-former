@@ -5,9 +5,10 @@ import { PenLine } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW, WIZARD_COLORS } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { wInp, wLbl, WF, WTA, WCB } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { GpsCoordButton } from '../shared/GpsCoordButton'
@@ -352,6 +353,7 @@ function PoleRecordWizard({ onClose }) {
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EC')
   const { clearDraft: clearFormDraft } = useDraft('360S014EC', d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: '360S014EC', setD, setStep, setPhotos, maxStep: W_STEPS.length - 2 })
 
   // ── Missing-field warnings ────────────────────────────────────────────────
 
@@ -600,7 +602,17 @@ function PoleRecordWizard({ onClose }) {
             <WF label="Address(s) of Service(s) from Pole" v={d.serviceAddresses} set={set('serviceAddresses')} ph="List addresses" />}
           <div style={{ fontWeight:700, fontSize:14, marginBottom:8, color:'#333' }}>Conductors</div>
           {(() => {
-            const firstEmptyIdx = d.conductors.findIndex(c => !(c.level||c.existing||c.size||c.material||c.insulation))
+            // NOTE: this predicate must match hasData below EXACTLY (including
+            // c.picker). Before v2.20.2, c.picker was checked in hasData but
+            // NOT here — so a row where the tech had tapped Cu/Ali/Manual but
+            // not yet picked a size (picker set, but level/existing/size/
+            // material/insulation all still blank) was wrongly treated as
+            // "the array's one empty slot". findIndex only ever returns the
+            // FIRST match, so that half-started row stole the slot from the
+            // real new blank row added via "+ Add Another Row", which then
+            // failed both hasData and isFirstEmpty and rendered as null —
+            // the new row silently vanished from the screen.
+            const firstEmptyIdx = d.conductors.findIndex(c => !(c.level||c.existing||c.size||c.material||c.insulation||c.picker))
             return d.conductors.map((c, i) => {
               const hasData    = c.level||c.existing||c.size||c.material||c.insulation||c.picker
               const isFirstEmpty = i === firstEmptyIdx
@@ -704,6 +716,8 @@ function PoleRecordWizard({ onClose }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={W_PURPLE} />
+
       <WizardShell
         title="AS-Built Pole Record"
         formNumber="360S014EC"

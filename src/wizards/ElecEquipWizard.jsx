@@ -5,9 +5,10 @@ import { FileText } from 'lucide-react'
 import { WizardShell } from '../shared/WizardShell'
 import { APP_ACCENT, APP_YELLOW, WIZARD_COLORS } from '../shared/constants'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { wInp, wLbl, WF, WTA, WCB, SectionHead } from '../shared/WizardInputs'
 import { PhotoAttachStep } from '../shared/PhotoAttachStep'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
@@ -139,6 +140,7 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EE')
   const { clearDraft: clearFormDraft } = useDraft('360S014EE', d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: '360S014EE', setD, setStep, setPhotos, maxStep: EE_STEPS.length - 2 })
 
   const renderCurrentStep = () => {
     switch (step) {
@@ -402,6 +404,8 @@ function ElecEquipWizard({ onClose = () => {} }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={W_PURPLE} />
+
         <WizardShell
           title="AS-Built Electrical Equipment Record"
           formNumber="360S014EE"

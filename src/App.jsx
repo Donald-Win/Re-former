@@ -17,7 +17,7 @@ import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.19.0'
+const APP_VERSION = '2.20.2'
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
@@ -535,7 +535,6 @@ const AsBuiltFormSelector = () => {
       id:           formId,
       name:         formDefinitions[formId]?.name || 'Unknown Form',
       url:          formDefinitions[formId]?.fileName ? `forms/${formDefinitions[formId].fileName}` : null,
-      alternateUrl: formDefinitions[formId]?.alternateFileName ? `forms/${formDefinitions[formId].alternateFileName}` : null,
       hasLink:      !!formDefinitions[formId]?.fileName,
     }))
   }, [selectedWork])
@@ -557,7 +556,6 @@ const AsBuiltFormSelector = () => {
         id,
         name:         form.name,
         url:          form.fileName ? `forms/${form.fileName}` : null,
-        alternateUrl: form.alternateFileName ? `forms/${form.alternateFileName}` : null,
         hasLink:      !!form.fileName,
       }))
       .filter(form =>
@@ -719,12 +717,6 @@ const AsBuiltFormSelector = () => {
                             )}
                           </div>
                           <p className="text-sm text-gray-700 mt-1">{form.name}</p>
-                          {form.alternateUrl && (
-                            <button onClick={e => { e.stopPropagation(); handleFormClick(form.alternateUrl, form.name) }}
-                              className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1">
-                              <ExternalLink size={12} />Download Excel version
-                            </button>
-                          )}
                           {!form.hasLink && form.id === 'MFG_CERT' && (
                             <p className="text-xs text-gray-500 mt-1 italic">Contact manufacturer for specific certificates</p>
                           )}
@@ -879,12 +871,6 @@ const AsBuiltFormSelector = () => {
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full"><Download size={10} /></span>
                         </div>
                         <p className="text-sm text-gray-700">{form.name}</p>
-                        {form.alternateUrl && (
-                          <button onClick={e => { e.stopPropagation(); handleFormClick(form.alternateUrl) }}
-                            className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1">
-                            <ExternalLink size={10} />Excel version
-                          </button>
-                        )}
                       </div>
                       <ExternalLink className="flex-shrink-0 text-indigo-600" size={18} />
                     </div>
@@ -1127,12 +1113,14 @@ const AsBuiltFormSelector = () => {
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button
               onClick={() => {
+                // Reload-on-update is handled by the single persistent
+                // 'controllerchange' listener registered once in main.jsx.
+                // A second listener used to be added right here on every
+                // click, which raced with that one and reloaded the page
+                // twice. Posting SKIP_WAITING is all this button needs to do.
                 navigator.serviceWorker.getRegistration().then(reg => {
                   if (reg && reg.waiting) {
                     reg.waiting.postMessage('SKIP_WAITING')
-                    navigator.serviceWorker.addEventListener('controllerchange', () => {
-                      window.location.reload()
-                    }, { once: true })
                   } else {
                     window.location.reload()
                   }

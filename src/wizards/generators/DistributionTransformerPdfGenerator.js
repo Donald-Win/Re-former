@@ -28,6 +28,20 @@
  * shared alignment for every circuit's value cell in a row, via
  * GRIDS.sectionF.valueAlign / GRIDS.sectionI.valueAlign).
  *
+ * Range-checking / row-status logic
+ * ──────────────────────────────────
+ * voltRowStatus() and phasingRowStatus() — which decide whether a
+ * measurement row gets a tick, a cross, or nothing — are imported from
+ * ./DistributionTransformerLimits rather than defined here. That file is
+ * also imported by DistributionTransformerWizard.jsx for the wizard's live
+ * in-form tick/cross feedback. Previously this generator defined its own
+ * local copies of these two functions with the same thresholds duplicated
+ * by hand — harmless while the numbers matched, but a latent bug: any
+ * future tweak to a range/limit would need to be made in two places, and
+ * nothing would catch it if only one got updated. Importing from the
+ * shared file makes it structurally impossible for the wizard's live
+ * feedback and the PDF's tick/cross marks to drift apart.
+ *
  * Data shape (wizard state)
  * ─────────────────────────
  * Section f:  d.fCircuits  — Array<{ rw, wb, br, rn, wn, bn }>
@@ -57,6 +71,7 @@ import {
 } from '../../shared/pdfDrawUtils'
 import { renderFields, renderGridRow, renderMatrixRow } from '../../shared/pdfFieldRenderer'
 import { appendPhotosToPdf } from '../../shared/appendPhotosToPdf'
+import { voltRowStatus, phasingRowStatus } from './DistributionTransformerLimits'
 
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/220F028B.pdf`
@@ -214,30 +229,6 @@ export const GRIDS = {
   },
 }
 
-// ── Range-checking helpers (shared by sections f and i) ──────────────────────
-// Returns 'confirmed' (tick), 'failed' ('X'), or 'empty' (nothing drawn) for
-// one measurement row, based on every circuit's entered value for that key.
-
-export function voltRowStatus(circuits, key) {
-  const filled = circuits.map(c => c[key]).filter(v => v !== '' && v != null)
-  if (filled.length === 0) return 'empty'
-  const allOk = filled.every(v => {
-    const n = parseFloat(v)
-    if (isNaN(n)) return false
-    if (['rw', 'wb', 'br'].includes(key)) return n >= 412 && n <= 422
-    if (['rn', 'wn', 'bn'].includes(key)) return n >= 238 && n <= 244
-    return false
-  })
-  return allOk ? 'confirmed' : 'failed'
-}
-
-export function phasingRowStatus(circuits, key) {
-  const filled = circuits.map(c => c[key]).filter(v => v !== '' && v != null)
-  if (filled.length === 0) return 'empty'
-  const allOk = filled.every(v => { const n = parseFloat(v); return !isNaN(n) && n < 10 })
-  return allOk ? 'confirmed' : 'failed'
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // GENERATOR
 // ─────────────────────────────────────────────────────────────────────────────
@@ -258,7 +249,8 @@ export async function generateB28Pdf(d, photos = []) {
   await renderFields({ pdfDoc, page: p3, draw: draw3 }, FIELDS.p3, d)
 
   // ── Page 2: Section f) Off-Load Voltage Checks (grid) ─────────────────────
-  // confirmed → tick, failed → 'X', empty → nothing drawn (see voltRowStatus)
+  // confirmed → tick, failed → 'X', empty → nothing drawn (see voltRowStatus,
+  // imported from ./DistributionTransformerLimits)
   const f         = GRIDS.sectionF
   const fCircuits = (d.fCircuits || []).slice(0, 4)
 

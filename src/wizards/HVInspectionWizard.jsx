@@ -11,10 +11,11 @@ import { SignaturePad } from '../shared/SignaturePad'
 import { getUserPrefs, getBaseFormState } from '../shared/userPrefs'
 import { sharePdf, buildPdfFilename } from '../shared/sharePdf'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useDraftPicker } from '../shared/useDraftPicker'
 import { DraftPicker } from '../shared/DraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { WF, WCB, SectionHead } from '../shared/WizardInputs'
 import { APP_ACCENT } from '../shared/constants'
 import { createWorkerGenerator } from '../shared/pdfWorkerClient'
@@ -292,6 +293,13 @@ export default function HVInspectionWizard({ onClose }) {
   const PHOTO_STEP       = SIG_STEP + 1
   const PREVIEW_STEP     = PHOTO_STEP + 1
 
+  // maxStep: PHOTO_STEP — restoring crash-recovered progress should never
+  // land directly on PREVIEW_STEP (see useCrashRecovery's doc comment for
+  // why: that step has no data of its own, only a generated PDF that
+  // requires an explicit triggerGenerate() call this restore path never
+  // makes, which would otherwise leave the tech looking at a blank screen).
+  const crashRecovery = useCrashRecovery({ formKey: FORM_KEY, setD, setStep, setPhotos, maxStep: PHOTO_STEP })
+
   const isPreview    = step === PREVIEW_STEP
   const isEquipStep  = step >= EQUIP_STEP_START && step < EQUIP_STEP_END
   const currentEquip = isEquipStep ? selectedEquipObjs[step - EQUIP_STEP_START] : null
@@ -413,6 +421,8 @@ export default function HVInspectionWizard({ onClose }) {
 
   return (
     <>
+    <CrashRecoveryBanner recovery={crashRecovery} accent={ACCENT} />
+
     <WizardShell
       title={FORM_LABEL}
       formNumber={FORM_KEY}

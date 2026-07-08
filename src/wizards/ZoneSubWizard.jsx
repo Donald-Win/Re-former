@@ -10,9 +10,10 @@ import { getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { APP_ACCENT, WIZARD_COLORS } from '../shared/constants'
 import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 
@@ -100,6 +101,7 @@ function ZoneSubWizard({ onClose }) {
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, '360S014EF')
   const { clearDraft: clearFormDraft } = useDraft('360S014EF', d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: '360S014EF', setD, setStep, setPhotos, maxStep: EF_STEPS.length - 2 })
 
   const AppliesToggle = ({ applies, label, onToggle }) => (
     <button type="button" onClick={onToggle} style={{
@@ -242,6 +244,8 @@ function ZoneSubWizard({ onClose }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={ACCENT} />
+
       <WizardShell
         title="Zone Substation Equipment Record"
         formNumber="360S014EF"

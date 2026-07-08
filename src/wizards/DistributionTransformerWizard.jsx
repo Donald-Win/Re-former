@@ -10,21 +10,19 @@ import { getUserPrefs, getBaseFormState } from '../shared/userPrefs'
 import { JobDetailsStep } from '../shared/JobDetailsStep'
 import { usePdfGenerate } from '../shared/usePdfGenerate'
 import { useWizardSetup } from '../shared/useWizardSetup'
-import { useDraft } from '../shared/useDraft'
+import { useDraft, useCrashRecovery } from '../shared/useDraft'
 import { DraftPicker } from '../shared/DraftPicker'
 import { useDraftPicker } from '../shared/useDraftPicker'
+import { CrashRecoveryBanner } from '../shared/CrashRecoveryBanner'
 import { createWorkerGenerator } from '../shared/pdfWorkerClient'
 import {
   VOLT_MEASUREMENTS,
   PHASING_MEASUREMENTS,
   EARTH_LIMITS,
-  LOOP_LIMIT,
   voltRange,
   phasingRange,
   earthRange,
   loopRange,
-  voltRowStatus,
-  phasingRowStatus,
 } from './generators/DistributionTransformerLimits'
 
 // ── PDF generation now runs off the main thread via the shared PDF worker ────
@@ -71,11 +69,10 @@ const AS_BUILT_ITEMS = [
 const emptyVoltCircuit    = () => ({ rw: '', wb: '', br: '', rn: '', wn: '', bn: '' })
 const emptyPhasingCircuit = () => ({ r1r2: '', w1w2: '', b1b2: '', neutral: false })
 
-// Range-checking helpers (voltRange, phasingRange, earthRange, loopRange,
-// voltRowStatus, phasingRowStatus) and their constants now live in
-// ./generators/DistributionTransformerLimits — imported above — so the
-// wizard's live UI feedback and the PDF generator's tick/cross marks always
-// agree on the same thresholds.
+// Range-checking helpers (voltRange, phasingRange, earthRange, loopRange)
+// and their constants now live in ./generators/DistributionTransformerLimits
+// — imported above — so the wizard's live UI feedback and the PDF
+// generator's tick/cross marks always agree on the same thresholds.
 
 // ── Initial state ─────────────────────────────────────────────────────────────
 
@@ -479,6 +476,7 @@ export default function DistributionTransformerWizard({ onClose }) {
 
   const { set, handleDevFill } = useWizardSetup(d, setD, step, FORM_KEY)
   const { clearDraft: clearFormDraft } = useDraft(FORM_KEY, d, step, photos)
+  const crashRecovery = useCrashRecovery({ formKey: FORM_KEY, setD, setStep, setPhotos, maxStep: B_STEPS.length - 2 })
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -545,7 +543,7 @@ export default function DistributionTransformerWizard({ onClose }) {
   const missingFields = [
     !d.contractor    && 'Contractor',
     !d.streetRoad    && 'No./Street/Road',
-    !d.pcoWONo       && 'SAP W/O No.',
+    !d.pcoWONo       && 'PCo W/O No.',
     !d.transformerNo && 'Transformer No.',
     !d.namePrint     && 'Print Name',
     !d.isnId         && 'ISN ID Number',
@@ -918,6 +916,8 @@ export default function DistributionTransformerWizard({ onClose }) {
 
   return (
     <>
+      <CrashRecoveryBanner recovery={crashRecovery} accent={ACCENT} />
+
       <WizardShell
         title={FORM_LABEL}
         formNumber={FORM_KEY}
