@@ -56,6 +56,25 @@ export default defineConfig({
 
   base,
 
+  // ── Web Worker output format ────────────────────────────────────────────
+  // pdfGen.worker.js (see src/workers/pdfGen.worker.js) uses dynamic
+  // import() per PDF generator so each generator stays its own lazy-loaded
+  // chunk instead of being bundled entirely into the worker file. Rollup
+  // can only code-split when the worker's OWN output format supports it —
+  // Vite's default worker format is 'iife', which does NOT support
+  // code-splitting and fails the production build with:
+  //   "Invalid value 'iife' for option 'worker.format' - UMD and IIFE
+  //   output formats are not supported for code-splitting builds."
+  // This only surfaces in `vite build` (dev serves workers as native ES
+  // modules regardless of this setting, so `npm run dev` never catches it).
+  // Setting format: 'es' tells Rollup to emit the worker itself as an ES
+  // module, which allows it to code-split its dynamic imports normally.
+  // Requires ES module Worker support, which all supported browsers for
+  // this app (recent iOS/Android/desktop) have.
+  worker: {
+    format: 'es',
+  },
+
   build: {
     // ── Target ───────────────────────────────────────────────────────────────
     target: 'es2020',
