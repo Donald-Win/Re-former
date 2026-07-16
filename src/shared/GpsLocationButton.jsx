@@ -29,6 +29,19 @@
  * old lets the OS return an already-locked, still field-accurate position
  * instantly in the common case.
  *
+ * Cleanup on unmount (v2.20.3)
+ * ─────────────────────────────
+ * The Nominatim fetch() is now issued with an AbortController tied to this
+ * component's lifetime. If the wizard/step is closed (or this button is
+ * otherwise unmounted) while a geocode request is still in flight, the
+ * fetch is aborted and the eventual settle/reject is ignored — previously
+ * the request ran to completion regardless, and its `.then`/`.catch` still
+ * called setState on an unmounted component (a React warning, and a
+ * needless network request kept alive after the user had already moved on).
+ * A `mountedRef` guard additionally covers the geolocation callback itself,
+ * since `getCurrentPosition` has no native cancellation and could still
+ * resolve after unmount even with the network layer aborted.
+ *
  * Props:
  *   onLocation(fields)  — called with { streetRoad, cityTown, district }
  *   accent              — hex colour for the button border/text
@@ -45,11 +58,21 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
   // Holds the cooldown timer so we can clear it on unmount
   const cooldownRef = useRef(null)
 
-  // Clear any pending cooldown when the component unmounts so we never call
-  // setIsCooldown on an unmounted component (avoids a React state update warning)
+  // Tracks whether this component is still mounted, and the AbortController
+  // for any in-flight Nominatim fetch, so both can be torn down together.
+  const mountedRef        = useRef(true)
+  const abortControllerRef = useRef(null)
+
+  // Clear any pending cooldown / abort any in-flight request when the
+  // component unmounts, so we never call setState on an unmounted
+  // component (avoids a React state update warning) and never leave a
+  // network request running after the user has navigated away.
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       if (cooldownRef.current) clearTimeout(cooldownRef.current)
+      if (abortControllerRef.current) abortControllerRef.current.abort()
     }
   }, [])
 
@@ -59,6 +82,7 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
    * but safe if handlePress is somehow called while a cooldown is active).
    */
   const enterError = (msg) => {
+    if (!mountedRef.current) return
     setStatus('error')
     setErrorMsg(msg)
 
@@ -66,7 +90,7 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
 
     setIsCooldown(true)
     cooldownRef.current = setTimeout(() => {
-      setIsCooldown(false)
+      if (mountedRef.current) setIsCooldown(false)
       cooldownRef.current = null
     }, COOLDOWN_MS)
   }
@@ -86,15 +110,26 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        // The device could take a while to get a fix; if the tech has
+        // since closed this step/wizard, don't touch state or start a
+        // network request on their behalf.
+        if (!mountedRef.current) return
+
         setStatus('geocoding')
         const { latitude, longitude } = pos.coords
+
+        const controller = new AbortController()
+        abortControllerRef.current = controller
+
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
+            { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
           )
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
           const data = await res.json()
+          if (!mountedRef.current) return
+
           const a = data.address || {}
 
           // Build street: "12 Example Road" or just "Example Road"
@@ -110,12 +145,17 @@ export function GpsLocationButton({ onLocation, accent = '#6366f1' }) {
           onLocation({ streetRoad, cityTown, district })
           setStatus('idle')
         } catch (err) {
+          if (err.name === 'AbortError') return // component unmounted — expected, not an error
+          if (!mountedRef.current) return
           console.error('GpsLocationButton: reverse geocode failed', err)
           // Network / Nominatim error — apply cooldown to avoid 429 on rapid retry
           enterError('Could not look up address. Check your internet connection.')
+        } finally {
+          if (abortControllerRef.current === controller) abortControllerRef.current = null
         }
       },
       (err) => {
+        if (!mountedRef.current) return
         // Geolocation errors do not hit Nominatim, but we still apply the
         // cooldown for consistency — it prevents UI flicker from rapid taps
         // and covers the edge case where the user hammers retry on a timeout.

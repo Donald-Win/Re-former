@@ -34,7 +34,9 @@
  * already supports running inside a worker (it falls back to
  * OffscreenCanvas/createImageBitmap when `document` is undefined), so the
  * full generation pipeline — fetch template, draw fields, embed photos — is
- * DOM-free and runs entirely off the main thread.
+ * DOM-free and runs entirely off the main thread. pdfWorkerClient.js also
+ * detects a crashed/wedged worker and transparently recreates it so a single
+ * failure doesn't permanently break generation for the rest of the session.
  *
  * Race-condition guard
  * ────────────────────
@@ -44,7 +46,11 @@
  * Generation timeout
  * ──────────────────
  * A 30-second timeout races against the generator. On expiry the user sees
- * a distinct "timed out" message instead of an infinite spinner.
+ * a distinct "timed out" message instead of an infinite spinner. The
+ * timeout's own timer is cleared as soon as the race settles either way
+ * (success or failure) — previously it was left running to completion even
+ * after the generator had already resolved, which was harmless but left a
+ * dangling timer per generation for no reason.
  */
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { PdfCanvasPreview } from './PdfCanvasPreview'
@@ -85,12 +91,13 @@ export function usePdfGenerate(generatorFn) {
     }
 
     // ── Timeout race ──────────────────────────────────────────────────────────
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
+    let timeoutId = null
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
         () => reject(new Error('GENERATION_TIMEOUT')),
         GENERATION_TIMEOUT_MS,
       )
-    )
+    })
 
     // ── Generator resolution ──────────────────────────────────────────────────
     // A thunk (length === 0) is a lazy import factory: () => Promise<generatorFn>.
@@ -105,6 +112,7 @@ export function usePdfGenerate(generatorFn) {
 
     Promise.race([runGeneration(), timeoutPromise])
       .then(result => {
+        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         const bytes = result instanceof Uint8Array ? result : new Uint8Array(result)
@@ -117,6 +125,7 @@ export function usePdfGenerate(generatorFn) {
         setPdfGenerating(false)
       })
       .catch(err => {
+        clearTimeout(timeoutId)
         if (myGenId !== genIdRef.current) return
 
         console.error('PDF generation failed:', err)

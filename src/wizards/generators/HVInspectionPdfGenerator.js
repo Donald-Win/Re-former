@@ -17,6 +17,20 @@
  * title, the page 3 signature block, and the three "Other (Specify)"
  * labels) are declared in FIELDS as usual.
  *
+ * PERF_ROW_OFFSET (v2.20.4)
+ * ──────────────────────────
+ * Operation and Performance checks share one combined row array
+ * (GRIDS.operationPerformance.rowY) — Operation occupies the first N rows,
+ * Performance starts right after. PERF_ROW_OFFSET used to be a hardcoded
+ * `4`, matched by hand to OPERATION_CHECKS' length (which happens to be 4).
+ * That's the same silent index-coupling trap that VISUAL_NA/OPERATION_NA/
+ * PERFORMANCE_NA were rewritten to avoid in HVInspectionChecks.js: if
+ * OPERATION_CHECKS ever gained or lost a row, every Performance tick would
+ * silently land one row off from its intended equipment column, with
+ * nothing to catch it. PERF_ROW_OFFSET is now derived directly from
+ * OPERATION_CHECKS.length, so it can never drift out of sync with the
+ * array it depends on.
+ *
  * Coordinate convention
  * ─────────────────────
  * All Y values are TOP-ORIGIN (CSS / screen style). renderFields converts
@@ -44,11 +58,11 @@ import {
 const getTemplateUrl = () =>
   `${import.meta.env.BASE_URL}forms/220F028A.pdf`
 
-// Maps Other-row index → the form-state key holding the user-typed label text.
-const OTHER_LABEL_KEYS = ['other1', 'other2', 'other3']
-
-// Performance rows occupy the lower portion of the combined p2 rowY array.
-const PERF_ROW_OFFSET = 4 // Operation occupies rows 0–3; Performance starts at 4
+// Performance rows occupy the lower portion of the combined p2 rowY array,
+// immediately after Operation's rows. Derived from OPERATION_CHECKS.length
+// (rather than hardcoded) so this can never drift out of sync with that
+// array — see the file header for the bug this fixes.
+const PERF_ROW_OFFSET = OPERATION_CHECKS.length
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELDS — the handful of individually-positioned fields on this form.

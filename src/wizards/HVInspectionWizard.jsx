@@ -27,6 +27,9 @@ import {
   QA_CHECKS,
   DOC_CHECKS,
   OTHER_CHECKS,
+  VISUAL_NA,
+  OPERATION_NA,
+  PERFORMANCE_NA,
 } from './generators/HVInspectionChecks'
 
 // ── PDF generation now runs off the main thread via the shared PDF worker ────
@@ -36,48 +39,14 @@ const FORM_KEY   = '220F028A'
 const FORM_LABEL = 'HV Inspection Certificate'
 const ACCENT     = APP_ACCENT
 
-// ── N/A maps — shaded cells from the original form ───────────────────────────
-const P1_NA = {
-  0:  [7, 8, 12],
-  1:  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  2:  [12],
-  3:  [0, 1, 2, 3, 4, 5, 6, 11, 12],
-  4:  [1, 6, 8, 12],
-  5:  [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  6:  [1, 6],
-  7:  [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  8:  [0, 1, 3, 4, 5, 7, 9, 12],
-  10: [6, 12],
-  11: [1, 12],
-  12: [1, 11, 12],
-  13: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-}
+// ── N/A (shaded cell) lookup ──────────────────────────────────────────────
+// The actual N/A data lives in HVInspectionChecks.js, keyed by check id and
+// equipment id (not array index — see that file's doc comment for why this
+// matters). isNA() here is just a thin, group-aware accessor over those maps.
+const NA_MAPS = { visual: VISUAL_NA, operation: OPERATION_NA, performance: PERFORMANCE_NA }
 
-const P2_NA = {
-  0:  [1, 2, 3, 7, 8, 9, 10, 11, 12],
-  1:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 12],
-  2:  [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
-  3:  [0, 1, 2, 3, 7, 8, 9, 10, 11, 12],
-  4:  [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
-  5:  [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12],
-  6:  [2, 3],
-  7:  [1, 11, 12],
-  8:  [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
-  9:  [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
-  10: [0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12],
-  11: [0, 1, 2, 3, 4, 5, 11],
-  12: [0, 1, 2, 3, 10, 11, 12],
-  13: [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12],
-  14: [0, 1, 2, 4, 6, 8, 9, 10, 11, 12],
-  15: [0, 1, 2, 3, 4, 6, 7, 8, 9, 11, 12],
-  16: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-}
-
-function isNA(checkGroup, rowIdx, colIdx) {
-  if (checkGroup === 'visual')      return (P1_NA[rowIdx] || []).includes(colIdx)
-  if (checkGroup === 'operation')   return (P2_NA[rowIdx] || []).includes(colIdx)
-  if (checkGroup === 'performance') return (P2_NA[rowIdx + 4] || []).includes(colIdx)
-  return false
+function isNA(checkGroup, checkId, equipId) {
+  return (NA_MAPS[checkGroup]?.[checkId] || []).includes(equipId)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -126,8 +95,6 @@ const CHECK_SECTIONS = [
 
 // ── EquipCheckList ────────────────────────────────────────────────────────────
 function EquipCheckList({ checkSections, equip, d, setD, accent }) {
-  const colIdx = EQUIP_TYPES.findIndex(e => e.id === equip.id)
-
   const toggle = (stateKey, checkId) => {
     setD(prev => ({
       ...prev,
@@ -145,7 +112,7 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
 
   const allNonOtherTicked = nonOtherSections.every(({ checks, stateKey, group }) =>
     checks
-      .filter((_, ri) => !isNA(group, ri, colIdx))
+      .filter(c => !isNA(group, c.id, equip.id))
       .every(c => d[stateKey]?.[c.id]?.[equip.id])
   )
 
@@ -155,7 +122,7 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
       nonOtherSections.forEach(({ checks, stateKey, group }) => {
         const updated = { ...next[stateKey] }
         checks
-          .filter((_, ri) => !isNA(group, ri, colIdx))
+          .filter(c => !isNA(group, c.id, equip.id))
           .forEach(c => { updated[c.id] = { ...updated[c.id], [equip.id]: !allNonOtherTicked } })
         next[stateKey] = updated
       })
@@ -166,7 +133,7 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
   return (
     <div>
       {checkSections.map(({ title, checks, stateKey, group }) => {
-        const applicable = checks.filter((_, ri) => !isNA(group, ri, colIdx))
+        const applicable = checks.filter(c => !isNA(group, c.id, equip.id))
         if (applicable.length === 0) return null
         const isOther = group === 'other'
 
@@ -185,9 +152,14 @@ function EquipCheckList({ checkSections, equip, d, setD, accent }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {applicable.map(check => {
                 const ticked = !!d[stateKey]?.[check.id]?.[equip.id]
-                const otherKey =
-                  check.id === 'ot0' ? 'other1' :
-                  check.id === 'ot1' ? 'other2' : 'other3'
+                // "Other (Specify N)" rows map to the wizard's otherN state
+                // key by POSITION within OTHER_CHECKS, not by a hardcoded
+                // 'ot0'/'ot1'/'ot2' string match — so this stays correct
+                // even if OTHER_CHECKS' ids ever change, as long as the
+                // number of "Other" slots (currently 3, matching other1-3
+                // in the wizard's initial state) stays the same.
+                const otherIdx = isOther ? OTHER_CHECKS.findIndex(oc => oc.id === check.id) : -1
+                const otherKey = otherIdx >= 0 ? `other${otherIdx + 1}` : null
 
                 return (
                   <div key={check.id} style={{ marginBottom: 4 }}>
@@ -293,12 +265,26 @@ export default function HVInspectionWizard({ onClose }) {
   const PHOTO_STEP       = SIG_STEP + 1
   const PREVIEW_STEP     = PHOTO_STEP + 1
 
-  // maxStep: PHOTO_STEP — restoring crash-recovered progress should never
-  // land directly on PREVIEW_STEP (see useCrashRecovery's doc comment for
-  // why: that step has no data of its own, only a generated PDF that
-  // requires an explicit triggerGenerate() call this restore path never
-  // makes, which would otherwise leave the tech looking at a blank screen).
-  const crashRecovery = useCrashRecovery({ formKey: FORM_KEY, setD, setStep, setPhotos, maxStep: PHOTO_STEP })
+  // maxStep: this wizard's step count is DATA-DEPENDENT (it grows with how
+  // many equipment types are selected), so a plain number computed from the
+  // wizard's current, pre-restore state (always `[]` on a fresh mount) would
+  // clamp every restore to the same wrong step regardless of how far the
+  // tech had actually progressed in a given snapshot. Passing a function
+  // instead lets useCrashRecovery resolve the ceiling from the SNAPSHOT's
+  // own selectedEquip — restoring to "Photos" (STEPS.length - 2 relative to
+  // that snapshot's actual equipment count), never landing directly on
+  // PREVIEW_STEP (see useCrashRecovery's doc comment for why: that step has
+  // no data of its own, only a generated PDF that requires an explicit
+  // triggerGenerate() call this restore path never makes, which would
+  // otherwise leave the tech looking at a blank screen).
+  const crashRecovery = useCrashRecovery({
+    formKey: FORM_KEY, setD, setStep, setPhotos,
+    maxStep: (snapshotData) => {
+      const equipCount = Array.isArray(snapshotData.selectedEquip) ? snapshotData.selectedEquip.length : 0
+      // Mirrors EQUIP_STEP_START(2) + equipCount = SIG_STEP; PHOTO_STEP = SIG_STEP + 1
+      return 2 + equipCount + 1
+    },
+  })
 
   const isPreview    = step === PREVIEW_STEP
   const isEquipStep  = step >= EQUIP_STEP_START && step < EQUIP_STEP_END

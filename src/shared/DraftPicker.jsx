@@ -45,6 +45,10 @@ export function DraftPicker({
   const [confirmDelete, setConfirmDelete] = useState(null)
   const closeTimerRef = useRef(null)
 
+  // Tracks whether the person has typed their own draft name — once true,
+  // the suggested-name effect below stops overwriting what they've typed.
+  const hasEditedNameRef = useRef(false)
+
   // Clear the auto-close timer if the component unmounts while it is counting down
   useEffect(() => {
     return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }
@@ -64,21 +68,43 @@ export function DraftPicker({
     }
   }, [formKey])
 
+  // Reset the sheet's own UI state whenever it's opened (or reopened in a
+  // different mode/for a different form). Intentionally does NOT depend on
+  // `d` — this effect is about resetting the SHEET, not about keeping the
+  // suggested name fresh; that's handled by the separate effect below.
   useEffect(() => {
     if (open) {
       setMode(initialMode)
       setSaved(false)
       setConfirmDelete(null)
+      hasEditedNameRef.current = false
       refreshDrafts()
-
-      // Pre-fill name from job details if available
-      const suggested = [d?.npJobNumber, d?.projectName, d?.streetRoad]
-        .filter(Boolean).join(' — ')
-      setName(suggested || '')
     }
-  }, [open, formKey, initialMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, formKey, initialMode, refreshDrafts])
+
+  // Keep the suggested draft name in sync with the live job details for as
+  // long as the sheet is open and the person hasn't typed their own name.
+  //
+  // Previously this pre-fill only ran in the reset effect above, which was
+  // deliberately limited to [open, formKey, initialMode] via a suppressed
+  // eslint-disable — meaning if `d` (job details) changed WHILE the Save
+  // Draft sheet was already open (e.g. an in-flight GPS lookup or autosave
+  // restore landed a moment after the sheet was opened), the suggested name
+  // silently went stale and never updated. This effect now correctly
+  // depends on the exact fields it reads, so it can't drift from `d`.
+  useEffect(() => {
+    if (!open || hasEditedNameRef.current) return
+    const suggested = [d?.npJobNumber, d?.projectName, d?.streetRoad]
+      .filter(Boolean).join(' — ')
+    setName(suggested || '')
+  }, [open, d?.npJobNumber, d?.projectName, d?.streetRoad])
 
   if (!open) return null
+
+  const handleNameChange = (e) => {
+    hasEditedNameRef.current = true
+    setName(e.target.value)
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -201,7 +227,7 @@ export function DraftPicker({
             <input
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={handleNameChange}
               placeholder="e.g. Pyes Pa Pole - TC1234567"
               style={{ ...wInp, borderColor: name ? accent : '#ddd' }}
             />

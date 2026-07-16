@@ -2,7 +2,7 @@
  * PhotoAttachStep — shared wizard step for attaching photos to a PDF.
  *
  * Props:
- *   photos   – array of { dataUrl: string, name: string }
+ *   photos   – array of { dataUrl: string, name: string, normalized: boolean }
  *   onChange – setter: (updaterFn) => void  (called with prev => [...prev, newItem])
  *   accent   – optional hex colour string for branding
  *
@@ -21,14 +21,100 @@
  * This also cuts N re-renders (one per file) down to 1 per batch. Any file
  * that fails to read is skipped (with a console warning) rather than
  * discarding the whole batch.
+ *
+ * Shift-left compression (v2.20.3)
+ * ─────────────────────────────────
+ * Photos used to be stored in wizard state — and therefore in every
+ * autosave snapshot and every named draft written to IndexedDB — as the
+ * FULL-RESOLUTION, uncompressed camera image. Compression only happened
+ * later, transiently, inside appendPhotosToPdf.js at the moment a PDF was
+ * actually generated, and those compressed bytes were discarded immediately
+ * afterward. That meant every autosave tick and every draft save was
+ * reading/writing multi-megabyte-per-photo blobs for no lasting benefit.
+ *
+ * readFileAsPhoto() now resizes and re-compresses each photo to the same
+ * dimensions/quality PDF generation uses (1600px longest edge, JPEG 80%)
+ * BEFORE it ever enters React state — so the smaller version is what's
+ * held in memory, autosaved, and stored in named drafts.
+ *
+ * If compression fails for any reason (e.g. a tainted canvas from an
+ * unusual image source), the original uncompressed image is used instead
+ * so the photo is never silently dropped.
+ *
+ * Skip the second pass entirely when already normalized (v2.20.6)
+ * ──────────────────────────────────────────────────────────────────
+ * Each photo is tagged with `normalized: true/false` depending on which of
+ * the two paths above it took. `normalized: true` means this photo has
+ * already been drawn through a canvas — which is what bakes correct EXIF
+ * orientation into the pixels, since pdf-lib's embedJpg ignores EXIF
+ * rotation metadata entirely — and resized to the shared MAX px cap.
+ * appendPhotosToPdf.js reads this flag and, when true, embeds the bytes
+ * directly with no further decode/resize/re-encode pass at all: previously
+ * EVERY photo was silently re-processed a second time at generation time
+ * regardless of whether that work was still needed, which both wasted CPU
+ * and compounded JPEG artifacts on an image already compressed once.
+ * `normalized: false` (the rare compression-failure fallback above) tells
+ * appendPhotosToPdf.js it must still run its full defensive pipeline on
+ * that one photo, since it's still at full resolution and may still carry
+ * an EXIF rotation tag. Any photo saved by a version of the app before this
+ * flag existed simply has no `normalized` key at all, which is treated the
+ * same as `false` — the safe, conservative default — so older saved drafts
+ * keep working exactly as before.
  */
 import React, { useRef } from 'react'
 import { Camera, X, ImageIcon } from 'lucide-react'
 
+const MAX_ATTACH_PX      = 1600  // longest edge cap — matches appendPhotosToPdf.js
+const ATTACH_JPEG_QUALITY = 0.8
+
+/** Resize `img` to fit within MAX_ATTACH_PX and re-encode as a JPEG data URL. */
+function compressImage(img) {
+  const { naturalWidth: w, naturalHeight: h } = img
+  let drawW = w
+  let drawH = h
+  if (w > MAX_ATTACH_PX || h > MAX_ATTACH_PX) {
+    const scale = MAX_ATTACH_PX / Math.max(w, h)
+    drawW = Math.round(w * scale)
+    drawH = Math.round(h * scale)
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width  = drawW
+  canvas.height = drawH
+  canvas.getContext('2d').drawImage(img, 0, 0, drawW, drawH)
+  return canvas.toDataURL('image/jpeg', ATTACH_JPEG_QUALITY)
+}
+
 function readFileAsPhoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = ev => resolve({ dataUrl: ev.target.result, name: file.name })
+    reader.onload = ev => {
+      const rawDataUrl = ev.target.result
+      const img = new Image()
+      img.onload = () => {
+        try {
+          // `normalized: true` is a contract with appendPhotosToPdf.js: it
+          // means this photo has ALREADY been drawn through a canvas (which
+          // is what bakes correct EXIF orientation into the pixels — pdf-lib
+          // ignores EXIF rotation metadata entirely when embedding) and
+          // resized to the shared MAX px cap. appendPhotosToPdf.js uses this
+          // flag to skip its own decode/resize/re-encode pass entirely for
+          // photos that already went through this successfully, embedding
+          // the bytes as-is instead of processing every photo twice.
+          resolve({ dataUrl: compressImage(img), name: file.name, normalized: true })
+        } catch (err) {
+          // Compression failed — fall back to the original, uncompressed
+          // image rather than losing the photo entirely. This raw file
+          // never went through canvas, so it can still carry an EXIF
+          // rotation tag and can still be arbitrarily large — normalized
+          // is left false so appendPhotosToPdf.js knows it must still run
+          // its own full defensive processing pass on this one photo.
+          console.warn(`PhotoAttachStep: compression failed for ${file.name}, using original`, err)
+          resolve({ dataUrl: rawDataUrl, name: file.name, normalized: false })
+        }
+      }
+      img.onerror = () => reject(new Error(`Failed to decode ${file.name}`))
+      img.src = rawDataUrl
+    }
     reader.onerror = () => reject(new Error(`Failed to read ${file.name}`))
     reader.readAsDataURL(file)
   })

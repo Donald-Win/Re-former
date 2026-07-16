@@ -88,3 +88,76 @@ export const OTHER_CHECKS = [
   { id: 'ot1', label: 'Other (Specify 2)' },
   { id: 'ot2', label: 'Other (Specify 3)' },
 ]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOT-APPLICABLE (SHADED) CELL DEFINITIONS  (v2.20.3)
+// ─────────────────────────────────────────────────────────────────────────────
+// These mark which equipment-type columns are shaded/not-applicable for each
+// check row on the printed form — used by HVInspectionWizard.jsx to hide
+// checkboxes that don't apply to a given equipment type from the fill UI.
+//
+// Previously this lived in HVInspectionWizard.jsx as two objects (P1_NA,
+// P2_NA) keyed by raw ARRAY INDEX into VISUAL_CHECKS/OPERATION_CHECKS/
+// PERFORMANCE_CHECKS and EQUIP_TYPES — e.g. `0: [7, 8, 12]` meant "row index
+// 0 is N/A for column indices 7, 8, 12". That's a silent trap: if any of
+// those four arrays above is ever reordered, or a row/column is inserted or
+// removed anywhere but the end, every N/A entry after that point silently
+// shifts to describe the WRONG row or the WRONG equipment column — with no
+// error, just a form that quietly shades (or fails to shade) the wrong
+// cells. PERF_ROW_OFFSET (the "+4" used to read Performance rows out of the
+// same P2_NA object as Operation) was a second, independent place this same
+// index coupling had to be kept in sync by hand.
+//
+// The maps below are keyed by the check's `id` and list the applicable
+// EQUIPMENT TYPE IDS (not array indices) that are N/A for that check — so
+// they stay correct no matter how the arrays above are reordered or edited,
+// and there's no separate offset to maintain for Performance vs Operation.
+// idsAt() below is only used once, at module load, to translate the
+// original index-based data into id-based data — new entries added later
+// should be written directly with equipment ids for clarity.
+
+const EQUIP_IDS = EQUIP_TYPES.map(e => e.id)
+const idsAt = (...indices) => indices.map(i => EQUIP_IDS[i])
+
+/** Keyed by VISUAL_CHECKS id → array of N/A EQUIP_TYPES ids. */
+export const VISUAL_NA = {
+  vc0:  idsAt(7, 8, 12),
+  vc1:  idsAt(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+  vc2:  idsAt(12),
+  vc3:  idsAt(0, 1, 2, 3, 4, 5, 6, 11, 12),
+  vc4:  idsAt(1, 6, 8, 12),
+  vc5:  idsAt(0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+  vc6:  idsAt(1, 6),
+  vc7:  idsAt(0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+  vc8:  idsAt(0, 1, 3, 4, 5, 7, 9, 12),
+  vc10: idsAt(6, 12),
+  vc11: idsAt(1, 12),
+  vc12: idsAt(1, 11, 12),
+  vc13: idsAt(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+  // vc9 and vc14 have no N/A columns — every equipment type applies.
+}
+
+/** Keyed by OPERATION_CHECKS id → array of N/A EQUIP_TYPES ids. */
+export const OPERATION_NA = {
+  op0: idsAt(1, 2, 3, 7, 8, 9, 10, 11, 12),
+  op1: idsAt(0, 1, 2, 3, 6, 7, 8, 9, 10, 12),
+  op2: idsAt(0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12),
+  op3: idsAt(0, 1, 2, 3, 7, 8, 9, 10, 11, 12),
+}
+
+/** Keyed by PERFORMANCE_CHECKS id → array of N/A EQUIP_TYPES ids. */
+export const PERFORMANCE_NA = {
+  pf0:  idsAt(1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12),
+  pf1:  idsAt(0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12),
+  pf2:  idsAt(2, 3),
+  pf3:  idsAt(1, 11, 12),
+  pf4:  idsAt(0, 1, 2, 3, 4, 5, 6, 7, 11, 12),
+  pf5:  idsAt(0, 1, 2, 3, 4, 5, 6, 7, 11, 12),
+  pf6:  idsAt(0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12),
+  pf7:  idsAt(0, 1, 2, 3, 4, 5, 11),
+  pf8:  idsAt(0, 1, 2, 3, 10, 11, 12),
+  pf9:  idsAt(0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12),
+  pf10: idsAt(0, 1, 2, 4, 6, 8, 9, 10, 11, 12),
+  pf11: idsAt(0, 1, 2, 3, 4, 6, 7, 8, 9, 11, 12),
+  pf12: idsAt(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+}

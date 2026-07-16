@@ -49,9 +49,15 @@ export function useDraftPicker({
   const close    = useCallback(() => setOpen(false), [])
 
   // Identical to the handleDraftLoad found in every wizard — centralised here.
+  //
+  // Note: draft.data never has a `photos` key — photos are always stored
+  // separately on `draft.photos` (see draftStore.js's saveDraft), so there
+  // used to be a no-op `const { photos: _, ...formData } = draft.data`
+  // destructure here that looked like it was stripping something out but
+  // never actually matched anything. Spreading draft.data directly is
+  // equivalent and clearer.
   const handleLoad = useCallback((draft) => {
-    const { photos: _, ...formData } = draft.data || {}
-    setD(prev => ({ ...prev, ...formData }))
+    setD(prev => ({ ...prev, ...(draft.data || {}) }))
     if (Array.isArray(draft.photos) && draft.photos.length > 0) setPhotos(draft.photos)
     setStep(draft.step || 0)
   }, [setD, setPhotos, setStep])

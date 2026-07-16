@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { APP_ACCENT } from './constants'
 
 export const wInp = {
@@ -11,9 +11,67 @@ export const wLbl = {
   textTransform: 'uppercase', letterSpacing: '0.05em',
 }
 
+// ── Input latency mitigation (v2.20.3) ────────────────────────────────────
+// WF/WTA used to call `set()` (the wizard's setD) on every single keystroke,
+// which replaces the entire top-level form-state object and re-renders the
+// whole current step for every character typed — noticeable lag on the
+// longer text fields (comments, work descriptions) on slower tablets.
+//
+// Both components now keep the value the person SEES in local state, so
+// typing always feels instant and only re-renders this one input. The
+// upstream `set()` call (which triggers the big wizard-level re-render) is
+// debounced by TEXT_DEBOUNCE_MS, and flushed immediately on blur so nothing
+// is lost if the person taps Next/Back, opens a modal, or moves to another
+// field right away — those all blur the current input first.
+//
+// Flush (not discard) a pending debounce on unmount (v2.20.4)
+// ──────────────────────────────────────────────────────────────
+// If this input unmounts WHILE a debounced write is still pending — e.g. a
+// step change fires from something other than blurring this field, such as
+// the dev-fill tool replacing wizard state, or a programmatic step jump —
+// the pending edit used to be silently discarded: the cleanup only cleared
+// the timer, it never committed the value. latestValueRef/setRef track the
+// most recent local value and `set` across renders (the unmount effect
+// itself only runs once, so without these refs it would only ever see the
+// value/set from the FIRST render), so the cleanup can flush the true
+// latest edit up to the wizard's state instead of dropping it.
+const TEXT_DEBOUNCE_MS = 250
+
 export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
   const [focused, setFocused] = useState(false)
   const isNumeric = type === 'number'
+
+  const [localValue, setLocalValue] = useState(v || '')
+  const debounceRef = useRef(null)
+
+  // Stay in sync with value changes that come from OUTSIDE this input —
+  // draft/crash-recovery restore, GPS autofill, dev-fill, etc. Harmless if
+  // it also fires right after our own debounced write lands, since setting
+  // state to its own value is a no-op re-render.
+  useEffect(() => { setLocalValue(v || '') }, [v])
+
+  // Always-current refs so the unmount cleanup (which only runs once, with
+  // a closure fixed at mount) can flush the LATEST value/set rather than
+  // whatever they were on the first render.
+  const latestValueRef = useRef(localValue)
+  const setRef = useRef(set)
+  useEffect(() => { latestValueRef.current = localValue }, [localValue])
+  useEffect(() => { setRef.current = set }, [set])
+
+  // Flush any pending debounced edit on unmount instead of discarding it.
+  useEffect(() => () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+      setRef.current(latestValueRef.current)
+    }
+  }, [])
+
+  const commitNow = (val) => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+    set(val)
+  }
+
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
@@ -21,19 +79,22 @@ export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
         type={isNumeric ? 'text' : type}
         inputMode={isNumeric ? 'numeric' : undefined}
         pattern={isNumeric ? '[0-9]*' : undefined}
-        value={v || ''}
+        value={localValue}
         onChange={e => {
           const raw = e.target.value
           // Strip non-digits on desktop for numeric fields.
           // Mobile keyboards are already constrained via inputMode/pattern.
-          set(isNumeric ? raw.replace(/[^0-9]/g, '') : raw)
+          const next = isNumeric ? raw.replace(/[^0-9]/g, '') : raw
+          setLocalValue(next)
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          debounceRef.current = setTimeout(() => { debounceRef.current = null; set(next) }, TEXT_DEBOUNCE_MS)
         }}
         placeholder={ph}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onBlur={() => { setFocused(false); commitNow(localValue) }}
         style={{
           ...wInp,
-          borderColor: focused ? accent : v ? accent : '#ddd',
+          borderColor: focused ? accent : localValue ? accent : '#ddd',
           boxShadow: focused ? `0 0 0 3px ${accent}25` : 'none',
         }} />
     </div>
@@ -42,17 +103,51 @@ export function WF({ label, v, set, type = 'text', ph, accent = APP_ACCENT }) {
 
 export function WTA({ label, v, set, rows = 3, ph, accent = APP_ACCENT }) {
   const [focused, setFocused] = useState(false)
+
+  const [localValue, setLocalValue] = useState(v || '')
+  const debounceRef = useRef(null)
+
+  useEffect(() => { setLocalValue(v || '') }, [v])
+
+  // Always-current refs so the unmount cleanup (which only runs once, with
+  // a closure fixed at mount) can flush the LATEST value/set rather than
+  // whatever they were on the first render.
+  const latestValueRef = useRef(localValue)
+  const setRef = useRef(set)
+  useEffect(() => { latestValueRef.current = localValue }, [localValue])
+  useEffect(() => { setRef.current = set }, [set])
+
+  // Flush any pending debounced edit on unmount instead of discarding it.
+  useEffect(() => () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+      setRef.current(latestValueRef.current)
+    }
+  }, [])
+
+  const commitNow = (val) => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+    set(val)
+  }
+
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <label style={{ ...wLbl, color: accent !== APP_ACCENT ? accent : wLbl.color }}>{label}</label>}
-      <textarea value={v || ''} onChange={e => set(e.target.value)}
+      <textarea value={localValue}
+        onChange={e => {
+          const next = e.target.value
+          setLocalValue(next)
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          debounceRef.current = setTimeout(() => { debounceRef.current = null; set(next) }, TEXT_DEBOUNCE_MS)
+        }}
         rows={rows} placeholder={ph}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onBlur={() => { setFocused(false); commitNow(localValue) }}
         style={{
           ...wInp,
           height: 'auto', resize: 'vertical',
-          borderColor: focused ? accent : v ? accent : '#ddd',
+          borderColor: focused ? accent : localValue ? accent : '#ddd',
           boxShadow: focused ? `0 0 0 3px ${accent}25` : 'none',
         }} />
     </div>

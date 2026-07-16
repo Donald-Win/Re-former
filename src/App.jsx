@@ -17,7 +17,7 @@ import { getUserPrefs } from './shared/userPrefs'
 import { CHANGELOGS } from './changelog'
 import { PdfCanvasPreview } from './shared/PdfCanvasPreview'
 
-const APP_VERSION = '2.20.2'
+const APP_VERSION = '2.21.0'
 
 // ── Wizard config (module-level — never recreated) ────────────────────────────
 const WIZARD_CONFIG = {
@@ -408,9 +408,33 @@ const AsBuiltFormSelector = () => {
   }, [])
 
   // ── Changelog ─────────────────────────────────────────────────────────────
+  // First-load detection (v2.21.0)
+  // ─────────────────────────────────
+  // localStorage.getItem() returns null both for a genuinely fresh install
+  // AND for an existing device that just had its storage cleared (browser
+  // history/site-data clear, reinstalling as a PWA, etc.) — the two are
+  // indistinguishable from here. Previously, either case fell through to
+  // `seen = []`, which meant every entry in CHANGELOGS (currently back to
+  // v2.8.0) was treated as "unseen" and queued — dumping the entire history
+  // as a wall of stacked "What's New" modals on a single visit.
+  //
+  // The correct behaviour is the same for both cases: don't replay history
+  // that's meaningless to a new install and unhelpful to a returning one —
+  // seed the seen-list with every version that exists RIGHT NOW (so nothing
+  // shows this run) and let any update pushed after this point show normally
+  // going forward, exactly as before.
   useEffect(() => {
     try {
       const raw = localStorage.getItem('re-former-changelog-seen')
+
+      if (raw === null) {
+        localStorage.setItem(
+          're-former-changelog-seen',
+          JSON.stringify(CHANGELOGS.map(b => b.version)),
+        )
+        return
+      }
+
       let seen = []
       if (raw) {
         try {
@@ -445,6 +469,28 @@ const AsBuiltFormSelector = () => {
       setChangelogQueue([])
       setChangelogIdx(0)
     }
+  }
+
+  // Marks every batch currently queued as seen in one go and closes the
+  // modal immediately — an escape hatch for the legitimate case of several
+  // real updates genuinely piling up (e.g. the app wasn't opened for a
+  // few months), so a tech isn't forced to tap "Next" through each one.
+  const dismissAllChangelogs = () => {
+    try {
+      const raw = localStorage.getItem('re-former-changelog-seen')
+      let seen = []
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw)
+          seen = Array.isArray(parsed) ? parsed : [String(parsed)]
+        } catch { seen = [raw] }
+      }
+      const queuedVersions = changelogQueue.map(b => b.version)
+      const merged = Array.from(new Set([...seen, ...queuedVersions]))
+      localStorage.setItem('re-former-changelog-seen', JSON.stringify(merged))
+    } catch {}
+    setChangelogQueue([])
+    setChangelogIdx(0)
   }
 
   const handleInstall = useCallback(async () => {
@@ -1007,7 +1053,22 @@ const AsBuiltFormSelector = () => {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                 <h2 style={{ fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>What's New</h2>
-                {total > 1 && <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{current} of {total}</span>}
+                {total > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{current} of {total}</span>
+                    <button
+                      onClick={dismissAllChangelogs}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        fontSize: 11, fontWeight: 700, color: '#4f46e5',
+                        textDecoration: 'underline', cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Skip all
+                    </button>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                 {batch.changes.map((item, i) => (

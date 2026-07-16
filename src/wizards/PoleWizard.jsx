@@ -616,7 +616,6 @@ function PoleRecordWizard({ onClose }) {
             return d.conductors.map((c, i) => {
               const hasData    = c.level||c.existing||c.size||c.material||c.insulation||c.picker
               const isFirstEmpty = i === firstEmptyIdx
-              const isLastRow    = i === d.conductors.length - 1
               return (hasData || isFirstEmpty) ? (
                 <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
                   <button
@@ -655,7 +654,6 @@ function PoleRecordWizard({ onClose }) {
             return d.crossarms.map((c, i) => {
               const hasData      = c.level||c.existing||c.voltage||c.endSize||c.length||c.arms||c.insulatorType||c.armMaterial||c.wires
               const isFirstEmpty = i === firstEmptyIdx
-              const isLastRow    = i === d.crossarms.length - 1
               return (hasData || isFirstEmpty) ? (
                 <div key={i} style={{ background:'#f8f8ff', border:'1.5px solid #ddd', borderRadius:10, padding:11, marginBottom:10, position:'relative' }}>
                   <button

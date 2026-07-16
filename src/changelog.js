@@ -13,6 +13,87 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.21.0',
+    changes: [
+      {
+        heading: "\"What's New\" no longer dumps the entire update history at once",
+        detail: "If the app's storage was ever cleared (or on a brand-new device), the app couldn't tell that apart from a fresh install — so it showed every update going all the way back to the very first release, one after another. It now recognises this case and quietly catches up in the background instead, so you'll only ever see genuinely new updates from that point forward.",
+      },
+      {
+        heading: '"Skip all" button on the What\'s New screen',
+        detail: "If several updates ever do pile up waiting to be seen (for example, if the app hasn't been opened in a while), a \"Skip all\" link now appears next to the page counter so you're not stuck tapping \"Next\" through each one.",
+      },
+    ],
+  },
+  {
+    version: '2.20.6',
+    changes: [
+      {
+        heading: 'Faster PDF generation for forms with several photos attached',
+        detail: "Photos that were already correctly sized and oriented at the moment they were attached are now added straight into the PDF, instead of being processed a second time during generation. This speeds up generating any form with photos attached, especially several at once, with no change to how the photos look in the finished PDF. A backup process still handles the rare case where a photo couldn't be fully prepared when it was first attached.",
+      },
+    ],
+  },
+  {
+    version: '2.20.5',
+    changes: [
+      {
+        heading: 'Photos attached to PDFs look slightly sharper',
+        detail: "Photos were being compressed twice — once when you attached them, and again while the PDF was being generated — and the second pass used a lower quality setting than the first, for no size benefit. That second pass is still needed (it's what keeps photos the right way up), but now keeps more of the original quality instead of needlessly softening an image that was already sized appropriately.",
+      },
+    ],
+  },
+  {
+    version: '2.20.4',
+    changes: [
+      {
+        heading: 'Completed forms no longer wrongly show "unsaved progress"',
+        detail: "On some devices, sharing or printing a finished PDF didn't properly mark the form as complete. Reopening that form afterwards could still show an \"unsaved progress found\" prompt even though it had already been finished and shared. This now clears correctly every time, on every device.",
+      },
+      {
+        heading: 'HV Inspection Certificate — corrected tick placement for Performance Tests',
+        detail: 'A background fix ensures every row under Performance Tests lines up with the correct equipment column on the generated PDF.',
+      },
+      {
+        heading: 'HV Inspection Certificate — restoring unsaved progress returns to the right step',
+        detail: "If the app closed unexpectedly partway through an HV Inspection Certificate, restoring that progress could land you further back than necessary. It now returns you to the step you were actually on.",
+      },
+      {
+        heading: 'Background fixes',
+        detail: 'Added a safeguard so text typed into a field is not lost in the rare case where the screen changes at the exact moment you were typing.',
+      },
+    ],
+  },
+  {
+    version: '2.20.3',
+    changes: [
+      {
+        heading: 'Photos take up less space and save faster',
+        detail: 'Photos are now resized and compressed as soon as you attach them, instead of only when the PDF is generated. Saved drafts and background progress-saving with several photos attached are now much smaller and quicker to save.',
+      },
+      {
+        heading: 'Typing feels smoother on longer fields',
+        detail: 'Comments, work descriptions, and other free-text fields no longer cause a brief stutter on each keystroke — most noticeable on older tablets.',
+      },
+      {
+        heading: 'PDF generation recovers automatically after a failure',
+        detail: 'If PDF generation ran into trouble in the background (most likely when processing a large batch of photos), every later attempt could get stuck until the app was fully reloaded. It now recovers on its own, and Retry works as expected.',
+      },
+      {
+        heading: '"Use my location" is more reliable when closing a form quickly',
+        detail: 'Looking up an address no longer keeps running, or tries to fill in fields, after the form has already been closed.',
+      },
+      {
+        heading: 'Save Draft always suggests an up-to-date name',
+        detail: 'The suggested draft name could occasionally be based on slightly outdated job details if they changed right as the Save Draft screen opened. It now always reflects the latest details.',
+      },
+      {
+        heading: 'Background fixes',
+        detail: 'Fixed a small memory leak that could occur after sharing a PDF by link. Fixed a leftover timer after every PDF generation. Corrected the internal logic behind the HV Inspection Certificate\'s shaded/not-applicable cells so it can no longer silently drift out of sync if the form is edited in the future.',
+      },
+    ],
+  },
+  {
     version: '2.20.2',
     changes: [
       {
@@ -122,11 +203,11 @@ export const CHANGELOGS = [
     changes: [
       {
         heading: 'Add Row buttons no longer vanish when all rows are deleted',
-        detail: 'In the Pole Record and Zone Substation wizards, tapping × on every conductor, crossarm, or equipment row permanently hid the “Add Row” button, locking the form. The button now always stays visible below the row list.',
+        detail: 'In the Pole Record and Zone Substation wizards, tapping × on every conductor, crossarm, or equipment row permanently hid the "Add Row" button, locking the form. The button now always stays visible below the row list.',
       },
       {
-        heading: 'Save Draft button no longer gets stuck on “Saving…”',
-        detail: 'After a successful save, the Save Draft button would stay disabled and show “Saving…” for the rest of the session. It now resets correctly after every save.',
+        heading: 'Save Draft button no longer gets stuck on "Saving…"',
+        detail: 'After a successful save, the Save Draft button would stay disabled and show "Saving…" for the rest of the session. It now resets correctly after every save.',
       },
       {
         heading: 'All attached photos are now saved in drafts',
@@ -323,7 +404,7 @@ export const CHANGELOGS = [
       },
       {
         heading: 'Changed print handling for blank PDF',
-        detail: 'Native PDF viewer in Safari on iOS was not handling the blank PDF fipes correctly. Changed to use the same custom handler as the wizard system. should handle printing far better',
+        detail: "The native PDF viewer in Safari on iOS wasn't handling blank form PDFs correctly. Changed to use the same custom handler as the wizard system, which should handle printing far better.",
       },
       {
         heading: 'Update notices',
