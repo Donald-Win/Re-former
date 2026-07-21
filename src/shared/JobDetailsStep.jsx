@@ -124,6 +124,7 @@ export function JobDetailsStep({
         <WF label="City / Town" v={d.cityTown} set={set('cityTown')} ph="Hamilton" accent={accent} />
         <WF label="District"    v={d.district} set={set('district')} ph="Waikato"  accent={accent} />
       </div>
+      <WF label="Map Number" v={d.mapNumber} set={set('mapNumber')} ph="Optional" accent={accent} />
 
       <WF label="Date Work Completed" v={d.dateWorkCompleted} set={set('dateWorkCompleted')} type="date" accent={accent} />
 

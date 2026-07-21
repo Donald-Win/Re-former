@@ -13,6 +13,19 @@
 
 export const CHANGELOGS = [
   {
+    version: '2.22.0',
+    changes: [
+      {
+        heading: 'New optional "Map Number" field',
+        detail: "You'll notice a new Map Number field on the job details step of every form. It's optional and only needed if you use one — it's being added now to get ready for a future update that will save your finished PDFs straight into OneDrive, organised into folders automatically. Nothing changes yet if you leave it blank.",
+      },
+      {
+        heading: 'New "Folder Structure" option in My Details',
+        detail: "My Details (⚙️) now has a Folder Structure section where you can set a OneDrive root folder name and choose how your job folders will be organised — by Project Name, Map Number, Site ID, and so on. Drag to reorder, or switch a level off if you don't want it. This is groundwork only for now — automatic saving to OneDrive isn't switched on yet — but it lets you set up your preferred layout ahead of time and see a live preview of what it'll look like.",
+      },
+    ],
+  },
+  {
     version: '2.21.0',
     changes: [
       {

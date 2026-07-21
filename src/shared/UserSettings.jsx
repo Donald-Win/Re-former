@@ -6,9 +6,11 @@
  * without the user being asked each time.
  */
 import { useState, useEffect } from 'react'
-import { CheckCircle2, User, Building2, PenLine, Trash2, FileText, Hash, Settings, Briefcase, List } from 'lucide-react'
-import { getUserPrefs, saveUserPref } from './userPrefs'
+import { CheckCircle2, User, Building2, PenLine, Trash2, FileText, Hash, Settings, Briefcase, List, FolderTree } from 'lucide-react'
+import { getUserPrefs, saveUserPref, getFolderTemplate, saveFolderTemplate } from './userPrefs'
 import { SignaturePad } from './SignaturePad'
+import { FolderTemplateEditor } from './FolderTemplateEditor'
+import { DEFAULT_FOLDER_TEMPLATE } from './folderStructure'
 import { APP_ACCENT } from './constants'
 
 export function UserSettings({ onClose }) {
@@ -18,6 +20,8 @@ export function UserSettings({ onClose }) {
   const [certNo,     setCertNo]     = useState('')
   const [signed,     setSigned]     = useState('')
   const [defaultView, setDefaultView] = useState('workType')
+  const [oneDriveRootFolder, setOneDriveRootFolder] = useState('')
+  const [folderTemplate, setFolderTemplate] = useState(DEFAULT_FOLDER_TEMPLATE)
   const [saved,      setSaved]      = useState(false)
 
   // Load existing prefs on mount
@@ -29,6 +33,8 @@ export function UserSettings({ onClose }) {
     setCertNo(prefs.certNo         || '')
     setSigned(prefs.signed         || '')
     setDefaultView(prefs.defaultView || 'workType')
+    setOneDriveRootFolder(prefs.oneDriveRootFolder || '')
+    setFolderTemplate(getFolderTemplate() || DEFAULT_FOLDER_TEMPLATE)
   }, [])
 
   const handleSave = () => {
@@ -38,6 +44,8 @@ export function UserSettings({ onClose }) {
     saveUserPref('certNo',      certNo)
     saveUserPref('signed',      signed)
     saveUserPref('defaultView', defaultView)
+    saveUserPref('oneDriveRootFolder', oneDriveRootFolder)
+    saveFolderTemplate(folderTemplate)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -49,11 +57,15 @@ export function UserSettings({ onClose }) {
     saveUserPref('isnId',      '')
     saveUserPref('certNo',     '')
     saveUserPref('signed',     '')
+    saveUserPref('oneDriveRootFolder', '')
+    saveFolderTemplate(DEFAULT_FOLDER_TEMPLATE)
     setContractor('')
     setNamePrint('')
     setIsnId('')
     setCertNo('')
     setSigned('')
+    setOneDriveRootFolder('')
+    setFolderTemplate(DEFAULT_FOLDER_TEMPLATE)
   }
 
   const inp = {
@@ -244,6 +256,51 @@ export function UserSettings({ onClose }) {
               )
             })}
           </div>
+        </div>
+
+        {/* Folder Structure — groundwork for future automatic OneDrive saving */}
+        <div style={section}>
+          <label style={lbl}>
+            <FolderTree size={14} />
+            Folder Structure (for future OneDrive auto-save)
+          </label>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10, lineHeight: 1.4 }}>
+            Automatic saving to OneDrive isn't switched on yet — this just lets you set up
+            and preview how your folders will be organised once it is. Drag the ⠿ handle to
+            reorder, and use the switch to leave a level out entirely.
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ ...lbl, fontSize: 11, marginBottom: 4 }}>Root Folder Name</label>
+            <input
+              type="text"
+              value={oneDriveRootFolder}
+              onChange={e => setOneDriveRootFolder(e.target.value)}
+              placeholder="e.g. Field Forms"
+              style={inp}
+              onFocus={e => e.target.style.borderColor = APP_ACCENT}
+              onBlur={e => e.target.style.borderColor = `${APP_ACCENT}40`}
+            />
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 5 }}>
+              If this folder already exists in your OneDrive it will be reused; if not, it'll be created.
+            </div>
+          </div>
+
+          <FolderTemplateEditor
+            template={folderTemplate}
+            onChange={setFolderTemplate}
+            accent={APP_ACCENT}
+            rootFolder={oneDriveRootFolder}
+            previewData={{
+              __formKey: '360S014EC',
+              projectName: 'Pyes Pa Blitz',
+              npJobNumber: 'TC1234567',
+              mapNumber: 'MAP-4521',
+              oldPoleId: 'WKT-12345',
+              contractor: contractor || 'Downer Group',
+              dateWorkCompleted: '2026-07-21',
+            }}
+          />
         </div>
 
         {/* Save button */}

@@ -9,16 +9,20 @@
  *   rf_pref_certNo            — competency certificate number
  *   rf_pref_dateWorkCompleted — last-used date (YYYY-MM-DD), refreshed to today on each load
  *   rf_pref_defaultView       — which screen the app opens to: 'workType' | 'allForms'
+ *   rf_pref_oneDriveRootFolder — OneDrive root folder name (groundwork for future auto-save)
+ *   rf_pref_folderTemplate     — JSON array of { token, enabled }, folder path order/toggles
  */
 
 const KEYS = {
-  contractor:        'rf_pref_contractor',
-  namePrint:         'rf_pref_namePrint',
-  isnId:             'rf_pref_isnId',
-  signed:            'rf_pref_signed',
-  certNo:            'rf_pref_certNo',
-  dateWorkCompleted: 'rf_pref_dateWorkCompleted',
-  defaultView:       'rf_pref_defaultView',
+  contractor:         'rf_pref_contractor',
+  namePrint:          'rf_pref_namePrint',
+  isnId:              'rf_pref_isnId',
+  signed:             'rf_pref_signed',
+  certNo:             'rf_pref_certNo',
+  dateWorkCompleted:  'rf_pref_dateWorkCompleted',
+  defaultView:        'rf_pref_defaultView',
+  oneDriveRootFolder: 'rf_pref_oneDriveRootFolder',
+  folderTemplate:     'rf_pref_folderTemplate',
 }
 
 /** Today's date as YYYY-MM-DD (matches HTML date input format). */
@@ -40,13 +44,14 @@ function todayString() {
  */
 export function getUserPrefs() {
   return {
-    contractor:        localStorage.getItem(KEYS.contractor)        || '',
-    namePrint:         localStorage.getItem(KEYS.namePrint)         || '',
-    isnId:             localStorage.getItem(KEYS.isnId)             || '',
-    signed:            localStorage.getItem(KEYS.signed)            || '',
-    certNo:            localStorage.getItem(KEYS.certNo)            || '',
-    dateWorkCompleted: todayString(),
-    defaultView:       localStorage.getItem(KEYS.defaultView)       || 'workType',
+    contractor:         localStorage.getItem(KEYS.contractor)        || '',
+    namePrint:          localStorage.getItem(KEYS.namePrint)         || '',
+    isnId:              localStorage.getItem(KEYS.isnId)             || '',
+    signed:             localStorage.getItem(KEYS.signed)            || '',
+    certNo:             localStorage.getItem(KEYS.certNo)            || '',
+    dateWorkCompleted:  todayString(),
+    defaultView:        localStorage.getItem(KEYS.defaultView)       || 'workType',
+    oneDriveRootFolder: localStorage.getItem(KEYS.oneDriveRootFolder) || '',
   }
 }
 
@@ -58,6 +63,34 @@ export function saveUserPref(key, value) {
   } else {
     localStorage.removeItem(KEYS[key])
   }
+}
+
+/**
+ * Returns the tech's configured folder template — an ordered array of
+ * { token, enabled } — or DEFAULT_FOLDER_TEMPLATE if nothing has been saved
+ * yet or the saved value fails to parse. Kept separate from getUserPrefs()
+ * because this value is an array, not a plain string like every other pref.
+ *
+ * Importing DEFAULT_FOLDER_TEMPLATE here (rather than duplicating it) keeps
+ * this file and folderStructure.js from drifting apart on what "default"
+ * means.
+ */
+export function getFolderTemplate() {
+  try {
+    const raw = localStorage.getItem(KEYS.folderTemplate)
+    if (!raw) return null // null signals "use the caller's own default" — see folderStructure.js
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Saves the tech's folder template (array of { token, enabled }). */
+export function saveFolderTemplate(template) {
+  try {
+    localStorage.setItem(KEYS.folderTemplate, JSON.stringify(template))
+  } catch { /* storage full — not critical */ }
 }
 
 /**
@@ -82,6 +115,7 @@ export function getBaseFormState(extras = {}) {
     streetRoad:        '',
     cityTown:          '',
     district:          '',
+    mapNumber:         '',
     contractor:        p.contractor,
     dateWorkCompleted: p.dateWorkCompleted,
     namePrint:         p.namePrint,
